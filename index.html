@@ -6,6 +6,8 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 
+    <script defer src="version.js"></script>
+
     <style>
         html, body {
             margin: 0;
@@ -41,7 +43,7 @@
             color: white;
             font-family: "Arial Black", Gadget, sans-serif;
             font-size: 30px;
-            z-index: 1;
+            z-index: 2;
         }
 
         #loader {
@@ -89,18 +91,27 @@
         <div class="loader-text">Loading engine...</div>
     </div>
 
-    <div id="gameTitle" class="game-title"></div>
+    <div id="gameTitle" class="game-title">Spinview</div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <script>
-        const APP_VERSION = "8";
+        function getCurrentVersionFromUrl() {
+            try {
+                const url = new URL(window.location.href);
+                return url.searchParams.get("_v") || "dev";
+            } catch (_) {
+                return "dev";
+            }
+        }
 
         function updateTitle() {
+            const version = getCurrentVersionFromUrl();
             const title = document.getElementById("gameTitle");
             if (title) {
-                title.textContent = "Spinview v" + APP_VERSION;
+                title.textContent = "Spinview " + version;
             }
+            document.title = "Spinview " + version;
         }
 
         let resizeScheduled = false;
@@ -127,14 +138,6 @@
                 canvas.width = fbW;
                 canvas.height = fbH;
             }
-
-            console.log("resize", {
-                cssW: cssW,
-                cssH: cssH,
-                dpr: dpr,
-                fbW: fbW,
-                fbH: fbH
-            });
         }
 
         function resizePass() {
@@ -172,7 +175,9 @@
             })(),
             preRun: [],
             locateFile: function(path) {
-                return path + "?v=" + APP_VERSION;
+                const version = getCurrentVersionFromUrl();
+                const sep = path.indexOf("?") >= 0 ? "&" : "?";
+                return path + sep + "_v=" + encodeURIComponent(version);
             },
             print: function() {
                 console.log("[stdout]: " + Array.prototype.slice.call(arguments).join(" "));
@@ -213,9 +218,10 @@
         };
 
         (function() {
+            const version = getCurrentVersionFromUrl();
             const s = document.createElement("script");
             s.async = true;
-            s.src = "App.js?v=" + APP_VERSION;
+            s.src = "App.js?_v=" + encodeURIComponent(version);
             document.body.appendChild(s);
         })();
     </script>
