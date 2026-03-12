@@ -1,4 +1,4 @@
-<script>
+
 (function() {
     function isBrowserShortcutToKeep(ev) {
         var key = ev.key ? ev.key.toLowerCase() : "";
@@ -92,4 +92,3 @@
     window.addEventListener("keydown", onKey, { passive: false, capture: true });
     window.addEventListener("keyup", onKey, { passive: false, capture: true });
 })();
-</script>
