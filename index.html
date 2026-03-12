@@ -37,6 +37,7 @@ body{
     display:block;
     background:black;
     z-index:0;
+    outline:none;
 }
 
 .game-title{
@@ -208,10 +209,20 @@ function resizeCanvas(){
 updateVersionLabels();
 
 var title = document.getElementById("gameTitle");
+var canvas = document.getElementById("canvas");
 
 title.addEventListener("pointerdown", function(e){
     e.preventDefault();
     e.stopPropagation();
+
+    if (window.spinviewDeactivateKeyboard) {
+        window.spinviewDeactivateKeyboard();
+    }
+
+    if (document.activeElement === canvas) {
+        canvas.blur();
+    }
+
     consoleToggle();
 });
 
@@ -241,7 +252,7 @@ window.onerror = function(message, source, lineno, colno, error){
 };
 
 var Module = {
-    canvas: document.getElementById("canvas"),
+    canvas: canvas,
 
     locateFile: function(path){
         var version = getCurrentVersion();
@@ -260,6 +271,10 @@ var Module = {
     onRuntimeInitialized: function(){
         resizeCanvas();
         consoleLine("runtime ready");
+
+        if (window.spinviewActivateKeyboard) {
+            window.spinviewActivateKeyboard();
+        }
 
         var loader = document.getElementById("loader");
         if(loader){

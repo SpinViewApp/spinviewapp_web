@@ -1,283 +1,145 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Spinview</title>
+(function() {
+    var canvas = null;
+    var appKeyboardActive = true;
 
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-
-<script defer src="version.js"></script>
-<script defer src="keys.js"></script>
-
-<style>
-html, body{
-    margin:0;
-    padding:0;
-    width:100%;
-    height:100%;
-    background:black;
-    overflow:hidden;
-}
-
-body{
-    position:fixed;
-    inset:0;
-    touch-action:none;
-    overscroll-behavior:none;
-    -webkit-text-size-adjust:100%;
-    text-size-adjust:100%;
-    font-family:Arial, Helvetica, sans-serif;
-}
-
-#canvas{
-    position:fixed;
-    inset:0;
-    width:100%;
-    height:100%;
-    display:block;
-    background:black;
-    z-index:0;
-}
-
-.game-title{
-    position:fixed;
-    left:12px;
-    bottom:12px;
-    color:white;
-    font-size:24px;
-    padding:8px 10px;
-    border-radius:8px;
-    background:rgba(0,0,0,0.25);
-    user-select:none;
-    -webkit-user-select:none;
-    cursor:pointer;
-    z-index:10;
-}
-
-#loader{
-    position:fixed;
-    inset:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    background:#0a0a0a;
-    color:white;
-    z-index:50;
-}
-
-.spinner{
-    width:40px;
-    height:40px;
-    border-radius:50%;
-    border:4px solid rgba(255,255,255,0.15);
-    border-top-color:white;
-    animation:spin 1s linear infinite;
-    margin-bottom:12px;
-}
-
-@keyframes spin{
-    to{ transform:rotate(360deg); }
-}
-
-#debugConsole{
-    position:fixed;
-    left:10px;
-    right:10px;
-    bottom:60px;
-    max-height:45vh;
-    overflow:auto;
-    padding:10px;
-    font:12px monospace;
-    background:rgba(0,0,0,0.9);
-    color:#9fef9f;
-    border-radius:8px;
-    border:1px solid rgba(255,255,255,0.15);
-    white-space:pre-wrap;
-    word-break:break-word;
-    display:none;
-    z-index:100;
-}
-
-#debugConsole.visible{
-    display:block;
-}
-</style>
-</head>
-
-<body>
-
-<div id="loader">
-    <div class="spinner"></div>
-    <div id="loaderText">Loading engine...</div>
-</div>
-
-<div id="gameTitle" class="game-title">Spinview</div>
-<div id="debugConsole"></div>
-
-<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
-
-<script>
-function getCurrentVersion(){
-    try{
-        var url = new URL(window.location.href);
-        var v = url.searchParams.get("_v");
-        if(v) return v;
-
-        v = localStorage.getItem("siteVersion");
-        if(v) return v;
-    }
-    catch(e){
-    }
-    return "dev";
-}
-
-function updateVersionLabels(){
-    var version = getCurrentVersion();
-    var t = document.getElementById("gameTitle");
-    var l = document.getElementById("loaderText");
-
-    document.title = "Spinview " + version;
-
-    if(t) t.textContent = "Spinview " + version;
-    if(l) l.textContent = "Loading engine... " + version;
-}
-
-var debugConsole = document.getElementById("debugConsole");
-var consoleVisible = false;
-
-function consoleShow(){
-    consoleVisible = true;
-    debugConsole.classList.add("visible");
-}
-
-function consoleHide(){
-    consoleVisible = false;
-    debugConsole.classList.remove("visible");
-}
-
-function consoleToggle(){
-    if(consoleVisible) consoleHide();
-    else consoleShow();
-}
-
-function consoleLine(){
-    var parts = [];
-    var i;
-    var v;
-    var line;
-
-    for(i = 0; i < arguments.length; i++){
-        v = arguments[i];
-        if(typeof v === "object"){
-            try{
-                parts.push(JSON.stringify(v));
-            }
-            catch(e){
-                parts.push(String(v));
-            }
+    function getCanvas() {
+        if (!canvas) {
+            canvas = document.getElementById("canvas");
         }
-        else{
-            parts.push(String(v));
+        return canvas;
+    }
+
+    function isTypingTarget(target) {
+        var tag;
+
+        if (!target) return false;
+
+        tag = target.tagName ? target.tagName.toLowerCase() : "";
+        if (tag === "input") return true;
+        if (tag === "textarea") return true;
+        if (tag === "select") return true;
+        if (target.isContentEditable) return true;
+
+        return false;
+    }
+
+    function isBrowserShortcutToKeep(ev) {
+        var key = ev.key ? ev.key.toLowerCase() : "";
+        var ctrl = !!ev.ctrlKey;
+        var shift = !!ev.shiftKey;
+        var alt = !!ev.altKey;
+        var meta = !!ev.metaKey;
+
+        if (key === "f5") return true;
+        if (ctrl && key === "r") return true;
+        if (meta && key === "r") return true;
+
+        if (ctrl && key === "f5") return true;
+        if (meta && shift && key === "r") return true;
+
+        if (key === "f11") return true;
+        if (key === "f12") return true;
+
+        if (ctrl && shift && key === "i") return true;
+        if (ctrl && shift && key === "j") return true;
+        if (ctrl && shift && key === "c") return true;
+        if (meta && alt && key === "i") return true;
+
+        if (ctrl && key === "l") return true;
+        if (meta && key === "l") return true;
+
+        if (ctrl && key === "t") return true;
+        if (meta && key === "t") return true;
+
+        if (ctrl && key === "w") return true;
+        if (meta && key === "w") return true;
+
+        if (ctrl && key === "n") return true;
+        if (meta && key === "n") return true;
+
+        if (ctrl && key === "f") return true;
+        if (meta && key === "f") return true;
+
+        if (ctrl && key === "p") return true;
+        if (meta && key === "p") return true;
+
+        if (ctrl && key === "s") return true;
+        if (meta && key === "s") return true;
+
+        if (alt && key === "arrowleft") return true;
+        if (alt && key === "arrowright") return true;
+        if (meta && key === "[") return true;
+        if (meta && key === "]") return true;
+
+        return false;
+    }
+
+    function shouldCaptureKey(ev) {
+        var c = getCanvas();
+        var target = ev.target;
+
+        if (isTypingTarget(target)) {
+            return false;
+        }
+
+        if (isBrowserShortcutToKeep(ev)) {
+            return false;
+        }
+
+        if (!appKeyboardActive) {
+            return false;
+        }
+
+        if (c && document.activeElement && document.activeElement !== c) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function forwardKeyToApp(type, ev) {
+        console.log("[key]", type, ev.key, "code=", ev.code);
+    }
+
+    function onKey(ev) {
+        if (!shouldCaptureKey(ev)) {
+            return;
+        }
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        forwardKeyToApp(ev.type, ev);
+    }
+
+    function activateKeyboardForApp() {
+        var c = getCanvas();
+        appKeyboardActive = true;
+        if (c) {
+            c.focus();
         }
     }
 
-    line = parts.join(" ");
-    console.log(line);
-
-    if(debugConsole){
-        debugConsole.textContent += line + "\n";
-        debugConsole.scrollTop = debugConsole.scrollHeight;
+    function deactivateKeyboardForApp() {
+        appKeyboardActive = false;
     }
-}
 
-function resizeCanvas(){
-    var canvas = document.getElementById("canvas");
-    var dpr = window.devicePixelRatio || 1;
-    var w = window.innerWidth;
-    var h = window.innerHeight;
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
 
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-    canvas.width = Math.max(1, Math.round(w * dpr));
-    canvas.height = Math.max(1, Math.round(h * dpr));
+    window.addEventListener("load", function() {
+        var c = getCanvas();
+        if (!c) return;
 
-    consoleLine("resize", w, h, "dpr", dpr, "canvas", canvas.width, canvas.height);
-}
+        c.addEventListener("pointerdown", function() {
+            activateKeyboardForApp();
+        });
 
-updateVersionLabels();
+        c.addEventListener("click", function() {
+            activateKeyboardForApp();
+        });
+    });
 
-var title = document.getElementById("gameTitle");
-
-title.addEventListener("pointerdown", function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    consoleToggle();
-});
-
-document.addEventListener("pointerdown", function(e){
-    if(!consoleVisible) return;
-    if(debugConsole.contains(e.target)) return;
-    if(e.target === title) return;
-    consoleHide();
-});
-
-window.addEventListener("load", function(){
-    resizeCanvas();
-});
-
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("orientationchange", function(){
-    setTimeout(resizeCanvas, 50);
-    setTimeout(resizeCanvas, 250);
-});
-
-if(window.visualViewport){
-    window.visualViewport.addEventListener("resize", resizeCanvas);
-}
-
-window.onerror = function(message, source, lineno, colno, error){
-    consoleLine("[onerror]", message, source, lineno, colno, error ? error.stack || error : "");
-};
-
-var Module = {
-    canvas: document.getElementById("canvas"),
-
-    locateFile: function(path){
-        var version = getCurrentVersion();
-        var sep = path.indexOf("?") >= 0 ? "&" : "?";
-        return path + sep + "_v=" + encodeURIComponent(version);
-    },
-
-    print: function(){
-        consoleLine("[stdout]", Array.prototype.slice.call(arguments).join(" "));
-    },
-
-    printErr: function(){
-        consoleLine("[stderr]", Array.prototype.slice.call(arguments).join(" "));
-    },
-
-    onRuntimeInitialized: function(){
-        resizeCanvas();
-        consoleLine("runtime ready");
-
-        var loader = document.getElementById("loader");
-        if(loader){
-            loader.style.display = "none";
-        }
-    }
-};
-</script>
-
-<script>
-(function(){
-    var version = getCurrentVersion();
-    var s = document.createElement("script");
-    s.async = true;
-    s.src = "App.js?_v=" + encodeURIComponent(version);
-    document.body.appendChild(s);
+    window.spinviewActivateKeyboard = activateKeyboardForApp;
+    window.spinviewDeactivateKeyboard = deactivateKeyboardForApp;
 })();
-</script>
-
-</body>
-</html>
