@@ -4,23 +4,28 @@
     <meta charset="utf-8" />
     <title>Spinview</title>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
     <style>
         html, body {
             margin: 0;
+            padding: 0;
+            width: 100%;
             height: 100%;
             background: black;
             overflow: hidden;
             -webkit-text-size-adjust: 100%;
             text-size-adjust: 100%;
             touch-action: manipulation;
+            zoom: 1.0 !important;
+            transform: scale(1) !important;
         }
 
         canvas#canvas {
             width: 100%;
             height: 100%;
             display: block;
+            touch-action: none;
         }
 
         .game-title {
@@ -91,15 +96,19 @@
         <div class="loader-text">Loading engine...</div>
     </div>
 
-    <div class="game-title">Spinview</div>
+    <!-- Le titre affiche maintenant la version dynamiquement -->
+    <div class="game-title" id="gameTitle">Spinview</div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <script>
         // ────────────────────────────────────────────────
         // Version unique → change-la ICI seulement !
-        const APP_VERSION = "2"; 
+        const APP_VERSION = "3";
         // ────────────────────────────────────────────────
+
+        // Mise à jour du titre affiché avec la version
+        document.getElementById("gameTitle").textContent = `Spinview v${APP_VERSION}`;
 
         var Module = {
             canvas: (() => document.getElementById('canvas'))(),
@@ -118,7 +127,6 @@
             console.log('[onerror]: ' + event.message);
     </script>
 
-    <!-- Le script principal utilise aussi la variable via template literal -->
-    <script async src="App.js?v=${APP_VERSION}"></script>
+    <script async src=`App.js?v=${APP_VERSION}`></script>
 </body>
 </html>
