@@ -4,11 +4,13 @@
     <meta charset="utf-8" />
     <title>Spinview</title>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 
     <style>
         html, body {
             margin: 0;
+            padding: 0;
+            width: 100%;
             height: 100%;
             background: black;
             overflow: hidden;
@@ -17,10 +19,18 @@
             touch-action: manipulation;
         }
 
+        body {
+            position: fixed;
+            inset: 0;
+        }
+
         canvas#canvas {
+            position: absolute;
+            inset: 0;
             width: 100%;
             height: 100%;
             display: block;
+            touch-action: none;
         }
 
         .game-title {
@@ -91,34 +101,141 @@
         <div class="loader-text">Loading engine...</div>
     </div>
 
-    <div class="game-title">Spinview</div>
+    <div id="gameTitle" class="game-title"></div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <script>
-        // ────────────────────────────────────────────────
-        // Version unique → change-la ICI seulement !
-        const APP_VERSION = "6"; 
-        // ────────────────────────────────────────────────
+        const APP_VERSION = "6";
+
+        function updateTitle() {
+            const title = document.getElementById("gameTitle");
+            if (title) {
+                title.textContent = "Spinview v" + APP_VERSION;
+            }
+        }
+
+        function resizeCanvasToNative() {
+            const canvas = document.getElementById("canvas");
+            if (!canvas) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const cssW = canvas.clientWidth;
+            const cssH = canvas.clientHeight;
+
+            const realW = Math.max(1, Math.round(cssW * dpr));
+            const realH = Math.max(1, Math.round(cssH * dpr));
+
+            if (canvas.width !== realW || canvas.height !== realH) {
+                canvas.width = realW;
+                canvas.height = realH;
+
+                console.log("canvas resize", {
+                    cssW: cssW,
+                    cssH: cssH,
+                    dpr: dpr,
+                    realW: realW,
+                    realH: realH
+                });
+            }
+        }
+
+        let resizeScheduled = false;
+        let stableFramesLeft = 0;
+        let lastClientW = -1;
+        let lastClientH = -1;
+
+        function runResizePass() {
+            resizeScheduled = false;
+
+            const canvas = document.getElementById("canvas");
+            if (!canvas) return;
+
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+
+            resizeCanvasToNative();
+
+            if (w !== lastClientW || h !== lastClientH) {
+                lastClientW = w;
+                lastClientH = h;
+                stableFramesLeft = 3;
+            } else if (stableFramesLeft > 0) {
+                stableFramesLeft--;
+            }
+
+            if (stableFramesLeft > 0) {
+                requestAnimationFrame(runResizePass);
+            }
+        }
+
+        function scheduleResize() {
+            if (resizeScheduled) return;
+            resizeScheduled = true;
+            requestAnimationFrame(runResizePass);
+        }
+
+        updateTitle();
 
         var Module = {
-            canvas: (() => document.getElementById('canvas'))(),
+            canvas: (function () {
+                return document.getElementById("canvas");
+            })(),
             preRun: [],
-            locateFile: (path) => `${path}?v=${APP_VERSION}`,
-            print: (...args) => console.log('[stdout]: ' + args.join(' ')),
-            printErr: (...args) => console.log('[stderr]: ' + args.join(' ')),
-            onRuntimeInitialized: function(){
+            locateFile: function(path) {
+                return path + "?v=" + APP_VERSION;
+            },
+            print: function() {
+                console.log("[stdout]: " + Array.prototype.slice.call(arguments).join(" "));
+            },
+            printErr: function() {
+                console.log("[stderr]: " + Array.prototype.slice.call(arguments).join(" "));
+            },
+            onRuntimeInitialized: function() {
+                scheduleResize();
+
                 const loader = document.getElementById("loader");
-                loader.classList.add("hidden");
-                setTimeout(()=>loader.remove(),500);
+                if (loader) {
+                    loader.classList.add("hidden");
+                    loader.addEventListener("transitionend", function onEnd() {
+                        loader.removeEventListener("transitionend", onEnd);
+                        if (loader.parentNode) {
+                            loader.parentNode.removeChild(loader);
+                        }
+                    });
+                }
             }
         };
 
-        window.onerror = (event) =>
-            console.log('[onerror]: ' + event.message);
-    </script>
+        window.addEventListener("load", function() {
+            updateTitle();
+            scheduleResize();
+        });
 
-    <!-- Le script principal utilise aussi la variable via template literal -->
-    <script async src="App.js?v=${APP_VERSION}"></script>
+        window.addEventListener("resize", function() {
+            scheduleResize();
+        });
+
+        window.addEventListener("orientationchange", function() {
+            scheduleResize();
+        });
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener("resize", function() {
+                scheduleResize();
+            });
+        }
+
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.log("[onerror]:", message, source, lineno, colno, error);
+        };
+
+        (function() {
+            const s = document.createElement("script");
+            s.async = true;
+            s.src = "App.js?v=" + APP_VERSION;
+            document.body.appendChild(s);
+        })();
+    </script>
 </body>
 </html>
