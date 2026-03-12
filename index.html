@@ -44,18 +44,6 @@
             z-index: 1;
         }
 
-        .game-menu-item {
-            pointer-events: auto;
-            font-size: 18px;
-            padding-left: 10px;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
-        .game-menu-link {
-            color: white;
-            text-decoration: none;
-        }
-
         #loader {
             position: fixed;
             inset: 0;
@@ -106,7 +94,7 @@
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <script>
-        const APP_VERSION = "6";
+        const APP_VERSION = "8";
 
         function updateTitle() {
             const title = document.getElementById("gameTitle");
@@ -115,64 +103,65 @@
             }
         }
 
-        function resizeCanvasToNative() {
+        let resizeScheduled = false;
+        let lastCssW = -1;
+        let lastCssH = -1;
+        let settleFrames = 0;
+
+        function applyCanvasSize() {
             const canvas = document.getElementById("canvas");
             if (!canvas) return;
 
             const dpr = window.devicePixelRatio || 1;
-            const cssW = canvas.clientWidth;
-            const cssH = canvas.clientHeight;
+            const cssW = Math.max(1, Math.round(window.innerWidth));
+            const cssH = Math.max(1, Math.round(window.innerHeight));
+            const fbW = Math.max(1, Math.round(cssW * dpr));
+            const fbH = Math.max(1, Math.round(cssH * dpr));
 
-            const realW = Math.max(1, Math.round(cssW * dpr));
-            const realH = Math.max(1, Math.round(cssH * dpr));
+            canvas.style.width = cssW + "px";
+            canvas.style.height = cssH + "px";
 
-            if (canvas.width !== realW || canvas.height !== realH) {
-                canvas.width = realW;
-                canvas.height = realH;
-
-                console.log("canvas resize", {
-                    cssW: cssW,
-                    cssH: cssH,
-                    dpr: dpr,
-                    realW: realW,
-                    realH: realH
-                });
+            if (typeof Module !== "undefined" && typeof Module.setCanvasSize === "function") {
+                Module.setCanvasSize(fbW, fbH, false);
+            } else {
+                canvas.width = fbW;
+                canvas.height = fbH;
             }
+
+            console.log("resize", {
+                cssW: cssW,
+                cssH: cssH,
+                dpr: dpr,
+                fbW: fbW,
+                fbH: fbH
+            });
         }
 
-        let resizeScheduled = false;
-        let stableFramesLeft = 0;
-        let lastClientW = -1;
-        let lastClientH = -1;
-
-        function runResizePass() {
+        function resizePass() {
             resizeScheduled = false;
 
-            const canvas = document.getElementById("canvas");
-            if (!canvas) return;
+            const cssW = Math.max(1, Math.round(window.innerWidth));
+            const cssH = Math.max(1, Math.round(window.innerHeight));
 
-            const w = canvas.clientWidth;
-            const h = canvas.clientHeight;
+            applyCanvasSize();
 
-            resizeCanvasToNative();
-
-            if (w !== lastClientW || h !== lastClientH) {
-                lastClientW = w;
-                lastClientH = h;
-                stableFramesLeft = 3;
-            } else if (stableFramesLeft > 0) {
-                stableFramesLeft--;
+            if (cssW !== lastCssW || cssH !== lastCssH) {
+                lastCssW = cssW;
+                lastCssH = cssH;
+                settleFrames = 2;
+            } else if (settleFrames > 0) {
+                settleFrames--;
             }
 
-            if (stableFramesLeft > 0) {
-                requestAnimationFrame(runResizePass);
+            if (settleFrames > 0) {
+                requestAnimationFrame(resizePass);
             }
         }
 
         function scheduleResize() {
             if (resizeScheduled) return;
             resizeScheduled = true;
-            requestAnimationFrame(runResizePass);
+            requestAnimationFrame(resizePass);
         }
 
         updateTitle();
@@ -212,18 +201,11 @@
             scheduleResize();
         });
 
-        window.addEventListener("resize", function() {
-            scheduleResize();
-        });
-
-        window.addEventListener("orientationchange", function() {
-            scheduleResize();
-        });
+        window.addEventListener("resize", scheduleResize);
+        window.addEventListener("orientationchange", scheduleResize);
 
         if (window.visualViewport) {
-            window.visualViewport.addEventListener("resize", function() {
-                scheduleResize();
-            });
+            window.visualViewport.addEventListener("resize", scheduleResize);
         }
 
         window.onerror = function(message, source, lineno, colno, error) {
