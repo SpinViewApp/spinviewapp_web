@@ -53,10 +53,11 @@
             font-family: Arial, Helvetica, sans-serif;
             font-size: 24px;
             line-height: 1;
-            pointer-events: none;
+            pointer-events: auto;
             user-select: none;
             -webkit-user-select: none;
             text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            cursor: pointer;
         }
 
         #loader {
@@ -148,11 +149,13 @@
             console.log("body.clientWidth/clientHeight =", document.body.clientWidth, document.body.clientHeight);
             console.log("canvas.clientWidth/clientHeight =", canvas.clientWidth, canvas.clientHeight);
             console.log("canvas.width/height =", canvas.width, canvas.height);
-            console.log("visualViewport =", window.visualViewport ? {
-                width: window.visualViewport.width,
-                height: window.visualViewport.height,
-                scale: window.visualViewport.scale
-            } : "none");
+
+            if (window.visualViewport) {
+                console.log("visualViewport.width/height/scale =", window.visualViewport.width, window.visualViewport.height, window.visualViewport.scale);
+            } else {
+                console.log("visualViewport = none");
+            }
+
             console.log("devicePixelRatio =", window.devicePixelRatio);
         }
 
@@ -189,7 +192,11 @@
             }
         };
 
-        window.addEventListener("load", debugCanvasSizes);
+        window.addEventListener("load", function() {
+            updateVersionLabels();
+            debugCanvasSizes();
+        });
+
         window.addEventListener("resize", debugCanvasSizes);
         window.addEventListener("orientationchange", debugCanvasSizes);
 
@@ -200,7 +207,11 @@
         window.onerror = function(message, source, lineno, colno, error) {
             console.log("[onerror]:", message, source, lineno, colno, error);
         };
+    </script>
 
+    <script src="console.js"></script>
+
+    <script>
         (function() {
             var version = getCurrentVersion();
             var s = document.createElement("script");
