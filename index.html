@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <title>Spinview</title>
-
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
 <script defer src="version.js"></script>
@@ -20,8 +19,7 @@ html, body {
 }
 
 body {
-    position: fixed;
-    inset: 0;
+    background: black;
     touch-action: none;
     overscroll-behavior: none;
     -webkit-text-size-adjust: 100%;
@@ -30,14 +28,12 @@ body {
 }
 
 #canvas {
-    position: fixed;
-    inset: 0;
     display: block;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     background: black;
-    z-index: 0;
     outline: none;
+    touch-action: none;
 }
 
 .game-title {
@@ -105,7 +101,6 @@ body {
 }
 </style>
 </head>
-
 <body>
 
 <div id="loader">
@@ -146,6 +141,8 @@ function updateVersionLabels() {
 
 var debugConsole = document.getElementById("debugConsole");
 var consoleVisible = false;
+var canvas = document.getElementById("canvas");
+var title = document.getElementById("gameTitle");
 
 function consoleShow() {
     consoleVisible = true;
@@ -192,30 +189,7 @@ function consoleLine() {
     }
 }
 
-function resizeCanvasCssOnly() {
-    var canvas = document.getElementById("canvas");
-    var w = window.innerWidth;
-    var h = window.innerHeight;
-
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-
-    consoleLine(
-        "resize css",
-        w,
-        h,
-        "dpr",
-        window.devicePixelRatio || 1,
-        "canvas",
-        canvas.width,
-        canvas.height
-    );
-}
-
 updateVersionLabels();
-
-var title = document.getElementById("gameTitle");
-var canvas = document.getElementById("canvas");
 
 title.addEventListener("pointerdown", function(e) {
     e.preventDefault();
@@ -237,17 +211,6 @@ document.addEventListener("pointerdown", function(e) {
     if (debugConsole.contains(e.target)) return;
     if (e.target === title) return;
     consoleHide();
-});
-
-window.addEventListener("load", function() {
-    resizeCanvasCssOnly();
-});
-
-window.addEventListener("resize", resizeCanvasCssOnly);
-window.addEventListener("orientationchange", function() {
-    setTimeout(resizeCanvasCssOnly, 50);
-    setTimeout(resizeCanvasCssOnly, 250);
-    setTimeout(resizeCanvasCssOnly, 500);
 });
 
 window.onerror = function(message, source, lineno, colno, error) {
@@ -272,8 +235,10 @@ var Module = {
     },
 
     onRuntimeInitialized: function() {
-        resizeCanvasCssOnly();
         consoleLine("runtime ready");
+        consoleLine("window", window.innerWidth, window.innerHeight);
+        consoleLine("canvas client", canvas.clientWidth, canvas.clientHeight);
+        consoleLine("canvas buffer", canvas.width, canvas.height);
 
         if (window.spinviewActivateKeyboard) {
             window.spinviewActivateKeyboard();
