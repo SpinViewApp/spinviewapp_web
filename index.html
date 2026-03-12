@@ -1,359 +1,349 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <title>Spinview</title>
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta charset="utf-8">
+<title>Spinview</title>
 
-    <script defer src="version.js"></script>
+<meta name="viewport"
+content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            background: #000;
-            overflow: hidden;
-            width: 100%;
-            height: 100%;
-        }
+<script defer src="version.js"></script>
+<script defer src="keys.js"></script>
 
-        body {
-            position: fixed;
-            inset: 0;
-            touch-action: none;
-            overscroll-behavior: none;
-            -webkit-text-size-adjust: 100%;
-            text-size-adjust: 100%;
-            font-family: Arial, Helvetica, sans-serif;
-        }
+<style>
 
-        #canvas {
-            position: fixed;
-            inset: 0;
-            display: block;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            border: 0;
-            background: #000;
-            touch-action: none;
-            z-index: 0;
-        }
+html, body{
+    margin:0;
+    padding:0;
+    width:100%;
+    height:100%;
+    background:black;
+    overflow:hidden;
+}
 
-        .game-title {
-            position: fixed;
-            left: 10px;
-            bottom: 10px;
-            z-index: 20;
-            color: #fff;
-            font-size: 24px;
-            line-height: 1;
-            pointer-events: auto;
-            user-select: none;
-            -webkit-user-select: none;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-            cursor: pointer;
-            padding: 8px 10px;
-            background: rgba(0,0,0,0.18);
-            border-radius: 8px;
-        }
+body{
+    position:fixed;
+    inset:0;
+    touch-action:none;
+    overscroll-behavior:none;
+    -webkit-text-size-adjust:100%;
+}
 
-        #loader {
-            position: fixed;
-            inset: 0;
-            z-index: 50;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            background: #0a0a0a;
-            color: #fff;
-            transition: opacity 0.35s ease;
-        }
+#canvas{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+    background:black;
+    z-index:0;
+}
 
-        #loader.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
+.game-title{
+    position:fixed;
+    left:12px;
+    bottom:12px;
 
-        .spinner {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: 4px solid rgba(255,255,255,0.15);
-            border-top-color: #fff;
-            animation: spin 1s linear infinite;
-            margin-bottom: 16px;
-        }
+    color:white;
+    font-family:Arial, Helvetica, sans-serif;
+    font-size:24px;
 
-        .loader-text {
-            font-size: 15px;
-            opacity: 0.85;
-        }
+    padding:8px 10px;
+    border-radius:8px;
 
-        #debugConsole {
-            position: fixed;
-            left: 10px;
-            right: 10px;
-            bottom: 60px;
-            max-height: 45vh;
-            overflow: auto;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.85);
-            color: #9fef9f;
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 10px;
-            padding: 10px;
-            font: 12px/1.4 monospace;
-            white-space: pre-wrap;
-            word-break: break-word;
-            display: none;
-            pointer-events: auto;
-        }
+    background:rgba(0,0,0,0.25);
+    backdrop-filter:blur(4px);
 
-        #debugConsole.visible {
-            display: block;
-        }
+    user-select:none;
+    cursor:pointer;
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-    </style>
+    z-index:10;
+}
+
+#loader{
+    position:fixed;
+    inset:0;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+
+    background:#0a0a0a;
+    color:white;
+
+    z-index:50;
+}
+
+.spinner{
+    width:40px;
+    height:40px;
+
+    border-radius:50%;
+    border:4px solid rgba(255,255,255,0.15);
+    border-top-color:white;
+
+    animation:spin 1s linear infinite;
+    margin-bottom:12px;
+}
+
+@keyframes spin{
+    to{ transform:rotate(360deg); }
+}
+
+#debugConsole{
+
+    position:fixed;
+    left:10px;
+    right:10px;
+    bottom:60px;
+
+    max-height:45vh;
+
+    overflow:auto;
+
+    padding:10px;
+
+    font:12px monospace;
+
+    background:rgba(0,0,0,0.9);
+    color:#9fef9f;
+
+    border-radius:8px;
+    border:1px solid rgba(255,255,255,0.15);
+
+    white-space:pre-wrap;
+
+    display:none;
+
+    z-index:100;
+}
+
+#debugConsole.visible{
+    display:block;
+}
+
+</style>
 </head>
+
 <body>
-    <div id="loader">
-        <div class="spinner"></div>
-        <div id="loaderText" class="loader-text">Loading engine...</div>
-    </div>
 
-    <div id="gameTitle" class="game-title">Spinview</div>
-    <div id="debugConsole"></div>
+<div id="loader">
+<div class="spinner"></div>
+<div id="loaderText">Loading engine...</div>
+</div>
 
-    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+<div id="gameTitle" class="game-title">Spinview</div>
 
-    <script>
-        function getCurrentVersion() {
-            try {
-                var url = new URL(window.location.href);
-                var v = url.searchParams.get("_v");
-                if (v) return v;
+<div id="debugConsole"></div>
 
-                v = localStorage.getItem("siteVersion");
-                if (v) return v;
-            } catch (_) {
+<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+
+<script>
+
+/* -------------------------
+version label
+------------------------- */
+
+function getCurrentVersion(){
+
+    try{
+        var url=new URL(window.location.href)
+        var v=url.searchParams.get("_v")
+        if(v) return v
+
+        v=localStorage.getItem("siteVersion")
+        if(v) return v
+    }
+    catch(e){}
+
+    return "dev"
+}
+
+function updateVersionLabels(){
+
+    var version=getCurrentVersion()
+
+    document.title="Spinview "+version
+
+    var t=document.getElementById("gameTitle")
+    var l=document.getElementById("loaderText")
+
+    if(t) t.textContent="Spinview "+version
+    if(l) l.textContent="Loading engine "+version
+}
+
+updateVersionLabels()
+
+
+/* -------------------------
+debug console
+------------------------- */
+
+var debugConsole=document.getElementById("debugConsole")
+var consoleVisible=false
+
+function consoleShow(){
+
+    consoleVisible=true
+    debugConsole.classList.add("visible")
+}
+
+function consoleHide(){
+
+    consoleVisible=false
+    debugConsole.classList.remove("visible")
+}
+
+function consoleToggle(){
+
+    if(consoleVisible) consoleHide()
+    else consoleShow()
+}
+
+/* console output */
+
+function consoleLine(){
+
+    var parts=[]
+
+    for(var i=0;i<arguments.length;i++){
+
+        var v=arguments[i]
+
+        if(typeof v==="object"){
+
+            try{
+                parts.push(JSON.stringify(v))
             }
-            return "dev";
+            catch(e){
+                parts.push(String(v))
+            }
         }
+        else parts.push(String(v))
+    }
 
-        function updateVersionLabels() {
-            var version = getCurrentVersion();
-            var title = document.getElementById("gameTitle");
-            var loaderText = document.getElementById("loaderText");
+    var line=parts.join(" ")
 
-            if (title) {
-                title.textContent = "Spinview " + version;
-            }
+    console.log(line)
 
-            if (loaderText) {
-                loaderText.textContent = "Loading engine... " + version;
-            }
+    debugConsole.textContent+=line+"\n"
+    debugConsole.scrollTop=debugConsole.scrollHeight
+}
 
-            document.title = "Spinview " + version;
-        }
 
-        var debugConsole = document.getElementById("debugConsole");
-        var debugConsoleVisible = false;
+/* -------------------------
+title toggle console
+------------------------- */
 
-        function appendDebugLine() {
-            var parts = [];
-            for (var i = 0; i < arguments.length; i++) {
-                var v = arguments[i];
-                if (typeof v === "object") {
-                    try {
-                        parts.push(JSON.stringify(v));
-                    } catch (_) {
-                        parts.push(String(v));
-                    }
-                } else {
-                    parts.push(String(v));
-                }
-            }
+var title=document.getElementById("gameTitle")
 
-            var line = parts.join(" ");
-            console.log(line);
+title.addEventListener("pointerdown",function(e){
 
-            if (debugConsole) {
-                debugConsole.textContent += line + "\n";
-                debugConsole.scrollTop = debugConsole.scrollHeight;
-            }
-        }
+    e.preventDefault()
+    e.stopPropagation()
 
-        function toggleDebugConsole() {
-            debugConsoleVisible = !debugConsoleVisible;
-            if (debugConsole) {
-                debugConsole.classList.toggle("visible", debugConsoleVisible);
-            }
-        }
+    consoleToggle()
 
-        function getViewportSize() {
-            var w = window.innerWidth;
-            var h = window.innerHeight;
+})
 
-            if (window.visualViewport) {
-                w = Math.round(window.visualViewport.width);
-                h = Math.round(window.visualViewport.height);
-            }
 
-            return { width: w, height: h };
-        }
+/* -------------------------
+click outside close console
+------------------------- */
 
-        function resizeCanvasToNativePixels() {
-            var canvas = document.getElementById("canvas");
-            if (!canvas) return;
+document.addEventListener("pointerdown",function(e){
 
-            var vp = getViewportSize();
-            var dpr = window.devicePixelRatio || 1;
+    if(!consoleVisible) return
 
-            var cssW = vp.width;
-            var cssH = vp.height;
+    if(debugConsole.contains(e.target)) return
 
-            var realW = Math.max(1, Math.round(cssW * dpr));
-            var realH = Math.max(1, Math.round(cssH * dpr));
+    if(e.target===title) return
 
-            canvas.style.width = cssW + "px";
-            canvas.style.height = cssH + "px";
+    consoleHide()
 
-            if (canvas.width !== realW) {
-                canvas.width = realW;
-            }
-            if (canvas.height !== realH) {
-                canvas.height = realH;
-            }
+})
 
-            appendDebugLine(
-                "[resizeCanvas]",
-                "css=", cssW + "x" + cssH,
-                "dpr=", dpr,
-                "real=", realW + "x" + realH
-            );
-        }
 
-        function debugCanvasSizes() {
-            var canvas = document.getElementById("canvas");
-            if (!canvas) return;
+/* -------------------------
+canvas resize native
+------------------------- */
 
-            appendDebugLine("----- SIZE DEBUG -----");
-            appendDebugLine("window.innerWidth/innerHeight =", window.innerWidth, window.innerHeight);
-            appendDebugLine("documentElement.clientWidth/clientHeight =", document.documentElement.clientWidth, document.documentElement.clientHeight);
-            appendDebugLine("body.clientWidth/clientHeight =", document.body.clientWidth, document.body.clientHeight);
-            appendDebugLine("canvas.clientWidth/clientHeight =", canvas.clientWidth, canvas.clientHeight);
-            appendDebugLine("canvas.width/height =", canvas.width, canvas.height);
+function resizeCanvas(){
 
-            if (window.visualViewport) {
-                appendDebugLine("visualViewport.width/height/scale =",
-                    window.visualViewport.width,
-                    window.visualViewport.height,
-                    window.visualViewport.scale
-                );
-            } else {
-                appendDebugLine("visualViewport = none");
-            }
+    var canvas=document.getElementById("canvas")
 
-            appendDebugLine("devicePixelRatio =", window.devicePixelRatio);
-        }
+    var dpr=window.devicePixelRatio||1
 
-        updateVersionLabels();
+    var w=window.innerWidth
+    var h=window.innerHeight
 
-        var Module = {
-            canvas: document.getElementById("canvas"),
-            preRun: [],
-            postRun: [],
-            locateFile: function(path) {
-                var version = getCurrentVersion();
-                var sep = path.indexOf("?") >= 0 ? "&" : "?";
-                return path + sep + "_v=" + encodeURIComponent(version);
-            },
-            print: function() {
-                appendDebugLine("[stdout]:", Array.prototype.slice.call(arguments).join(" "));
-            },
-            printErr: function() {
-                appendDebugLine("[stderr]:", Array.prototype.slice.call(arguments).join(" "));
-            },
-            setStatus: function(text) {
-                if (text) {
-                    appendDebugLine("[status]:", text);
-                }
-            },
-            onRuntimeInitialized: function() {
-                resizeCanvasToNativePixels();
-                debugCanvasSizes();
+    canvas.style.width=w+"px"
+    canvas.style.height=h+"px"
 
-                var loader = document.getElementById("loader");
-                if (loader) {
-                    loader.classList.add("hidden");
-                    loader.addEventListener("transitionend", function onEnd() {
-                        loader.removeEventListener("transitionend", onEnd);
-                        if (loader.parentNode) {
-                            loader.parentNode.removeChild(loader);
-                        }
-                    });
-                }
-            }
-        };
+    canvas.width=Math.round(w*dpr)
+    canvas.height=Math.round(h*dpr)
 
-        function afterViewportChange() {
-            resizeCanvasToNativePixels();
-            debugCanvasSizes();
-        }
+    consoleLine("resize",w,h,"dpr",dpr)
+}
 
-        window.addEventListener("load", function() {
-            resizeCanvasToNativePixels();
-            updateVersionLabels();
-            debugCanvasSizes();
-        });
+window.addEventListener("resize",resizeCanvas)
+window.addEventListener("orientationchange",function(){
 
-        window.addEventListener("resize", afterViewportChange);
-        window.addEventListener("orientationchange", function() {
-            setTimeout(afterViewportChange, 50);
-            setTimeout(afterViewportChange, 250);
-        });
+    setTimeout(resizeCanvas,50)
+})
 
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener("resize", afterViewportChange);
-        }
+window.addEventListener("load",resizeCanvas)
 
-        window.onerror = function(message, source, lineno, colno, error) {
-            appendDebugLine("[onerror]:", message, source, lineno, colno, error ? (error.stack || error) : "");
-        };
 
-        (function setupTitleToggle() {
-            var title = document.getElementById("gameTitle");
-            if (!title) return;
+/* -------------------------
+emscripten module
+------------------------- */
 
-            function onToggle(ev) {
-                ev.preventDefault();
-                ev.stopPropagation();
-                toggleDebugConsole();
-                appendDebugLine("[ui]: title toggled console");
-            }
+var Module={
 
-            title.addEventListener("pointerdown", onToggle, { passive: false });
-            title.addEventListener("click", onToggle, false);
-            title.addEventListener("touchstart", onToggle, { passive: false });
-        })();
-    </script>
+    canvas:document.getElementById("canvas"),
 
-    <script>
-        (function() {
-            var version = getCurrentVersion();
-            var s = document.createElement("script");
-            s.async = true;
-            s.src = "App.js?_v=" + encodeURIComponent(version);
-            document.body.appendChild(s);
-        })();
-    </script>
+    print:function(){
+        consoleLine("[stdout]",...arguments)
+    },
+
+    printErr:function(){
+        consoleLine("[stderr]",...arguments)
+    },
+
+    onRuntimeInitialized:function(){
+
+        resizeCanvas()
+
+        var loader=document.getElementById("loader")
+        loader.style.display="none"
+
+        consoleLine("runtime ready")
+    }
+
+}
+
+
+/* -------------------------
+load wasm js
+------------------------- */
+
+(function(){
+
+    var version=getCurrentVersion()
+
+    var s=document.createElement("script")
+
+    s.async=true
+    s.src="App.js?_v="+encodeURIComponent(version)
+
+    document.body.appendChild(s)
+
+})()
+
+</script>
+
 </body>
 </html>
