@@ -10,98 +10,98 @@
 <script defer src="keys.js"></script>
 
 <style>
-html, body{
-    margin:0;
-    padding:0;
-    width:100%;
-    height:100%;
-    background:black;
-    overflow:hidden;
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: black;
+    overflow: hidden;
 }
 
-body{
-    position:fixed;
-    inset:0;
-    touch-action:none;
-    overscroll-behavior:none;
-    -webkit-text-size-adjust:100%;
-    text-size-adjust:100%;
-    font-family:Arial, Helvetica, sans-serif;
+body {
+    position: fixed;
+    inset: 0;
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
-#canvas{
-    position:fixed;
-    inset:0;
-    display:block;
-    width:100%;
-    height:100%;
-    background:black;
-    z-index:0;
-    outline:none;
+#canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: black;
+    z-index: 0;
+    outline: none;
 }
 
-.game-title{
-    position:fixed;
-    left:12px;
-    bottom:12px;
-    color:white;
-    font-size:24px;
-    padding:8px 10px;
-    border-radius:8px;
-    background:rgba(0,0,0,0.25);
-    user-select:none;
-    -webkit-user-select:none;
-    cursor:pointer;
-    z-index:10;
+.game-title {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    color: white;
+    font-size: 24px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.25);
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+    z-index: 10;
 }
 
-#loader{
-    position:fixed;
-    inset:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    background:#0a0a0a;
-    color:white;
-    z-index:50;
+#loader {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: #0a0a0a;
+    color: white;
+    z-index: 50;
 }
 
-.spinner{
-    width:40px;
-    height:40px;
-    border-radius:50%;
-    border:4px solid rgba(255,255,255,0.15);
-    border-top-color:white;
-    animation:spin 1s linear infinite;
-    margin-bottom:12px;
+.spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.15);
+    border-top-color: white;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
 }
 
-@keyframes spin{
-    to{ transform:rotate(360deg); }
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
-#debugConsole{
-    position:fixed;
-    left:10px;
-    right:10px;
-    bottom:60px;
-    max-height:45vh;
-    overflow:auto;
-    padding:10px;
-    font:12px monospace;
-    background:rgba(0,0,0,0.9);
-    color:#9fef9f;
-    border-radius:8px;
-    border:1px solid rgba(255,255,255,0.15);
-    white-space:pre-wrap;
-    word-break:break-word;
-    display:none;
-    z-index:100;
+#debugConsole {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 60px;
+    max-height: 45vh;
+    overflow: auto;
+    padding: 10px;
+    font: 12px monospace;
+    background: rgba(0,0,0,0.9);
+    color: #9fef9f;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+    z-index: 100;
 }
 
-#debugConsole.visible{
-    display:block;
+#debugConsole.visible {
+    display: block;
 }
 </style>
 </head>
@@ -119,66 +119,66 @@ body{
 <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
 
 <script>
-function getCurrentVersion(){
-    try{
+function getCurrentVersion() {
+    try {
         var url = new URL(window.location.href);
         var v = url.searchParams.get("_v");
-        if(v) return v;
+        if (v) return v;
 
         v = localStorage.getItem("siteVersion");
-        if(v) return v;
+        if (v) return v;
     }
-    catch(e){
+    catch (e) {
     }
     return "dev";
 }
 
-function updateVersionLabels(){
+function updateVersionLabels() {
     var version = getCurrentVersion();
     var t = document.getElementById("gameTitle");
     var l = document.getElementById("loaderText");
 
     document.title = "Spinview " + version;
 
-    if(t) t.textContent = "Spinview " + version;
-    if(l) l.textContent = "Loading engine... " + version;
+    if (t) t.textContent = "Spinview " + version;
+    if (l) l.textContent = "Loading engine... " + version;
 }
 
 var debugConsole = document.getElementById("debugConsole");
 var consoleVisible = false;
 
-function consoleShow(){
+function consoleShow() {
     consoleVisible = true;
     debugConsole.classList.add("visible");
 }
 
-function consoleHide(){
+function consoleHide() {
     consoleVisible = false;
     debugConsole.classList.remove("visible");
 }
 
-function consoleToggle(){
-    if(consoleVisible) consoleHide();
+function consoleToggle() {
+    if (consoleVisible) consoleHide();
     else consoleShow();
 }
 
-function consoleLine(){
+function consoleLine() {
     var parts = [];
     var i;
     var v;
     var line;
 
-    for(i = 0; i < arguments.length; i++){
+    for (i = 0; i < arguments.length; i++) {
         v = arguments[i];
-        if(typeof v === "object"){
-            try{
+        if (typeof v === "object") {
+            try {
                 parts.push(JSON.stringify(v));
             }
-            catch(e){
+            catch (e) {
                 parts.push(String(v));
             }
         }
-        else{
+        else {
             parts.push(String(v));
         }
     }
@@ -186,30 +186,30 @@ function consoleLine(){
     line = parts.join(" ");
     console.log(line);
 
-    if(debugConsole){
+    if (debugConsole) {
         debugConsole.textContent += line + "\n";
         debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 }
 
-/* Important:
-   Do not multiply by devicePixelRatio here.
-   Let Sokol / Emscripten manage the real framebuffer size.
-*/
-function resizeCanvas(){
+function resizeCanvasCssOnly() {
     var canvas = document.getElementById("canvas");
     var w = window.innerWidth;
     var h = window.innerHeight;
 
-    if(window.visualViewport){
-        w = Math.round(window.visualViewport.width);
-        h = Math.round(window.visualViewport.height);
-    }
-
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
 
-    consoleLine("resize css", w, h, "dpr", window.devicePixelRatio || 1, "canvas", canvas.width, canvas.height);
+    consoleLine(
+        "resize css",
+        w,
+        h,
+        "dpr",
+        window.devicePixelRatio || 1,
+        "canvas",
+        canvas.width,
+        canvas.height
+    );
 }
 
 updateVersionLabels();
@@ -217,73 +217,70 @@ updateVersionLabels();
 var title = document.getElementById("gameTitle");
 var canvas = document.getElementById("canvas");
 
-title.addEventListener("pointerdown", function(e){
+title.addEventListener("pointerdown", function(e) {
     e.preventDefault();
     e.stopPropagation();
 
-    if(window.spinviewDeactivateKeyboard){
+    if (window.spinviewDeactivateKeyboard) {
         window.spinviewDeactivateKeyboard();
     }
 
-    if(document.activeElement === canvas){
+    if (document.activeElement === canvas) {
         canvas.blur();
     }
 
     consoleToggle();
 });
 
-document.addEventListener("pointerdown", function(e){
-    if(!consoleVisible) return;
-    if(debugConsole.contains(e.target)) return;
-    if(e.target === title) return;
+document.addEventListener("pointerdown", function(e) {
+    if (!consoleVisible) return;
+    if (debugConsole.contains(e.target)) return;
+    if (e.target === title) return;
     consoleHide();
 });
 
-window.addEventListener("load", function(){
-    resizeCanvas();
+window.addEventListener("load", function() {
+    resizeCanvasCssOnly();
 });
 
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("orientationchange", function(){
-    setTimeout(resizeCanvas, 50);
-    setTimeout(resizeCanvas, 250);
+window.addEventListener("resize", resizeCanvasCssOnly);
+window.addEventListener("orientationchange", function() {
+    setTimeout(resizeCanvasCssOnly, 50);
+    setTimeout(resizeCanvasCssOnly, 250);
+    setTimeout(resizeCanvasCssOnly, 500);
 });
 
-if(window.visualViewport){
-    window.visualViewport.addEventListener("resize", resizeCanvas);
-}
-
-window.onerror = function(message, source, lineno, colno, error){
+window.onerror = function(message, source, lineno, colno, error) {
     consoleLine("[onerror]", message, source, lineno, colno, error ? error.stack || error : "");
 };
 
 var Module = {
     canvas: canvas,
 
-    locateFile: function(path){
+    locateFile: function(path) {
         var version = getCurrentVersion();
         var sep = path.indexOf("?") >= 0 ? "&" : "?";
         return path + sep + "_v=" + encodeURIComponent(version);
     },
 
-    print: function(){
+    print: function() {
         consoleLine("[stdout]", Array.prototype.slice.call(arguments).join(" "));
     },
 
-    printErr: function(){
+    printErr: function() {
         consoleLine("[stderr]", Array.prototype.slice.call(arguments).join(" "));
     },
 
-    onRuntimeInitialized: function(){
-        resizeCanvas();
+    onRuntimeInitialized: function() {
+        resizeCanvasCssOnly();
         consoleLine("runtime ready");
 
-        if(window.spinviewActivateKeyboard){
+        if (window.spinviewActivateKeyboard) {
             window.spinviewActivateKeyboard();
         }
 
         var loader = document.getElementById("loader");
-        if(loader){
+        if (loader) {
             loader.style.display = "none";
         }
     }
@@ -291,7 +288,7 @@ var Module = {
 </script>
 
 <script>
-(function(){
+(function() {
     var version = getCurrentVersion();
     var s = document.createElement("script");
     s.async = true;
