@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <title>Spinview</title>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
     <script defer src="version.js"></script>
 
@@ -20,28 +21,26 @@
 
         body {
             position: fixed;
-            left: 0;
-            top: 0;
-            right: 0;
-            bottom: 0;
+            inset: 0;
             touch-action: none;
             overscroll-behavior: none;
             -webkit-text-size-adjust: 100%;
             text-size-adjust: 100%;
+            font-family: Arial, Helvetica, sans-serif;
         }
 
         #canvas {
             position: fixed;
-            left: 0;
-            top: 0;
+            inset: 0;
             display: block;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             margin: 0;
             padding: 0;
             border: 0;
             background: #000;
             touch-action: none;
+            z-index: 0;
         }
 
         .game-title {
@@ -50,7 +49,6 @@
             bottom: 10px;
             z-index: 20;
             color: #fff;
-            font-family: Arial, Helvetica, sans-serif;
             font-size: 24px;
             line-height: 1;
             pointer-events: auto;
@@ -58,6 +56,9 @@
             -webkit-user-select: none;
             text-shadow: 0 1px 2px rgba(0,0,0,0.8);
             cursor: pointer;
+            padding: 8px 10px;
+            background: rgba(0,0,0,0.18);
+            border-radius: 8px;
         }
 
         #loader {
@@ -70,7 +71,6 @@
             flex-direction: column;
             background: #0a0a0a;
             color: #fff;
-            font-family: Arial, Helvetica, sans-serif;
             transition: opacity 0.35s ease;
         }
 
@@ -94,6 +94,30 @@
             opacity: 0.85;
         }
 
+        #debugConsole {
+            position: fixed;
+            left: 10px;
+            right: 10px;
+            bottom: 60px;
+            max-height: 45vh;
+            overflow: auto;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.85);
+            color: #9fef9f;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            padding: 10px;
+            font: 12px/1.4 monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            display: none;
+            pointer-events: auto;
+        }
+
+        #debugConsole.visible {
+            display: block;
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -106,6 +130,7 @@
     </div>
 
     <div id="gameTitle" class="game-title">Spinview</div>
+    <div id="debugConsole"></div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
@@ -139,24 +164,105 @@
             document.title = "Spinview " + version;
         }
 
+        var debugConsole = document.getElementById("debugConsole");
+        var debugConsoleVisible = false;
+
+        function appendDebugLine() {
+            var parts = [];
+            for (var i = 0; i < arguments.length; i++) {
+                var v = arguments[i];
+                if (typeof v === "object") {
+                    try {
+                        parts.push(JSON.stringify(v));
+                    } catch (_) {
+                        parts.push(String(v));
+                    }
+                } else {
+                    parts.push(String(v));
+                }
+            }
+
+            var line = parts.join(" ");
+            console.log(line);
+
+            if (debugConsole) {
+                debugConsole.textContent += line + "\n";
+                debugConsole.scrollTop = debugConsole.scrollHeight;
+            }
+        }
+
+        function toggleDebugConsole() {
+            debugConsoleVisible = !debugConsoleVisible;
+            if (debugConsole) {
+                debugConsole.classList.toggle("visible", debugConsoleVisible);
+            }
+        }
+
+        function getViewportSize() {
+            var w = window.innerWidth;
+            var h = window.innerHeight;
+
+            if (window.visualViewport) {
+                w = Math.round(window.visualViewport.width);
+                h = Math.round(window.visualViewport.height);
+            }
+
+            return { width: w, height: h };
+        }
+
+        function resizeCanvasToNativePixels() {
+            var canvas = document.getElementById("canvas");
+            if (!canvas) return;
+
+            var vp = getViewportSize();
+            var dpr = window.devicePixelRatio || 1;
+
+            var cssW = vp.width;
+            var cssH = vp.height;
+
+            var realW = Math.max(1, Math.round(cssW * dpr));
+            var realH = Math.max(1, Math.round(cssH * dpr));
+
+            canvas.style.width = cssW + "px";
+            canvas.style.height = cssH + "px";
+
+            if (canvas.width !== realW) {
+                canvas.width = realW;
+            }
+            if (canvas.height !== realH) {
+                canvas.height = realH;
+            }
+
+            appendDebugLine(
+                "[resizeCanvas]",
+                "css=", cssW + "x" + cssH,
+                "dpr=", dpr,
+                "real=", realW + "x" + realH
+            );
+        }
+
         function debugCanvasSizes() {
             var canvas = document.getElementById("canvas");
             if (!canvas) return;
 
-            console.log("----- SIZE DEBUG -----");
-            console.log("window.innerWidth/innerHeight =", window.innerWidth, window.innerHeight);
-            console.log("documentElement.clientWidth/clientHeight =", document.documentElement.clientWidth, document.documentElement.clientHeight);
-            console.log("body.clientWidth/clientHeight =", document.body.clientWidth, document.body.clientHeight);
-            console.log("canvas.clientWidth/clientHeight =", canvas.clientWidth, canvas.clientHeight);
-            console.log("canvas.width/height =", canvas.width, canvas.height);
+            appendDebugLine("----- SIZE DEBUG -----");
+            appendDebugLine("window.innerWidth/innerHeight =", window.innerWidth, window.innerHeight);
+            appendDebugLine("documentElement.clientWidth/clientHeight =", document.documentElement.clientWidth, document.documentElement.clientHeight);
+            appendDebugLine("body.clientWidth/clientHeight =", document.body.clientWidth, document.body.clientHeight);
+            appendDebugLine("canvas.clientWidth/clientHeight =", canvas.clientWidth, canvas.clientHeight);
+            appendDebugLine("canvas.width/height =", canvas.width, canvas.height);
 
             if (window.visualViewport) {
-                console.log("visualViewport.width/height/scale =", window.visualViewport.width, window.visualViewport.height, window.visualViewport.scale);
+                appendDebugLine("visualViewport.width/height/scale =",
+                    window.visualViewport.width,
+                    window.visualViewport.height,
+                    window.visualViewport.scale
+                );
             } else {
-                console.log("visualViewport = none");
+                appendDebugLine("visualViewport = none");
             }
 
-            console.log("devicePixelRatio =", window.devicePixelRatio);
+            appendDebugLine("devicePixelRatio =", window.devicePixelRatio);
         }
 
         updateVersionLabels();
@@ -171,12 +277,18 @@
                 return path + sep + "_v=" + encodeURIComponent(version);
             },
             print: function() {
-                console.log("[stdout]: " + Array.prototype.slice.call(arguments).join(" "));
+                appendDebugLine("[stdout]:", Array.prototype.slice.call(arguments).join(" "));
             },
             printErr: function() {
-                console.log("[stderr]: " + Array.prototype.slice.call(arguments).join(" "));
+                appendDebugLine("[stderr]:", Array.prototype.slice.call(arguments).join(" "));
+            },
+            setStatus: function(text) {
+                if (text) {
+                    appendDebugLine("[status]:", text);
+                }
             },
             onRuntimeInitialized: function() {
+                resizeCanvasToNativePixels();
                 debugCanvasSizes();
 
                 var loader = document.getElementById("loader");
@@ -192,24 +304,47 @@
             }
         };
 
+        function afterViewportChange() {
+            resizeCanvasToNativePixels();
+            debugCanvasSizes();
+        }
+
         window.addEventListener("load", function() {
+            resizeCanvasToNativePixels();
             updateVersionLabels();
             debugCanvasSizes();
         });
 
-        window.addEventListener("resize", debugCanvasSizes);
-        window.addEventListener("orientationchange", debugCanvasSizes);
+        window.addEventListener("resize", afterViewportChange);
+        window.addEventListener("orientationchange", function() {
+            setTimeout(afterViewportChange, 50);
+            setTimeout(afterViewportChange, 250);
+        });
 
         if (window.visualViewport) {
-            window.visualViewport.addEventListener("resize", debugCanvasSizes);
+            window.visualViewport.addEventListener("resize", afterViewportChange);
         }
 
         window.onerror = function(message, source, lineno, colno, error) {
-            console.log("[onerror]:", message, source, lineno, colno, error);
+            appendDebugLine("[onerror]:", message, source, lineno, colno, error ? (error.stack || error) : "");
         };
-    </script>
 
-    <script src="console.js"></script>
+        (function setupTitleToggle() {
+            var title = document.getElementById("gameTitle");
+            if (!title) return;
+
+            function onToggle(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                toggleDebugConsole();
+                appendDebugLine("[ui]: title toggled console");
+            }
+
+            title.addEventListener("pointerdown", onToggle, { passive: false });
+            title.addEventListener("click", onToggle, false);
+            title.addEventListener("touchstart", onToggle, { passive: false });
+        })();
+    </script>
 
     <script>
         (function() {

@@ -1,224 +1,46 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>Spinview</title>
+(function() {
+    var el = document.getElementById("debugConsole");
+    if (!el) {
+        return;
+    }
 
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    var oldLog = console.log;
+    var oldWarn = console.warn;
+    var oldError = console.error;
 
-    <script defer src="version.js"></script>
+    function write(prefix, args) {
+        var parts = [];
+        var i;
 
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            background: #000;
-            overflow: hidden;
-            width: 100%;
-            height: 100%;
-        }
-
-        body {
-            position: fixed;
-            left: 0;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            touch-action: none;
-            overscroll-behavior: none;
-            -webkit-text-size-adjust: 100%;
-            text-size-adjust: 100%;
-        }
-
-        #canvas {
-            position: fixed;
-            left: 0;
-            top: 0;
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            margin: 0;
-            padding: 0;
-            border: 0;
-            background: #000;
-            touch-action: none;
-        }
-
-        .game-title {
-            position: fixed;
-            left: 10px;
-            bottom: 10px;
-            z-index: 20;
-            color: #fff;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 24px;
-            line-height: 1;
-            pointer-events: auto;
-            user-select: none;
-            -webkit-user-select: none;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-            cursor: pointer;
-        }
-
-        #loader {
-            position: fixed;
-            inset: 0;
-            z-index: 50;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            background: #0a0a0a;
-            color: #fff;
-            font-family: Arial, Helvetica, sans-serif;
-            transition: opacity 0.35s ease;
-        }
-
-        #loader.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .spinner {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: 4px solid rgba(255,255,255,0.15);
-            border-top-color: #fff;
-            animation: spin 1s linear infinite;
-            margin-bottom: 16px;
-        }
-
-        .loader-text {
-            font-size: 15px;
-            opacity: 0.85;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-    </style>
-</head>
-<body>
-    <div id="loader">
-        <div class="spinner"></div>
-        <div id="loaderText" class="loader-text">Loading engine...</div>
-    </div>
-
-    <div id="gameTitle" class="game-title">Spinview</div>
-
-    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-
-    <script>
-        function getCurrentVersion() {
-            try {
-                var url = new URL(window.location.href);
-                var v = url.searchParams.get("_v");
-                if (v) return v;
-
-                v = localStorage.getItem("siteVersion");
-                if (v) return v;
-            } catch (_) {
-            }
-            return "dev";
-        }
-
-        function updateVersionLabels() {
-            var version = getCurrentVersion();
-            var title = document.getElementById("gameTitle");
-            var loaderText = document.getElementById("loaderText");
-
-            if (title) {
-                title.textContent = "Spinview " + version;
-            }
-
-            if (loaderText) {
-                loaderText.textContent = "Loading engine... " + version;
-            }
-
-            document.title = "Spinview " + version;
-        }
-
-        function debugCanvasSizes() {
-            var canvas = document.getElementById("canvas");
-            if (!canvas) return;
-
-            console.log("----- SIZE DEBUG -----");
-            console.log("window.innerWidth/innerHeight =", window.innerWidth, window.innerHeight);
-            console.log("documentElement.clientWidth/clientHeight =", document.documentElement.clientWidth, document.documentElement.clientHeight);
-            console.log("body.clientWidth/clientHeight =", document.body.clientWidth, document.body.clientHeight);
-            console.log("canvas.clientWidth/clientHeight =", canvas.clientWidth, canvas.clientHeight);
-            console.log("canvas.width/height =", canvas.width, canvas.height);
-
-            if (window.visualViewport) {
-                console.log("visualViewport.width/height/scale =", window.visualViewport.width, window.visualViewport.height, window.visualViewport.scale);
-            } else {
-                console.log("visualViewport = none");
-            }
-
-            console.log("devicePixelRatio =", window.devicePixelRatio);
-        }
-
-        updateVersionLabels();
-
-        var Module = {
-            canvas: document.getElementById("canvas"),
-            preRun: [],
-            postRun: [],
-            locateFile: function(path) {
-                var version = getCurrentVersion();
-                var sep = path.indexOf("?") >= 0 ? "&" : "?";
-                return path + sep + "_v=" + encodeURIComponent(version);
-            },
-            print: function() {
-                console.log("[stdout]: " + Array.prototype.slice.call(arguments).join(" "));
-            },
-            printErr: function() {
-                console.log("[stderr]: " + Array.prototype.slice.call(arguments).join(" "));
-            },
-            onRuntimeInitialized: function() {
-                debugCanvasSizes();
-
-                var loader = document.getElementById("loader");
-                if (loader) {
-                    loader.classList.add("hidden");
-                    loader.addEventListener("transitionend", function onEnd() {
-                        loader.removeEventListener("transitionend", onEnd);
-                        if (loader.parentNode) {
-                            loader.parentNode.removeChild(loader);
-                        }
-                    });
+        for (i = 0; i < args.length; i++) {
+            var v = args[i];
+            if (typeof v === "object") {
+                try {
+                    parts.push(JSON.stringify(v));
+                } catch (_) {
+                    parts.push(String(v));
                 }
+            } else {
+                parts.push(String(v));
             }
-        };
-
-        window.addEventListener("load", function() {
-            updateVersionLabels();
-            debugCanvasSizes();
-        });
-
-        window.addEventListener("resize", debugCanvasSizes);
-        window.addEventListener("orientationchange", debugCanvasSizes);
-
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener("resize", debugCanvasSizes);
         }
 
-        window.onerror = function(message, source, lineno, colno, error) {
-            console.log("[onerror]:", message, source, lineno, colno, error);
-        };
-    </script>
+        el.textContent += prefix + parts.join(" ") + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
 
-    <script src="console.js"></script>
+    console.log = function() {
+        oldLog.apply(console, arguments);
+        write("", arguments);
+    };
 
-    <script>
-        (function() {
-            var version = getCurrentVersion();
-            var s = document.createElement("script");
-            s.async = true;
-            s.src = "App.js?_v=" + encodeURIComponent(version);
-            document.body.appendChild(s);
-        })();
-    </script>
-</body>
-</html>
+    console.warn = function() {
+        oldWarn.apply(console, arguments);
+        write("[warn] ", arguments);
+    };
+
+    console.error = function() {
+        oldError.apply(console, arguments);
+        write("[error] ", arguments);
+    };
+})();
