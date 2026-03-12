@@ -3,8 +3,11 @@
 <head>
     <meta charset="utf-8" />
     <title>Spinview</title>
-   
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+
     <script defer src="version.js"></script>
+
     <style>
         html, body {
             margin: 0;
@@ -12,7 +15,11 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: black;
+            background: #000;
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            overscroll-behavior: none;
+            touch-action: none;
         }
 
         body {
@@ -20,46 +27,117 @@
             inset: 0;
         }
 
+        #app-root {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            background: #000;
+        }
+
         #canvas {
             position: absolute;
-            inset: 0;
+            left: 0;
+            top: 0;
             width: 100%;
             height: 100%;
             display: block;
+            background: #000;
             touch-action: none;
-            background: black;
         }
 
         .game-title {
-            pointer-events: none;
             position: absolute;
             left: 10px;
             bottom: 10px;
-            color: white;
+            z-index: 20;
+            color: #fff;
             font-family: Arial, Helvetica, sans-serif;
             font-size: 24px;
-            z-index: 2;
+            line-height: 1;
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-select: none;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+
+        #loader {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background: #0a0a0a;
+            color: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+            transition: opacity 0.35s ease;
+        }
+
+        #loader.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 4px solid rgba(255,255,255,0.15);
+            border-top-color: #fff;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        .loader-text {
+            font-size: 15px;
+            opacity: 0.85;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <div id="gameTitle" class="game-title">Spinview</div>
-    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="app-root">
+        <div id="loader">
+            <div class="spinner"></div>
+            <div id="loaderText" class="loader-text">Loading engine...</div>
+        </div>
+
+        <div id="gameTitle" class="game-title">Spinview</div>
+
+        <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    </div>
 
     <script>
-        function getCurrentVersionFromUrl() {
+        function getCurrentVersion() {
             try {
-                const url = new URL(window.location.href);
-                return url.searchParams.get("_v") || "dev";
+                var url = new URL(window.location.href);
+                var v = url.searchParams.get("_v");
+                if (v) return v;
+
+                v = localStorage.getItem("siteVersion");
+                if (v) return v;
             } catch (_) {
-                return "dev";
             }
+            return "dev";
         }
 
         function updateVersionLabels() {
-            const version = getCurrentVersionFromUrl();
-            const title = document.getElementById("gameTitle");
-            if (title) title.textContent = "Spinview " + version;
+            var version = getCurrentVersion();
+            var title = document.getElementById("gameTitle");
+            var loaderText = document.getElementById("loaderText");
+
+            if (title) {
+                title.textContent = "Spinview " + version;
+            }
+
+            if (loaderText) {
+                loaderText.textContent = "Loading engine... " + version;
+            }
+
             document.title = "Spinview " + version;
         }
 
@@ -68,9 +146,10 @@
         var Module = {
             canvas: document.getElementById("canvas"),
             preRun: [],
+            postRun: [],
             locateFile: function(path) {
-                const version = getCurrentVersionFromUrl();
-                const sep = path.indexOf("?") >= 0 ? "&" : "?";
+                var version = getCurrentVersion();
+                var sep = path.indexOf("?") >= 0 ? "&" : "?";
                 return path + sep + "_v=" + encodeURIComponent(version);
             },
             print: function() {
@@ -78,16 +157,36 @@
             },
             printErr: function() {
                 console.log("[stderr]: " + Array.prototype.slice.call(arguments).join(" "));
+            },
+            onRuntimeInitialized: function() {
+                var loader = document.getElementById("loader");
+                if (loader) {
+                    loader.classList.add("hidden");
+                    loader.addEventListener("transitionend", function onEnd() {
+                        loader.removeEventListener("transitionend", onEnd);
+                        if (loader.parentNode) {
+                            loader.parentNode.removeChild(loader);
+                        }
+                    });
+                }
             }
         };
+
+        window.addEventListener("load", function() {
+            updateVersionLabels();
+        });
+
+        window.addEventListener("pageshow", function() {
+            updateVersionLabels();
+        });
 
         window.onerror = function(message, source, lineno, colno, error) {
             console.log("[onerror]:", message, source, lineno, colno, error);
         };
 
         (function() {
-            const version = getCurrentVersionFromUrl();
-            const s = document.createElement("script");
+            var version = getCurrentVersion();
+            var s = document.createElement("script");
             s.async = true;
             s.src = "App.js?_v=" + encodeURIComponent(version);
             document.body.appendChild(s);
