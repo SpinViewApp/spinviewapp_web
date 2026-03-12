@@ -17,8 +17,8 @@
             -webkit-text-size-adjust: 100%;
             text-size-adjust: 100%;
             touch-action: manipulation;
-            zoom: 1.0 !important;
-            transform: scale(1) !important;
+            zoom: 1.0;
+            transform: scale(1);
         }
 
         canvas#canvas {
@@ -96,19 +96,15 @@
         <div class="loader-text">Loading engine...</div>
     </div>
 
-    <!-- Le titre affiche maintenant la version dynamiquement -->
-    <div class="game-title" id="gameTitle">Spinview</div>
+    <div class="game-title">Spinview</div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <script>
         // ────────────────────────────────────────────────
         // Version unique → change-la ICI seulement !
-        const APP_VERSION = "3";
+        const APP_VERSION = "2"; 
         // ────────────────────────────────────────────────
-
-        // Mise à jour du titre affiché avec la version
-        document.getElementById("gameTitle").textContent = `Spinview v${APP_VERSION}`;
 
         var Module = {
             canvas: (() => document.getElementById('canvas'))(),
@@ -127,6 +123,7 @@
             console.log('[onerror]: ' + event.message);
     </script>
 
-    <script async src=`App.js?v=${APP_VERSION}`></script>
+    <!-- Le script principal utilise aussi la variable via template literal -->
+    <script async src="App.js?v=${APP_VERSION}"></script>
 </body>
 </html>
