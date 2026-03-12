@@ -26,6 +26,13 @@
             inset: 0;
         }
 
+        #app-root {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            background: black;
+        }
+
         canvas#canvas {
             position: absolute;
             inset: 0;
@@ -33,6 +40,7 @@
             height: 100%;
             display: block;
             touch-action: none;
+            background: black;
         }
 
         .game-title {
@@ -86,14 +94,16 @@
     </style>
 </head>
 <body>
-    <div id="loader">
-        <div class="spinner"></div>
-        <div class="loader-text">Loading engine...</div>
+    <div id="app-root">
+        <div id="loader">
+            <div class="spinner"></div>
+            <div class="loader-text" id="loaderText">Loading engine...</div>
+        </div>
+
+        <div id="gameTitle" class="game-title">Spinview</div>
+
+        <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
     </div>
-
-    <div id="gameTitle" class="game-title">Spinview</div>
-
-    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <script>
         function getCurrentVersionFromUrl() {
@@ -105,69 +115,23 @@
             }
         }
 
-        function updateTitle() {
+        function updateVersionLabels() {
             const version = getCurrentVersionFromUrl();
             const title = document.getElementById("gameTitle");
+            const loaderText = document.getElementById("loaderText");
+
             if (title) {
                 title.textContent = "Spinview " + version;
             }
+
+            if (loaderText) {
+                loaderText.textContent = "Loading engine... " + version;
+            }
+
             document.title = "Spinview " + version;
         }
 
-        let resizeScheduled = false;
-        let lastCssW = -1;
-        let lastCssH = -1;
-        let settleFrames = 0;
-
-        function applyCanvasSize() {
-            const canvas = document.getElementById("canvas");
-            if (!canvas) return;
-
-            const dpr = window.devicePixelRatio || 1;
-            const cssW = Math.max(1, Math.round(window.innerWidth));
-            const cssH = Math.max(1, Math.round(window.innerHeight));
-            const fbW = Math.max(1, Math.round(cssW * dpr));
-            const fbH = Math.max(1, Math.round(cssH * dpr));
-
-            canvas.style.width = cssW + "px";
-            canvas.style.height = cssH + "px";
-
-            if (typeof Module !== "undefined" && typeof Module.setCanvasSize === "function") {
-                Module.setCanvasSize(fbW, fbH, false);
-            } else {
-                canvas.width = fbW;
-                canvas.height = fbH;
-            }
-        }
-
-        function resizePass() {
-            resizeScheduled = false;
-
-            const cssW = Math.max(1, Math.round(window.innerWidth));
-            const cssH = Math.max(1, Math.round(window.innerHeight));
-
-            applyCanvasSize();
-
-            if (cssW !== lastCssW || cssH !== lastCssH) {
-                lastCssW = cssW;
-                lastCssH = cssH;
-                settleFrames = 2;
-            } else if (settleFrames > 0) {
-                settleFrames--;
-            }
-
-            if (settleFrames > 0) {
-                requestAnimationFrame(resizePass);
-            }
-        }
-
-        function scheduleResize() {
-            if (resizeScheduled) return;
-            resizeScheduled = true;
-            requestAnimationFrame(resizePass);
-        }
-
-        updateTitle();
+        updateVersionLabels();
 
         var Module = {
             canvas: (function () {
@@ -186,8 +150,6 @@
                 console.log("[stderr]: " + Array.prototype.slice.call(arguments).join(" "));
             },
             onRuntimeInitialized: function() {
-                scheduleResize();
-
                 const loader = document.getElementById("loader");
                 if (loader) {
                     loader.classList.add("hidden");
@@ -202,16 +164,8 @@
         };
 
         window.addEventListener("load", function() {
-            updateTitle();
-            scheduleResize();
+            updateVersionLabels();
         });
-
-        window.addEventListener("resize", scheduleResize);
-        window.addEventListener("orientationchange", scheduleResize);
-
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener("resize", scheduleResize);
-        }
 
         window.onerror = function(message, source, lineno, colno, error) {
             console.log("[onerror]:", message, source, lineno, colno, error);
