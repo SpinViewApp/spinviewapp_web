@@ -251,8 +251,53 @@ window.onerror = function(message, source, lineno, colno, error) {
     consoleLine("[onerror]", message, source, lineno, colno, error ? (error.stack || error) : "");
 };
 
+function spinviewProbeWebGL(canvas) {
+    var attrs = {
+        alpha: false, antialias: false, depth: true, stencil: true,
+        preserveDrawingBuffer: false, powerPreference: "high-performance",
+        failIfMajorPerformanceCaveat: false
+    };
+    var info = {
+        href: String(location.href), secure: !!window.isSecureContext,
+        ua: String(navigator.userAgent || ""), webxr: !!(navigator.xr),
+        webgl2: false, webgl1: false, main_webgl2: false
+    };
+    var test = document.createElement("canvas");
+    test.width = 16; test.height = 16;
+    var gl2 = null, gl1 = null;
+    try { gl2 = test.getContext("webgl2", attrs); } catch (e) { info.gl2_err = String(e); }
+    try { gl1 = test.getContext("webgl") || test.getContext("experimental-webgl"); } catch (e) { info.gl1_err = String(e); }
+    info.webgl2 = !!gl2; info.webgl1 = !!gl1;
+    var mainGl2 = null;
+    try { mainGl2 = canvas.getContext("webgl2", attrs); } catch (e) { info.main_gl2_err = String(e); }
+    info.main_webgl2 = !!mainGl2;
+    consoleLine("[spinview-gl-probe]", JSON.stringify(info));
+    if (!info.webgl2) consoleLine("[spinview-gl-probe] ERROR: WebGL2 required (SOKOL_GLES3)");
+    return mainGl2;
+}
+
+canvas.addEventListener("webglcontextlost", function(e) {
+    consoleLine("[webglcontextlost]"); e.preventDefault();
+}, false);
+
+var preGl = spinviewProbeWebGL(canvas);
+
 var Module = {
     canvas: canvas,
+
+    webglContextAttributes: {
+        alpha: false, antialias: false, depth: true, stencil: true,
+        preserveDrawingBuffer: false, powerPreference: "high-performance",
+        failIfMajorPerformanceCaveat: false
+    },
+
+    preinitializedWebGLContext: preGl || undefined,
+
+    preRun: [function() {
+        var gl = (typeof GLctx !== "undefined" && GLctx) ||
+            (typeof GL !== "undefined" && GL.currentContext && GL.currentContext.GLctx);
+        consoleLine("[spinview] preRun GLctx=", !!gl, "preinit=", !!Module.preinitializedWebGLContext);
+    }],
 
     locateFile: function(path) {
         var version = getCurrentVersion();
@@ -266,6 +311,12 @@ var Module = {
 
     printErr: function() {
         consoleLine("[stderr]", Array.prototype.slice.call(arguments).join(" "));
+    },
+
+    onAbort: function(reason) {
+        consoleLine("[ABORT]", reason);
+        var loader = document.getElementById("loaderText");
+        if (loader) loader.textContent = "Engine aborted: " + reason;
     },
 
     onRuntimeInitialized: function() {
