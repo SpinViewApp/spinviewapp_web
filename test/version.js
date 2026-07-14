@@ -18,6 +18,10 @@
         );
     }
 
+    function hasDebugParameter(){
+        return /(?:^|[?&])debug(?:[=&]|$)/i.test(location.search);
+    }
+
     function readStorage(storage,key){
         try{
             return storage.getItem(key) || "";
@@ -57,14 +61,36 @@
         );
     }
 
-    window.getCurrentVersion =
-        getCurrentVersion;
+    function updateDebugState(){
+        var enabled =
+            hasDebugParameter() ||
+            isLocalDevelopmentHost();
+
+        window.spinviewDebugEnabled = enabled;
+
+        if(typeof window.spinviewSetDebugEnabled === "function"){
+            window.spinviewSetDebugEnabled(enabled);
+        }
+
+        if(typeof window.spinviewUpdateVersionLabel === "function"){
+            window.spinviewUpdateVersionLabel();
+        }
+    }
+
+    window.getCurrentVersion = getCurrentVersion;
+    window.spinviewHasDebugParameter = hasDebugParameter;
+    window.spinviewIsLocalDevelopmentHost = isLocalDevelopmentHost;
+    window.spinviewDebugEnabled =
+        hasDebugParameter() ||
+        isLocalDevelopmentHost();
 
     var storedVersion =
         readStorage(localStorage,VERSION_KEY);
 
     var pageVersion =
         getPageVersion();
+
+    updateDebugState();
 
     fetch(
         VERSION_FILE + "?_=" + Date.now(),
@@ -98,16 +124,14 @@
             remoteVersion
         );
 
-        if(typeof window.spinviewUpdateVersionLabel === "function"){
-            window.spinviewUpdateVersionLabel();
-        }
+        updateDebugState();
 
         if(pageVersion === remoteVersion){
             return;
         }
 
         /*
-            Local development hosts update the stored version
+            Local development hosts update the stored version,
             but never force a reload.
         */
         if(isLocalDevelopmentHost()){
@@ -153,5 +177,7 @@
             DEFAULT_VERSION,
             error
         );
+
+        updateDebugState();
     });
 })();
