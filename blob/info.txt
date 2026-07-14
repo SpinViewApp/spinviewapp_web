@@ -1,0 +1,769 @@
+
+
+
+
+# Bloblings — Seamless-Primitive Toon Critters (Three.js prototype)
+
+<aside>
+▶️
+
+**How to run:** copy the code block below into a file called `bloblings.html` and open it in any modern browser (desktop or phone). No build step, no dependencies to install — Three.js loads from a CDN. Drag to orbit, scroll/pinch to zoom, tap the ground to make everyone cheer, use the buttons to spawn archetypes or a whole party. The URL hash holds the current seed — copy the link to reproduce an exact critter.
+
+</aside>
+
+## The style: "Bloblings"
+
+A procedurally generated character style built entirely from **primitive shapes (spheres, cylinders, cones)** that read as **one seamless, squishy body** — like vinyl toys crossed with ragdolls. Every character is defined by a tiny **genome** (a ~30-gene JSON of ratios, torso shape, palette family, face layout, temperament, and archetype), which is exactly what makes the style *AI-generatable*: a language model can emit a valid, good-looking character as a one-line JSON object, and the system guarantees it animates, welds, and shades correctly.
+
+**Design pillars**
+
+1. **Seamless from primitives** — no marching cubes, no raymarching, no skinned meshes. Pure tech-art trickery (below) that runs on a low-end phone.
+2. **Toon + juice** — 3-band cel shading with hue-shifted shadows, complementary rim light, merged silhouette outlines, squash & stretch, footstep dust, blinks, jiggle appendages, elastic spawn pops.
+3. **One animation brain, every body plan** — the same procedural gait/IK core drives 2-legged, 4-legged, 6–8-legged, no-legged (hopping), and flying characters with arms.
+
+---
+
+## The core tech-art trick: one weld field, three jobs
+
+The naive way to make primitives look like one blob is metaballs (marching cubes) or raymarched SDF smooth-min — both are far too expensive for mobile. Instead, this prototype exploits a property of toon shading: **banded lighting hides geometry seams as long as the *normals* are continuous across the seam.** So we fake the SDF blend at the *shading* level:
+
+1. **Normal welding (vertex shader).** Each character uploads a small uniform array of "weld joints" (world position + radius) at every articulation: neck, shoulders, elbows, hips, knees, feet, tail base, wing roots. In the vertex shader, any vertex inside a joint's radius has its normal bent toward the *radial direction from the joint center* — as if the whole joint region were one sphere. Two intersecting primitives near a hip end up with matching normals, so the cel bands flow across them without a break. To the eye, the surface is one continuous form. Cost: a ~36-iteration loop of one `length()` each, per vertex. Trivial on mobile GPUs.
+2. **Outline suppression from the same field.** Outlines are inverted-hull (backface shells pushed along the normal — one extra cheap draw per mesh, no post-processing). Inverted hulls normally betray compound characters by drawing dark rings wherever a limb intersects the torso. Fix: the hull push is multiplied by `1 − 0.85 × weldInfluence` — the shell collapses exactly where parts merge, so interior intersection rings vanish while the *outer silhouette* stays crisply outlined as a single blob. Line weight even tapers organically near joints, which reads as intentional inking.
+3. **Consistent toon response.** Because the hull is pushed along the *welded* normal too, outlines of touching primitives merge into one contour instead of two overlapping ones.
+
+Everything else in the look is one hand-written `ShaderMaterial` (no lights, no shadow maps, no post): 3-band ramp, shadow color hue-shifted toward violet (never just "darker"), stepped specular ping, complementary-hue Fresnel rim gated to the lit side, plus soft blob shadows and a dotted pastel ground.
+
+**Why it's mobile-performant:** zero render targets, zero post-process passes, no lights/shadow maps, shared unit geometries across all characters, pixel ratio clamped at 2, and the entire "seamless body" illusion costs one small vertex-shader loop plus one backface pass.
+
+---
+
+## The procedural animation system
+
+No animation clips anywhere — everything is generated from a phase clock, velocity, and a handful of springs:
+
+| Archetype | Locomotion core |
+| --- | --- |
+| **Biped** | Cyclic gait (duty-cycle stance/swing), analytic 2-bone leg IK with forward pole, stride auto-scaled to speed so feet never skate, counter-phase arm swing, double-bounce hip bob |
+| **Quad** | Same gait engine, diagonal-pair phase offsets (trot), long body, head in front |
+| **Many-leg (6–8)** | Same gait engine, alternating-tripod phase offsets with per-leg stagger, knees-up pole vectors, low-slung body |
+| **Hopper (no legs)** | State-machine hop cycle: anticipation crouch → launch stretch → parabolic airtime → landing squash + dust, volume-preserving squash & stretch, arms flail up mid-air, turns only while grounded |
+| **Flyer** | Sine wing flap with lead-lag, hover bob, banks into turns, pitches with climb rate, dangling stub legs with sway, arms hang with secondary motion |
+
+**Shared across all bodies:** wander-steering AI with idle pauses, gaze system (head anticipates turns, drifts, saccades), timed blinks, spring-loaded secondary motion on ears/antennae/tails, cheer emotes on tap, footstep dust, landing impacts, and elastic spawn pops.
+
+---
+
+## Full source — single file, zero build
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>BLOBLINGS</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:linear-gradient(#bfe4ff 0%,#eaf7ff 55%,#dff0e6 100%);font-family:ui-rounded,'Segoe UI',system-ui,sans-serif}
+canvas{display:block}
+#ui{position:fixed;top:14px;left:14px;display:flex;flex-direction:column;gap:8px;user-select:none;z-index:2}
+.card{background:rgba(255,255,255,.75);backdrop-filter:blur(8px);border-radius:16px;padding:10px 14px;box-shadow:0 4px 18px rgba(60,90,120,.18)}
+.card h1{font-size:15px;margin:0 0 2px;letter-spacing:.5px}
+.seed{font-size:11px;opacity:.6}
+.row{display:flex;gap:6px;flex-wrap:wrap;max-width:340px}
+button{border:0;border-radius:12px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;background:#fff;box-shadow:0 2px 8px rgba(60,90,120,.15);transition:transform .08s}
+button:active{transform:scale(.93)}
+button.primary{background:#3d3a4f;color:#fff}
+#hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:12px;color:#3d3a4f;opacity:.55}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="ui">
+  <div class="card"><h1>🫧 BLOBLINGS</h1><div class="seed" id="seedLabel">seed —</div></div>
+  <div class="card row">
+    <button class="primary" id="bNew">🎲 New</button>
+    <button data-arch="biped">🚶</button>
+    <button data-arch="quad">🐕</button>
+    <button data-arch="spider">🕷️</button>
+    <button data-arch="hopper">🐰</button>
+    <button data-arch="flyer">🐦</button>
+    <button id="bParty">🎉 Party</button>
+  </div>
+</div>
+<div id="hint">drag to orbit · scroll to zoom · tap ground to cheer</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// color management stays ON: custom shaders below are deliberately authored in sRGB and
+// write raw output; built-in materials (eyes, dust) go through the standard pipeline.
+
+// ---------- tiny utils ----------
+const mulberry32 = a => () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
+const lerp=(a,b,u)=>a+(b-a)*u, clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const ease=u=>u*u*(3-2*u);
+const elastic=u=>u>=1?1:1+Math.pow(2,-10*u)*Math.sin((u*10-0.75)*2.094);
+const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
+const UP=new THREE.Vector3(0,1,0);
+const _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _a=new THREE.Vector3(), _b=new THREE.Vector3();
+
+// ---------- renderer / scene ----------
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,120);
+camera.position.set(0,3.4,8.2);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.target.set(0,1,0); controls.enableDamping=true;
+controls.minDistance=3.5; controls.maxDistance=18; controls.maxPolarAngle=1.45;
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+// ---------- shared geometry & light ----------
+const G={ sphere:new THREE.SphereGeometry(1,24,18), cyl:new THREE.CylinderGeometry(1,1,1,14,1), cone:new THREE.ConeGeometry(1,1,14) };
+const LIGHTDIR={value:new THREE.Vector3(.55,.8,.35).normalize()};
+const MAXJ=36, OUTLINE_W=0.035;
+
+// ---------- the weld-field toon shader ----------
+// One vertex-shader field does three jobs: welds normals across primitives,
+// suppresses interior outline rings, and merges silhouette hulls.
+const VERT=`
+uniform vec4 uJoints[${MAXJ}];
+uniform float uJointCount, uWeld, uOutline, uOScale;
+varying vec3 vN, vW;
+void main(){
+  vec3 wp=(modelMatrix*vec4(position,1.0)).xyz;
+  // cofactor matrix = correct normal transform under non-uniform scale
+  mat3 m=mat3(modelMatrix);
+  mat3 nmat=mat3(cross(m[1],m[2]),cross(m[2],m[0]),cross(m[0],m[1]));
+  vec3 n=normalize(nmat*normal);
+  vec3 acc=vec3(0.0); float wsum=0.0;
+  for(int i=0;i<${MAXJ};i++){
+    if(float(i)>=uJointCount) break;
+    vec3 d=wp-uJoints[i].xyz;
+    float dist=max(length(d),1e-4);
+    float w=1.0-smoothstep(uJoints[i].w*0.2,uJoints[i].w,dist);
+    acc+=(d/dist)*w*w; wsum+=w*w;
+  }
+  float weld=clamp(wsum,0.0,1.0);
+  if(wsum>1e-3) n=normalize(mix(n,normalize(acc),weld*uWeld));
+  vN=n;
+  // ink: per-critter weight (uOScale) + distance compensation for a stable screen-space line
+  float dcomp=clamp(distance(cameraPosition,wp)*0.122,0.55,2.2);
+  wp+=n*uOutline*uOScale*dcomp*(1.0-0.85*weld);   // hull collapses exactly where parts merge
+  vW=wp;
+  gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.0);
+}`;
+const FRAG=`
+uniform vec3 uColor,uShade,uRimC,uLightDir;
+varying vec3 vN,vW;
+void main(){
+  vec3 n=normalize(vN), v=normalize(cameraPosition-vW), l=normalize(uLightDir);
+  float ndl=dot(n,l)*0.5+0.5;
+  float b1=smoothstep(0.42,0.46,ndl), b2=smoothstep(0.74,0.78,ndl);
+  vec3 col=mix(uShade,uColor,b1);
+  col=mix(col,min(uColor*1.15+0.05,vec3(1.0)),b2);
+  float sp=smoothstep(0.45,0.5,pow(max(dot(n,normalize(l+v)),0.0),40.0));
+  col+=sp*0.3;
+  float fr=pow(1.0-max(dot(n,v),0.0),3.0);
+  col+=uRimC*fr*(0.25+0.75*b1);
+  gl_FragColor=vec4(col,1.0);
+}`;
+const OFRAG=`uniform vec3 uColor; void main(){ gl_FragColor=vec4(uColor,1.0); }`;
+
+// ---------- ground ----------
+const ground=new THREE.Mesh(new THREE.CircleGeometry(32,48),new THREE.ShaderMaterial({
+  vertexShader:`varying vec2 vP; void main(){vP=position.xy; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`varying vec2 vP;<br>  void main(){<br>    vec2 g=fract(vP*0.6)-0.5;<br>    float d=smoothstep(0.10,0.05,length(g));<br>    float fade=smoothstep(26.0,6.0,length(vP));<br>    vec3 col=mix(vec3(0.84,0.94,0.87),vec3(0.73,0.88,0.80),d*fade);<br>    col=mix(vec3(0.88,0.95,0.97),col,smoothstep(30.0,23.0,length(vP)));<br>    gl_FragColor=vec4(col,1.0);<br>  }`}));
+ground.rotation.x=-Math.PI/2; scene.add(ground);
+
+// ---------- soft blob shadows ----------
+function makeShadow(){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,uniforms:{uA:{value:.34}},
+    vertexShader:`varying vec2 vUv; void main(){vUv=uv*2.0-1.0; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`varying vec2 vUv; uniform float uA; void main(){ float a=uA*smoothstep(1.0,0.3,length(vUv)); gl_FragColor=vec4(0.15,0.18,0.30,a); }`}));
+  m.rotation.x=-Math.PI/2; m.position.y=.012; scene.add(m); return m;
+}
+
+// ---------- dust / confetti pool ----------
+const puffGeo=new THREE.IcosahedronGeometry(1,0);
+const puffs=[]; let puffI=0;
+for(let i=0;i<64;i++){ const m=new THREE.Mesh(puffGeo,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0})); m.visible=false; scene.add(m); puffs.push({m,life:0,vel:new THREE.Vector3(),s:1}); }
+function puff(pos,scale=1,color=0xffffff){ const p=puffs[puffI++%puffs.length]; p.m.visible=true; p.m.material.color.set(color); p.life=1; p.s=scale; p.m.position.copy(pos); p.vel.set((Math.random()-.5)*1.4,Math.random()*1.6+.4,(Math.random()-.5)*1.4); }
+function updatePuffs(dt){ for(const p of puffs){ if(p.life<=0) continue; p.life-=dt*2.4; if(p.life<=0){p.m.visible=false;continue;} p.m.position.addScaledVector(p.vel,dt); p.vel.y-=dt*1.5; p.m.scale.setScalar(p.s*(0.08+(1-p.life)*0.16)); p.m.material.opacity=p.life*0.7; } }
+
+const EYE_W=new THREE.MeshBasicMaterial({color:0xffffff});
+const EYE_B=new THREE.MeshBasicMaterial({color:0x1d1b2a});
+
+// ---------- limb math ----------
+function placeSeg(m,a,b,th){ m.position.copy(a).add(b).multiplyScalar(.5); _v.copy(b).sub(a); const len=Math.max(_v.length(),1e-4); m.scale.set(th,len,th); m.quaternion.setFromUnitVectors(UP,_v.multiplyScalar(1/len)); }
+const _ikD=new THREE.Vector3(), _ikS=new THREE.Vector3();   // private scratch — never clobbers caller temps
+function solveIK(knee,a,t,l1,l2,pole){
+  const d=_ikD.copy(t).sub(a); let L=d.length();
+  const maxL=(l1+l2)*0.999;
+  if(L>maxL){ t.copy(a).addScaledVector(d.multiplyScalar(1/L),maxL); L=maxL; d.copy(t).sub(a); }   // NOTE: clamps target on over-reach
+  const dir=d.multiplyScalar(1/Math.max(L,1e-4));
+  const cos=clamp((l1*l1+L*L-l2*l2)/(2*l1*Math.max(L,1e-4)),-1,1);
+  const proj=l1*cos, h=Math.sqrt(Math.max(l1*l1-proj*proj,1e-6));
+  const side=_ikS.copy(pole).addScaledVector(dir,-pole.dot(dir));
+  if(side.lengthSq()<1e-6) side.set(0,0,1);
+  side.normalize();
+  knee.copy(a).addScaledVector(dir,proj).addScaledVector(side,h);
+}
+
+// ---------- genome: the tiny, AI-generatable character spec ----------
+const ARCHES=['biped','quad','spider','hopper','flyer'];
+const TORSOS=['sphere','egg','bean','pill'];
+const EYESTYLES=['dot','oval','big','sleepy'];
+function makeGenome(seed,forceArch){
+  const R=mulberry32(seed);
+  const arch=forceArch||ARCHES[(R()*ARCHES.length)|0];
+  // master ratio dials — variety lives in ratios, not values
+  const stretch=.68+.75*R();        // squat pancake -> tall noodle
+  const headToBody=.5+.85*R();      // lumbering brute -> all-head baby
+  // palette family with rare outliers (commonness curve, not uniform variance)
+  const pr=R();
+  const pal=pr<.07?'dark':pr<.14?'pale':pr<.42?'jewel':pr<.66?'dusty':'candy';
+  const er=R();
+  return {
+    seed, arch, hue:R(), pal,
+    accentComp:R()<.35,             // complementary belly/feet instead of adjacent hue
+    torso:TORSOS[(R()*TORSOS.length)|0],
+    stretch, headToBody,
+    bodyW:(.5+.35*R())/Math.sqrt(stretch), bodyH:(.55+.45*R())*stretch, chubby:.8+.5*R(),
+    headR:(.30+.22*R())*(0.6+0.8*headToBody),
+    legLen:(.7+.55*R())*lerp(.85,1.2,(stretch-.68)/.75), legTh:.10+.07*R(),
+    armLen:.5+.3*R(), armTh:.08+.05*R(),
+    sideLegs:3+((R()*2)|0),
+    eyeCount:er<.12?1:er<.88?2:3,
+    eyeStyle:EYESTYLES[(R()*EYESTYLES.length)|0],
+    eyeR:.10+.08*R(), eyeSep:.32+.22*R(), eyeY:.02+.3*R(),
+    mouth:R()<.6,
+    ears:R()<.5, antennae:R()<.3, tail:R()<.6,
+    horn:R()<.10,                       // rare outlier
+    tinyWings:R()<.08&&arch!=='flyer',  // rare useless flapping nubs
+    temper:R(),                         // sleepy 0 -> hyper 1
+    wing:.55+.4*R(),
+  };
+}
+
+// ---------- Critter ----------
+class Critter{
+constructor(genome,x=0,z=0){
+  const g=this.g=genome;
+  const R=this.R=mulberry32((g.seed^0x9E3779B9)>>>0);   // behavior RNG: same seed = same LIFE, not just same body
+  this.uJoints={value:Array.from({length:MAXJ},()=>new THREE.Vector4(0,0,0,.001))};
+  this.uJointCount={value:0};
+  this.oScale=clamp((g.bodyW*g.chubby+g.bodyH+g.headR)/1.55,.7,1.5);   // ink weight follows body size
+  this.tempo=lerp(.72,1.35,g.temper);
+  this.mats=[];
+  // palette families instead of one polite pastel rule: [saturation, lightness]
+  const P={jewel:[.78,.46],candy:[.68,.66],dusty:[.34,.60],dark:[.55,.24],pale:[.28,.86]}[g.pal];
+  const aHue=(g.hue+(g.accentComp?.5:.06))%1;
+  const aL=g.pal==='dark'?.72:g.pal==='pale'?.38:Math.min(P[1]+.22,.9);
+  this.matBody=this.toon(new THREE.Color().setHSL(g.hue,P[0],P[1]));
+  this.matBelly=this.toon(new THREE.Color().setHSL(aHue,Math.max(P[0]-.1,.2),aL));
+  this.matDark=this.toon(new THREE.Color().setHSL(aHue,P[0]*.9,g.pal==='pale'?.45:Math.max(P[1]-.22,.16)));
+  this.matOutline=this.toon(new THREE.Color().setHSL(g.hue,Math.min(P[0],.6),g.pal==='pale'?.42:.14),OUTLINE_W);
+  this.root=new THREE.Group(); this.root.position.set(x,0,z); scene.add(this.root);
+  this.limbs=new THREE.Group(); scene.add(this.limbs);
+  this.body=new THREE.Group(); this.root.add(this.body);
+  this.shadow=makeShadow();
+  this.heading=R()*Math.PI*2; this.speed=0; this.speedT=0; this.turnV=0;
+  this.fwd=new THREE.Vector3(0,0,1);
+  this.goal=new THREE.Vector3((R()*2-1)*7,0,(R()*2-1)*7);
+  this.pause=0; this.phase=R(); this.hopT=0; this.prevHopP=0; this.canTurn=true;
+  this.cheer=0; this.airT=0; this.age=0; this.blinkT=1+R()*3; this.blink=0;
+  this.gaze=0; this.vy=0; this.prevY=0; this.speedF=0; this.str=.4;
+  this.build();
+}
+toon(col,outlineW=0){
+  const hsl={h:0,s:0,l:0}; col.getHSL(hsl);
+  const shade=new THREE.Color().setHSL((hsl.h+0.07)%1,Math.min(1,hsl.s*1.05),hsl.l*0.62);
+  const rim=new THREE.Color().setHSL((hsl.h+0.5)%1,.55,.72);
+  const m=new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:outlineW>0?OFRAG:FRAG,
+    uniforms:{uJoints:this.uJoints,uJointCount:this.uJointCount,uWeld:{value:.6},uOutline:{value:outlineW},uOScale:{value:this.oScale},
+      uColor:{value:col},uShade:{value:shade},uRimC:{value:rim},uLightDir:LIGHTDIR},
+    side:outlineW>0?THREE.BackSide:THREE.FrontSide});
+  this.mats.push(m); return m;
+}
+part(geo,mat,parent){ const m=new THREE.Mesh(geo,mat); m.add(new THREE.Mesh(geo,this.matOutline)); parent.add(m); return m; }
+bare(geo,mat,parent){ const m=new THREE.Mesh(geo,mat); parent.add(m); return m; }
+build(){
+  const g=this.g, arch=g.arch;
+  const long=(arch==='quad'||arch==='spider');
+  const bw=this.bw=g.bodyW*g.chubby;
+  const bh=this.bh=long?g.bodyW*0.95:g.bodyH;
+  const bl=this.bl=long?g.bodyH+g.bodyW*0.9:g.bodyW*1.05;
+  this.standH = arch==='biped'?g.legLen*.95 : arch==='quad'?g.legLen*.85 : arch==='spider'?g.legLen*.7 : arch==='hopper'?bh*.8 : .2;
+  this.flyH = 1.6+bh*.4;
+  this.cruise = (arch==='hopper'?1.3 : arch==='flyer'?2.1 : (arch==='biped'?1.5:1.9)*g.legLen)*lerp(.85,1.18,g.temper);
+  this.duty = arch==='biped'?.55 : arch==='quad'?.6 : .65;
+  this.flapF = (9+g.wing*3)*lerp(.85,1.15,g.temper);
+
+  // torso archetypes — variety at the silhouette level (the weld field fuses composites into one form)
+  const tor=arch==='hopper'?'sphere':g.torso;   // hoppers keep the classic blob (their feet pads depend on it)
+  this.torsoComposite=tor!=='sphere';
+  if(tor==='bean'){
+    const a=this.part(G.sphere,this.matBody,this.body), b=this.part(G.sphere,this.matBody,this.body);
+    if(long){ a.scale.set(bw,bh*.96,bl*.62); a.position.z=bl*.30; b.scale.set(bw*.88,bh*.88,bl*.55); b.position.z=-bl*.34; }
+    else{ a.scale.set(bw,bh*.62,bl); a.position.y=-bh*.28; b.scale.set(bw*.84,bh*.55,bl*.86); b.position.y=bh*.30; }
+  }else if(tor==='egg'){
+    const a=this.part(G.sphere,this.matBody,this.body); a.scale.set(bw,bh*.9,bl); a.position.y=-bh*.12;
+    const b=this.part(G.sphere,this.matBody,this.body); b.scale.set(bw*.72,bh*.72,bl*.72); b.position.y=bh*.42;
+  }else if(tor==='pill'){
+    const mid=this.part(G.cyl,this.matBody,this.body);
+    if(long){ mid.scale.set(bw,bl*.9,bh); mid.rotation.x=Math.PI/2; }
+    else mid.scale.set(bw,bh*1.05,bw);
+    const c1=this.part(G.sphere,this.matBody,this.body), c2=this.part(G.sphere,this.matBody,this.body);
+    if(long){ c1.scale.set(bw,bh,bw); c1.position.z=bl*.45; c2.scale.set(bw,bh,bw); c2.position.z=-bl*.45; }
+    else{ c1.scale.setScalar(bw); c1.position.y=bh*.52; c2.scale.setScalar(bw); c2.position.y=-bh*.52; }
+  }else{
+    const torso=this.part(G.sphere,this.matBody,this.body); torso.scale.set(bw,bh,bl);
+  }
+  const belly=this.part(G.sphere,this.matBelly,this.body); belly.scale.set(bw*.8,bh*.8,bl*.72); belly.position.set(0,-bh*.06,bl*.32);
+
+  this.head=new THREE.Group(); this.body.add(this.head);
+  if(long) this.head.position.set(0,bh*.55,bl*.85);
+  else this.head.position.set(0,bh*.8+g.headR*.4,bl*.08);
+  const skull=this.part(G.sphere,this.matBody,this.head); skull.scale.set(g.headR*1.12,g.headR,g.headR*1.02);
+  const muzzle=this.part(G.sphere,this.matBelly,this.head); muzzle.scale.set(g.headR*.45,g.headR*.3,g.headR*.32); muzzle.position.set(0,-g.headR*.28,g.headR*.78);
+  // faces: eye count / style / height are where personality lives
+  this.eyes=[];
+  const es=g.eyeStyle, eR=g.eyeR*(es==='big'?1.6:es==='dot'?.7:1);
+  this.squint=es==='sleepy'?.55:1;
+  const xs=g.eyeCount===1?[0]:g.eyeCount===2?[-1,1]:[-1,0,1];
+  for(const s of xs){
+    const e=new THREE.Group(); this.head.add(e);
+    e.position.set(s*g.eyeSep*g.headR,g.headR*(g.eyeY+(g.eyeCount===3&&s===0?.34:0)),g.headR*.8);
+    if(es==='dot'){
+      const p=this.bare(G.sphere,EYE_B,e); p.scale.set(eR,eR*1.15,eR*.5);
+      const gl=this.bare(G.sphere,EYE_W,e); gl.scale.setScalar(eR*.3); gl.position.set(eR*.25,eR*.3,eR*.4);
+    }else{
+      const w=this.bare(G.sphere,EYE_W,e); w.scale.set(eR,eR*1.3,eR*.45);
+      const p=this.bare(G.sphere,EYE_B,e); p.scale.set(eR*.45,eR*.62,eR*.3); p.position.z=eR*.28;
+      const gl=this.bare(G.sphere,EYE_W,e); gl.scale.setScalar(eR*.16); gl.position.set(eR*.16,eR*.22,eR*.42);
+    }
+    this.eyes.push(e);
+  }
+  if(g.mouth){ const mo=this.bare(G.sphere,EYE_B,this.head); mo.scale.set(g.headR*.16,g.headR*.05,g.headR*.05); mo.position.set(0,-g.headR*.42,g.headR*.92); }
+  this.ears=[]; this.antennae=[];
+  if(g.ears||arch==='hopper'){
+    const eh=g.headR*(arch==='hopper'?1.25:.62);
+    for(const s of [-1,1]){
+      const grp=new THREE.Group(); this.head.add(grp);
+      grp.position.set(s*g.headR*.5,g.headR*.72,0); grp.rotation.z=-s*.3;
+      const c=this.part(G.cone,this.matBody,grp); c.scale.set(g.headR*.28,eh,g.headR*.22); c.position.y=eh*.45;
+      this.ears.push(grp);
+    }
+  }
+  if(g.antennae){
+    for(const s of [-1,1]){
+      const grp=new THREE.Group(); this.head.add(grp);
+      grp.position.set(s*g.headR*.28,g.headR*.85,0);
+      const st=this.part(G.cyl,this.matBody,grp); st.scale.set(g.headR*.06,g.headR*.8,g.headR*.06); st.position.y=g.headR*.4;
+      const b=this.part(G.sphere,this.matDark,grp); b.scale.setScalar(g.headR*.13); b.position.y=g.headR*.85;
+      this.antennae.push(grp);
+    }
+  }
+  if(g.horn){   // rare outlier — commonness curve beats uniform variance
+    const h=this.part(G.cone,this.matDark,this.head);
+    h.scale.set(g.headR*.3,g.headR*.85,g.headR*.3); h.position.set(0,g.headR*.9,g.headR*.15); h.rotation.x=.25;
+  }
+  this.tinyWings=[];
+  if(g.tinyWings){   // useless, flapping, adorable
+    for(const s of [-1,1]){
+      const grp=new THREE.Group(); this.body.add(grp);
+      grp.position.set(s*bw*.85,bh*.3,-bl*.25);
+      const w=this.part(G.sphere,this.matBelly,grp); w.scale.set(.16,.05,.1); w.position.x=s*.13;
+      this.tinyWings.push(grp);
+    }
+  }
+  this.arms=[]; this.wings=[];
+  if(arch==='biped'||arch==='hopper'||arch==='flyer'){
+    this.armL=g.armLen*(arch==='hopper'?.55:1);
+    for(const s of [-1,1]){
+      const a={s,shL:new THREE.Vector3(s*bw*.92,bh*.28,0),
+        mU:this.part(G.cyl,this.matBody,this.limbs), mL:this.part(G.cyl,this.matBody,this.limbs),
+        bSh:this.part(G.sphere,this.matBody,this.limbs), bEl:this.part(G.sphere,this.matBody,this.limbs),
+        hand:this.part(G.sphere,this.matBody,this.limbs),
+        shW:new THREE.Vector3(), elW:new THREE.Vector3(), haW:new THREE.Vector3()};
+      this.arms.push(a);
+    }
+  }
+  if(arch==='flyer'){
+    for(const s of [-1,1]){
+      const grp=new THREE.Group(); this.body.add(grp);
+      grp.position.set(s*bw*.6,bh*.45,-bl*.05);
+      const w=this.part(G.sphere,this.matBelly,grp); w.scale.set(g.wing,.08,g.wing*.45); w.position.x=s*g.wing*.85;
+      this.wings.push(grp);
+    }
+    this.dangles=[];
+    for(const s of [-1,1]){
+      const grp=new THREE.Group(); this.body.add(grp);
+      grp.position.set(s*bw*.32,-bh*.72,0);
+      const l=this.part(G.cyl,this.matBody,grp); l.scale.set(g.armTh*.9,bh*.5,g.armTh*.9); l.position.y=-bh*.25;
+      const f=this.part(G.sphere,this.matDark,grp); f.scale.set(g.armTh*1.4,g.armTh*1.1,g.armTh*1.8); f.position.y=-bh*.5;
+      this.dangles.push(grp);
+    }
+  }
+  if(arch==='hopper'){
+    for(const s of [-1,1]){
+      const f=this.part(G.sphere,this.matDark,this.body);
+      f.scale.set(bw*.34,bh*.12,bw*.52); f.position.set(s*bw*.42,-bh*.82,bw*.18);
+    }
+  }
+  this.legs=[];
+  const mkLeg=(hipL,homeL,off,pole)=>{
+    this.legs.push({hipL,homeL,off,poleL:pole,cur:homeL.clone().add(this.root.position),prevP:this.R(),
+      inStance:false,plant:new THREE.Vector3(),lift:new THREE.Vector3(),
+      mU:this.part(G.cyl,this.matBody,this.limbs), mL:this.part(G.cyl,this.matBody,this.limbs),
+      bHip:this.part(G.sphere,this.matBody,this.limbs), bKnee:this.part(G.sphere,this.matBody,this.limbs),
+      foot:this.part(G.sphere,this.matDark,this.limbs),
+      hipW:new THREE.Vector3(),kneeW:new THREE.Vector3(),footW:new THREE.Vector3()});
+  };
+  if(arch==='biped'){
+    mkLeg(new THREE.Vector3(-bw*.45,-bh*.5,0),new THREE.Vector3(-bw*.5,0,0),0,new THREE.Vector3(0,.25,1));
+    mkLeg(new THREE.Vector3(bw*.45,-bh*.5,0),new THREE.Vector3(bw*.5,0,0),.5,new THREE.Vector3(0,.25,1));
+  } else if(arch==='quad'){
+    let i=0;
+    for(const zs of [1,-1]) for(const s of [-1,1])
+      mkLeg(new THREE.Vector3(s*bw*.5,-bh*.35,zs*bl*.55),new THREE.Vector3(s*bw*.62,0,zs*bl*.68),[0,.5,.5,0][i++],new THREE.Vector3(0,.3,1));
+  } else if(arch==='spider'){
+    const n=g.sideLegs;
+    for(const s of [-1,1]) for(let i=0;i<n;i++){
+      const z=lerp(bl*.55,-bl*.55,i/(n-1));
+      const off=(((i+(s>0?1:0))%2)*.5+i*.07)%1;
+      mkLeg(new THREE.Vector3(s*bw*.7,-bh*.1,z),new THREE.Vector3(s*(bw*1.2+g.legLen*.45),0,z*1.6),off,new THREE.Vector3(s,1.7,.1));
+    }
+  }
+  this.l1=g.legLen*.55; this.l2=g.legLen*.58;
+  this.hasTail=false;
+  if(g.tail&&arch!=='flyer'){
+    this.tailBaseL=new THREE.Vector3(0,bh*.05,-bl*.92);
+    this.tailPts=[]; this.tailM=[];
+    for(let i=0;i<4;i++) this.tailPts.push(this.root.position.clone().add(new THREE.Vector3(0,this.standH,-.3*i)));
+    for(let i=0;i<3;i++) this.tailM.push(this.part(G.sphere,this.matBody,this.limbs));
+    this.hasTail=true;
+  }
+  this.shadowR=Math.max(bw,bl*.8)*1.5;
+}
+
+// ---- per-frame update ----
+update(dt,t){
+  this.age+=dt; if(this.cheer>0)this.cheer-=dt;
+  this.blinkT-=dt*this.tempo; if(this.blinkT<0){this.blink=.13;this.blinkT=1.4+this.R()*3.2;}
+  if(this.blink>0)this.blink-=dt;
+  this.updateAI(dt);
+  this.airT=0;
+  const arch=this.g.arch;
+  if(arch==='hopper')this.poseHopper(dt,t);
+  else if(arch==='flyer')this.poseFlyer(dt,t);
+  else this.poseWalker(dt,t);
+  // gaze: anticipate turns, drift, saccades
+  const gz=clamp(this.turnV*.4,-.7,.7)+Math.sin(t*.7*this.tempo+this.g.seed%7)*.12*this.tempo;
+  this.gaze=lerp(this.gaze,gz,1-Math.exp(-dt*5));
+  this.head.rotation.y=this.gaze;
+  this.head.rotation.x=Math.sin(t*1.3)*.05+(this.cheer>0?-.25:0);
+  const bs=(this.blink>0?.12:1)*this.squint;
+  for(const e of this.eyes)e.scale.y=lerp(e.scale.y,bs,1-Math.exp(-dt*30));
+  // secondary motion on appendages
+  this.vy=lerp(this.vy,(this.root.position.y-this.prevY)/Math.max(dt,1e-4),1-Math.exp(-dt*10));
+  for(const e of this.ears)e.rotation.x=clamp(-this.vy*.28,-.9,.9)+Math.sin(t*2.6)*.05;
+  for(const a of this.antennae)a.rotation.x=clamp(-this.vy*.4,-1,1)+Math.sin(t*3.4)*.1-this.speedF*.3;
+  for(let i=0;i<this.tinyWings.length;i++)this.tinyWings[i].rotation.z=(i===0?-1:1)*(Math.sin(t*14*this.tempo)*.7+.25);
+  // elastic spawn pop
+  this.root.rotation.y=this.heading;
+  this.root.scale.setScalar(Math.max(.001,elastic(Math.min(this.age*1.3,1))));
+  this.root.updateMatrixWorld(true);
+  this.updateLegs(dt,t);
+  this.updateArms(dt,t);
+  this.updateTail(dt);
+  this.updateJoints();
+  const h=this.root.position.y;
+  this.shadow.position.set(this.root.position.x,.012,this.root.position.z);
+  this.shadow.scale.setScalar(Math.max(this.shadowR*(1-clamp(h*.16,0,.6))*this.root.scale.x,.01));
+  this.shadow.material.uniforms.uA.value=.34*(1-clamp(h*.2,0,.75));
+  this.prevY=this.root.position.y;
+}
+updateAI(dt){
+  const pos=this.root.position;
+  if(this.pause>0){ this.pause-=dt; this.speedT=0; this.turnV*=Math.exp(-dt*3); }
+  else{
+    _v.copy(this.goal).sub(pos); _v.y=0; const dGoal=_v.length();
+    if(dGoal<.9){
+      if(this.R()<.5)this.pause=(1+this.R()*2.5)/this.tempo;
+      const rr=pos.length()>9?2:8;
+      this.goal.set((this.R()*2-1)*rr,0,(this.R()*2-1)*rr);
+    }else{
+      const want=Math.atan2(_v.x,_v.z);
+      const mt=(this.g.arch==='flyer'?1.6:3)*dt;
+      const step=clamp(wrapA(want-this.heading),-mt,mt);
+      if(this.canTurn)this.heading+=step;
+      this.turnV=lerp(this.turnV,clamp(step/Math.max(dt,1e-4),-3,3),1-Math.exp(-dt*4));
+      this.speedT=this.cruise*clamp(dGoal/2,.4,1);
+    }
+  }
+  this.speed=lerp(this.speed,this.speedT,1-Math.exp(-dt*3));
+  this.speedF=clamp(this.speed/this.cruise,0,1);
+  this.fwd.set(Math.sin(this.heading),0,Math.cos(this.heading));
+  // soft separation — no more ghosting through each other
+  for(const o of critters){
+    if(o===this)continue;
+    _v.copy(pos).sub(o.root.position); _v.y=0;
+    const d=_v.length(), rr=(this.bw+o.bw)*1.5;
+    if(d<rr&&d>1e-4)pos.addScaledVector(_v.multiplyScalar(1/d),(rr-d)*2.2*dt);
+  }
+}
+setSquash(sy){ const sxz=1/Math.sqrt(Math.max(sy,.05)); this.body.scale.set(sxz,sy,sxz); }
+cheerBounce(t){ if(this.cheer<=0)return 0; return Math.abs(Math.sin(t*11))*.22*Math.min(this.cheer,1); }
+poseWalker(dt,t){
+  this.canTurn=true;
+  this.root.position.addScaledVector(this.fwd,this.speed*dt);
+  this.root.position.y=0;
+  this.str=clamp(this.speed*.42,.25,this.g.legLen*.95);
+  if(this.speed>.05)this.phase+=dt*this.speed*this.duty/this.str;
+  const bob=Math.sin(this.phase*Math.PI*4+.6)*.045*this.speedF*this.g.legLen;
+  this.setSquash(1+Math.sin(this.phase*Math.PI*4)*.035*this.speedF+Math.sin(t*2.2*this.tempo)*.012);
+  this.body.position.y=this.standH+bob+this.cheerBounce(t);
+  this.body.rotation.x=(this.g.arch==='biped'?.09:.02)*this.speedF;
+  this.body.rotation.z=Math.sin(this.phase*Math.PI*2)*.03*this.speedF-this.turnV*.06;
+}
+poseHopper(dt,t){
+  const T=.85, hopH=.65+this.g.bodyH*.4;
+  const active=this.speed>.25||(this.hopT%1)>.02;
+  if(active)this.hopT+=dt/T;
+  const p=this.hopT%1;
+  let sy=1,y=0;
+  if(p<.32){ sy=1-.3*ease(p/.32); }                                              // anticipation crouch
+  else if(p<.42){ const u=(p-.32)/.1; sy=lerp(.7,1.3,u); y=lerp(0,.1,u); }        // launch stretch
+  else if(p<.82){ const u=(p-.42)/.4; y=.1+hopH*4*u*(1-u); sy=lerp(1.3,1,Math.min(u*2.5,1)); this.airT=Math.sin(u*Math.PI); }
+  else { sy=lerp(.72,1,ease((p-.82)/.18)); }                                      // landing squash
+  if(this.prevHopP<.82&&p>=.82&&active)
+    for(let i=0;i<5;i++)puff(new THREE.Vector3(this.root.position.x+(Math.random()-.5)*.5,.06,this.root.position.z+(Math.random()-.5)*.5),1.1);
+  this.prevHopP=p;
+  this.canTurn=p<.32||p>.82||!active;
+  const air=(p>.42&&p<.82)?1:0;
+  this.root.position.addScaledVector(this.fwd,this.speed*2.1*air*dt);
+  this.root.position.y=y;
+  this.setSquash(sy+Math.sin(t*2.4*this.tempo)*.012);
+  this.body.position.y=this.standH+this.cheerBounce(t);
+  this.body.rotation.x=air?.12:-(1-sy)*.3;
+}
+poseFlyer(dt,t){
+  this.canTurn=true;
+  this.root.position.addScaledVector(this.fwd,this.speed*dt);
+  const alt=this.flyH+Math.sin(t*2.1+this.g.seed%5)*.16+this.speedF*.1;
+  this.root.position.y=lerp(this.root.position.y,alt,1-Math.exp(-dt*3));
+  this.setSquash(1+Math.sin(t*this.flapF)*.02);
+  this.body.position.y=this.cheerBounce(t);
+  this.body.rotation.x=clamp(this.vy*.18,-.4,.4)+.12*this.speedF;
+  this.body.rotation.z=clamp(-this.turnV*.3,-.5,.5);
+  for(let i=0;i<this.wings.length;i++){ const s=i===0?-1:1; this.wings[i].rotation.z=s*(Math.sin(t*this.flapF)*.95+.2); }
+  if(this.dangles)for(const d of this.dangles){ d.rotation.x=Math.sin(t*this.flapF*.5)*.18+this.speedF*.25; d.rotation.z=this.turnV*.15; }
+}
+updateLegs(dt,t){
+  if(!this.legs.length)return;
+  const rs=this.root.scale.x, th=this.g.legTh*rs, lift=this.g.legLen*.35;
+  for(const leg of this.legs){
+    leg.hipW.copy(leg.hipL); this.body.localToWorld(leg.hipW);
+    const home=_v2.copy(leg.homeL); this.root.localToWorld(home); home.y=0;
+    if(this.speed<=.05){ leg.inStance=false; leg.cur.lerp(home,1-Math.exp(-dt*6)); leg.cur.y*=Math.exp(-dt*8); }
+    else{
+      const p=(this.phase+leg.off)%1;
+      if(p<this.duty){
+        // stance: latch the footfall in WORLD space once — planted feet never skate, even pivoting
+        if(!leg.inStance){ leg.inStance=true; leg.plant.copy(leg.cur); leg.plant.y=0; if(this.speedF>.25)puff(leg.plant,.5); }
+        leg.cur.copy(leg.plant);
+      }else{
+        if(leg.inStance){ leg.inStance=false; leg.lift.copy(leg.cur); }
+        const u=(p-this.duty)/(1-this.duty);
+        _v.copy(home).addScaledVector(this.fwd,this.str*.5);   // landing point ahead of home
+        leg.cur.lerpVectors(leg.lift,_v,ease(u));
+        leg.cur.y=Math.sin(u*Math.PI)*lift*this.speedF;
+      }
+      leg.prevP=p;
+    }
+    _a.copy(leg.cur); _a.y+=this.g.legTh*.55;
+    _b.copy(leg.poleL).applyQuaternion(this.root.quaternion);
+    solveIK(leg.kneeW,leg.hipW,_a,this.l1*rs,this.l2*rs,_b);
+    leg.footW.copy(_a);
+    placeSeg(leg.mU,leg.hipW,leg.kneeW,th);
+    placeSeg(leg.mL,leg.kneeW,leg.footW,th*.85);
+    leg.bHip.position.copy(leg.hipW); leg.bHip.scale.setScalar(th*1.25);
+    leg.bKnee.position.copy(leg.kneeW); leg.bKnee.scale.setScalar(th*1.15);
+    leg.foot.position.copy(leg.footW).addScaledVector(this.fwd,th*.5);
+    leg.foot.position.y=Math.max(leg.footW.y,0)+th*.5;
+    leg.foot.scale.set(th*1.7,th*1.1,th*2.1);
+    leg.foot.quaternion.copy(this.root.quaternion);
+  }
+}
+updateArms(dt,t){
+  if(!this.arms.length)return;
+  const rs=this.root.scale.x, AL=this.armL, th=this.g.armTh*rs;
+  for(const a of this.arms){
+    const s=a.s;
+    let raise=.18+.06*Math.sin(t*2.1+s), sw=0;
+    if(this.g.arch==='flyer'){ sw=Math.sin(t*this.flapF*.5)*.25; raise=.3; }
+    else sw=Math.sin(this.phase*Math.PI*2+(s>0?Math.PI:0))*.85*this.speedF;
+    if(this.airT>0){ raise=lerp(raise,2.2,this.airT); sw=Math.sin(t*14)*.2; }      // arms up mid-hop
+    if(this.cheer>0){ const cu=Math.min(this.cheer/1.2,1); raise=lerp(raise,2.6,cu); sw=Math.sin(t*16+s)*.3; }
+    const d1=_a.set(s*Math.sin(raise)*Math.cos(sw),-Math.cos(raise)*Math.cos(sw),Math.sin(sw));
+    const b=.6+Math.max(0,sw)*.4;
+    const d2=_b.set(d1.x,d1.y*Math.cos(b)+d1.z*Math.sin(b),-d1.y*Math.sin(b)+d1.z*Math.cos(b));
+    a.shW.copy(a.shL); this.body.localToWorld(a.shW);
+    a.elW.copy(a.shL).addScaledVector(d1,AL*.55); this.body.localToWorld(a.elW);
+    a.haW.copy(a.shL).addScaledVector(d1,AL*.55).addScaledVector(d2,AL*.5); this.body.localToWorld(a.haW);
+    placeSeg(a.mU,a.shW,a.elW,th); placeSeg(a.mL,a.elW,a.haW,th*.9);
+    a.bSh.position.copy(a.shW); a.bSh.scale.setScalar(th*1.3);
+    a.bEl.position.copy(a.elW); a.bEl.scale.setScalar(th*1.1);
+    a.hand.position.copy(a.haW); a.hand.scale.setScalar(th*1.55);
+  }
+}
+updateTail(dt){
+  if(!this.hasTail)return;
+  const base=_a.copy(this.tailBaseL); this.body.localToWorld(base);
+  this.tailPts[0].copy(base);
+  let segL=this.g.bodyW*.36*this.root.scale.x;
+  const damp=1-Math.exp(-dt*9);
+  for(let i=1;i<4;i++){
+    const p=this.tailPts[i], prev=this.tailPts[i-1];
+    _b.copy(this.fwd).multiplyScalar(-segL); _b.y=segL*.4;
+    p.lerp(_v2.copy(prev).add(_b),damp);
+    _b.copy(p).sub(prev); const L=_b.length()||1e-4;
+    p.copy(prev).addScaledVector(_b,segL/L);
+    this.tailM[i-1].position.copy(p);
+    this.tailM[i-1].scale.setScalar(this.g.bodyW*.3*Math.pow(.76,i)*this.root.scale.x);
+    segL*=.78;
+  }
+}
+updateJoints(){
+  let n=0; const J=this.uJoints.value, rs=this.root.scale.x;
+  const add=(p,r)=>{ if(n<MAXJ)J[n++].set(p.x,p.y,p.z,r*rs); };
+  this.head.getWorldPosition(_a); add(_a,this.g.headR*1.05);
+  if(this.torsoComposite){ this.body.getWorldPosition(_a); add(_a,Math.max(this.bw,this.bh,this.bl)*1.15); }   // fuse composite torsos into one form
+  for(const a of this.arms){ add(a.shW,this.g.armTh*3); add(a.elW,this.g.armTh*2.4); add(a.haW,this.g.armTh*2); }
+  for(const l of this.legs){ add(l.hipW,this.g.legTh*3.2); add(l.kneeW,this.g.legTh*2.6); add(l.footW,this.g.legTh*2.2); }
+  if(this.hasTail)add(this.tailPts[0],this.bw*.55);
+  for(const w of this.wings){ w.getWorldPosition(_a); add(_a,.24); }
+  this.uJointCount.value=n;
+}
+dispose(){
+  scene.remove(this.root,this.limbs,this.shadow);
+  this.shadow.material.dispose(); this.shadow.geometry.dispose();
+  for(const m of this.mats)m.dispose();
+}
+}
+
+// ---------- world management & UI ----------
+// the seed lives in the URL hash -> a critter is a reproducible, shareable link
+const hashSeed=parseInt(location.hash.slice(1),10);
+let critters=[], seedCounter=Number.isFinite(hashSeed)?hashSeed:(Math.random()*1e9)|0;
+const seedLabel=document.getElementById('seedLabel');
+function clearAll(){ for(const c of critters)c.dispose(); critters=[]; }
+function spawn(arch,x=0,z=0){
+  const seed=seedCounter++;
+  const c=new Critter(makeGenome(seed,arch),x,z);
+  critters.push(c);
+  seedLabel.textContent='seed '+seed+' · '+c.g.arch+' · '+c.g.torso+' · '+c.g.pal;
+  try{history.replaceState(null,'','#'+seed)}catch(e){}
+  for(let i=0;i<8;i++)puff(new THREE.Vector3(x+(Math.random()-.5)*.6,Math.random()*.5,z+(Math.random()-.5)*.6),1.2);
+  return c;
+}
+document.getElementById('bNew').onclick=()=>{ clearAll(); spawn(null); };
+document.querySelectorAll('[data-arch]').forEach(b=>b.onclick=()=>{ clearAll(); spawn(b.dataset.arch); });
+document.getElementById('bParty').onclick=()=>{ clearAll(); for(let i=0;i<7;i++){ const a=i*Math.PI*2/7; spawn(null,Math.sin(a)*4.5,Math.cos(a)*4.5); } };
+spawn(null);
+
+// tap-to-cheer (distinguish tap from orbit drag)
+const ray=new THREE.Raycaster(); let downXY=null;
+renderer.domElement.addEventListener('pointerdown',e=>downXY=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!downXY||Math.hypot(e.clientX-downXY[0],e.clientY-downXY[1])>6)return;
+  ray.setFromCamera(new THREE.Vector2((e.clientX/innerWidth)*2-1,-(e.clientY/innerHeight)*2+1),camera);
+  const hit=ray.intersectObject(ground)[0];
+  if(!hit)return;
+  for(const c of critters)c.cheer=1.4;
+  for(let i=0;i<14;i++)puff(hit.point.clone().add(new THREE.Vector3((Math.random()-.5)*.6,.2,(Math.random()-.5)*.6)),1.3,new THREE.Color().setHSL(Math.random(),.75,.7,THREE.SRGBColorSpace));
+});
+
+// ---------- main loop ----------
+const clock=new THREE.Clock();
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=Math.min(clock.getDelta(),.05), t=clock.elapsedTime;
+  for(const c of critters)c.update(dt,t);
+  updatePuffs(dt);
+  controls.update();
+  renderer.render(scene,camera);
+}
+tick();
+</script>
+</body>
+</html>
+```
+
+---
+
+## Tuning guide (where the feel lives)
+
+- **Seamlessness**: `uWeld` (0.6) is how hard normals bend toward joints; joint radii in `updateJoints()` control how far the blend reaches. Bigger radii = gooier, more metaball-like.
+- **Ink**: `OUTLINE_W` (0.035) is line weight; the `0.85` in the vertex shader is interior-ring suppression — lower it and you'll see why it exists.
+- **Ramp**: the `0.42/0.46` and `0.74/0.78` smoothstep pairs are the two band edges; widen the gaps for softer, anime-style falloff.
+- **Gait**: `duty` is stance fraction (higher = more grounded, heavier feel); stride is auto-derived from speed so feet never skate — the `× 0.42` in `poseWalker` sets step length per unit of speed.
+- **Hop**: the four windows in `poseHopper` (0–.32 crouch, –.42 launch, –.82 air, –1 land) are the entire animation — retime them for snappy vs. floaty.
+- **Juice budget**: every polish effect (bob, sway, blink, jiggle, dust, pop, cheer) is one or two lines — delete any of them and A/B it to feel what each contributes.
+- **Variety**: `stretch` and `headToBody` are the master silhouette dials; palette families live in the `P` table in the constructor; rarity odds (`horn`, `tinyWings`, eye count) are the commonness curve — tune those probabilities before adding new traits.
+
+## Why this style is "easily AI-generatable"
+
+The entire character is `makeGenome()` — a flat JSON of ~30 scalars/booleans/enums. That means:
+
+1. An LLM can design characters directly ("a chunky teal 6-legged critter with antennae" → one JSON object), with **zero risk of broken output**: every value is clamped, every archetype animates, welds, and shades by construction.
+2. Style consistency is enforced by the system (one shader, one palette rule, one outline), not by the generator — the AI only chooses *within* the style, which is exactly what makes large AI-generated casts look art-directed instead of incoherent.
+3. The genome is a natural interface for evolution/breeding mechanics, daily-seed characters, or player-prompted companions.
+
+## Roadmap to "next billion dollar game" quality
+
+1. **Scale**: merge each critter into 2 draw calls (body + outline) with per-part instancing; move the joint array into a small data texture to lift the 36-joint cap and support crowds of hundreds.
+2. **Deeper blend**: add a screen-space "goo" pass (dilate + threshold the toon ID buffer) for true metaball-grade merging on high-end devices, falling back to the weld field on mobile.
+3. **Animation layers**: foot-planting IK on uneven terrain (raycast per foot), lean-into-acceleration spring on the root, reactive hit/knockback ragdoll blending (the primitives are already physics-colliders-shaped).
+4. **Faces as a genome dimension**: brows, pupil shapes, and mouth curves drive emotion states (happy/scared/angry) — the single biggest "alive" multiplier for the cost.
+5. **Audio juice**: pitch-randomized footstep pops and hop "boings" keyed to the same gait events that spawn dust.
+6. **Genome LLM endpoint**: a system prompt with the genome schema + 10 curated examples reliably yields shippable characters from natural-language prompts — the whole point of the style.
+
+---
+
+## v2 changelog — the self-review, applied
+
+**Bugs fixed**
+
+- Normals now transform by the **cofactor matrix** of the model matrix — correct under non-uniform scale (the old `mat3(modelMatrix)` skewed cel bands on stretched primitives).
+- **Planted feet latch in world space** at footfall and hold that exact spot through stance — zero skating, even when pivoting in place — and footstep dust now fires precisely at the plant moment.
+- `solveIK` got private scratch vectors so it can never clobber caller temps again (its target-clamping side effect is now explicitly commented).
+
+**Shortcuts un-shortcut**
+
+- Color management stays **on**: the custom shaders deliberately author in sRGB and write raw output, while built-ins (eyes, dust) use the standard pipeline with explicit color spaces.
+- Ink weight now scales with critter size (`uOScale`) and compensates for camera distance — the line reads consistently near and far, on big brutes and tiny babies alike.
+- **Full determinism**: every behavioral random (heading, wander goals, pauses, blinks, gait offsets) flows through the seeded RNG, and the seed lives in the URL hash — a critter is now a shareable link.
+- Soft separation steering — party critters no longer ghost through each other.
+- The `tail=null→true` flag smell replaced with an honest `hasTail`.
+
+**Variety pass (the “samish” fix)**
+
+- Master ratio dials: `stretch` (squat pancake → tall noodle) and `headToBody` (lumbering brute → all-head baby) — silhouettes now differ at a glance.
+- Four **torso archetypes** — sphere / egg / bean / pill — built from composite primitives and fused seamlessly by the same weld field.
+- Five **palette families** (jewel, dusty, candy, plus rare dark and pale outliers) with sometimes-complementary accent hues on belly and feet.
+- **Faces**: 1, 2, or 3 eyes; four eye styles (dot, oval, big, sleepy half-lidded); variable eye height; optional mouths.
+- **Rarity structure**: ~10% horns, ~8% useless flapping wing-nubs on non-flyers — outliers at the tails of the distribution are what make a cast feel varied.
+- `temper` gene (sleepy → hyper) scales cruise speed, blink rate, gaze drift, idle bounce, and flap speed — two similar-looking critters now *behave* like different animals.
+
+**Deliberately deferred** (architecture rebuilds, not patches): instanced crowd rendering with the joint array in a data texture, and the pose-solver/renderer split — still roadmap items 1 and 3.

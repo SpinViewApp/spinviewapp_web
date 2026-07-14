@@ -1,43 +1,157 @@
+/* version.js */
 (function(){
-  function getStoredVersion() {
-    try { return localStorage.getItem('siteVersion') || null; }
-    catch(_) { return null; }
-  }
+    "use strict";
 
-  function setStoredVersion(v) {
-    try { localStorage.setItem('siteVersion', v); } catch(_) {}
-  }
+    var VERSION_FILE = "version.txt";
+    var DEFAULT_VERSION = "dev";
+    var VERSION_KEY = "siteVersion";
+    var RELOAD_KEY = "lastReloadVersion";
 
-  function getLastReloadVersion() {
-    try { return sessionStorage.getItem('lastReloadVersion') || null; }
-    catch(_) { return null; }
-  }
+    function isLocalDevelopmentHost(){
+        var host = location.hostname;
 
-  function setLastReloadVersion(v) {
-    try { sessionStorage.setItem('lastReloadVersion', v); } catch(_) {}
-  }
+        return (
+            host === "localhost" ||
+            host === "127.0.0.1" ||
+            host === "::1" ||
+            host.indexOf("192.168.") === 0
+        );
+    }
 
-  var storedVersion = getStoredVersion();
+    function readStorage(storage,key){
+        try{
+            return storage.getItem(key) || "";
+        }
+        catch(error){
+            return "";
+        }
+    }
 
-  fetch("version.txt?_=" + Date.now(), { cache: "no-store" })
-    .then(r => r.text())
-    .then(remoteVersion => {
-      remoteVersion = remoteVersion.trim();
-      if (!remoteVersion) return;
+    function writeStorage(storage,key,value){
+        try{
+            storage.setItem(key,value);
+        }
+        catch(error){
+        }
+    }
 
-      // If the fetched version is different from stored one
-      if (remoteVersion !== storedVersion) {
-        setStoredVersion(remoteVersion);
+    function getPageVersion(){
+        try{
+            return (
+                new URL(location.href)
+                    .searchParams
+                    .get("_v") ||
+                ""
+            );
+        }
+        catch(error){
+            return "";
+        }
+    }
 
-        // Avoid reload loop if already reloaded for this version
-        if (getLastReloadVersion() === remoteVersion) return;
-        setLastReloadVersion(remoteVersion);
+    function getCurrentVersion(){
+        return (
+            getPageVersion() ||
+            readStorage(localStorage,VERSION_KEY) ||
+            DEFAULT_VERSION
+        );
+    }
 
-        // Force reload with cache-busting based on version
-        var url = new URL(location.href);
-        url.searchParams.set('_v', remoteVersion);
-        location.replace(url.toString());
-      }
+    window.getCurrentVersion =
+        getCurrentVersion;
+
+    var storedVersion =
+        readStorage(localStorage,VERSION_KEY);
+
+    var pageVersion =
+        getPageVersion();
+
+    fetch(
+        VERSION_FILE + "?_=" + Date.now(),
+        {
+            cache:"no-store"
+        }
+    )
+    .then(function(response){
+        if(!response.ok){
+            throw new Error(
+                "HTTP " + response.status
+            );
+        }
+
+        return response.text();
     })
-    .catch(() => { /* optional: ignore errors silently */ });
+    .then(function(remoteVersion){
+        var lastReloadVersion;
+        var url;
+
+        remoteVersion =
+            remoteVersion.trim();
+
+        if(!remoteVersion){
+            return;
+        }
+
+        writeStorage(
+            localStorage,
+            VERSION_KEY,
+            remoteVersion
+        );
+
+        if(typeof window.spinviewUpdateVersionLabel === "function"){
+            window.spinviewUpdateVersionLabel();
+        }
+
+        if(pageVersion === remoteVersion){
+            return;
+        }
+
+        /*
+            Local development hosts update the stored version
+            but never force a reload.
+        */
+        if(isLocalDevelopmentHost()){
+            return;
+        }
+
+        lastReloadVersion =
+            readStorage(
+                sessionStorage,
+                RELOAD_KEY
+            );
+
+        if(lastReloadVersion === remoteVersion){
+            return;
+        }
+
+        writeStorage(
+            sessionStorage,
+            RELOAD_KEY,
+            remoteVersion
+        );
+
+        url = new URL(location.href);
+
+        /*
+            Existing parameters such as ?debug are preserved.
+        */
+        url.searchParams.set(
+            "_v",
+            remoteVersion
+        );
+
+        location.replace(
+            url.toString()
+        );
+    })
+    .catch(function(error){
+        console.warn(
+            "[version] Could not load version.txt.",
+            "Using version:",
+            storedVersion ||
+            pageVersion ||
+            DEFAULT_VERSION,
+            error
+        );
+    });
 })();
