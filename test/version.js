@@ -18,6 +18,8 @@
         );
     }
 
+    /* ?debug = JS console/status verbosity (this file).
+     * ?gui   = wasm panbuilder/ImGui panels (default = fill-page render, no dock). */
     function hasDebugParameter(){
         return /(?:^|[?&])debug(?:[=&]|$)/i.test(location.search);
     }
