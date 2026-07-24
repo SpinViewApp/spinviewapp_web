@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sound worker proto 2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; background: #111; color: #ddd; font: 14px/1.4 Consolas, monospace; }
+  main { max-width: 760px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 18px; color: #fff; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+  button, input { font: inherit; padding: 6px 10px; }
+  #log {
+    white-space: pre-wrap; background: #000; border: 1px solid #333;
+    padding: 12px; min-height: 240px; border-radius: 6px;
+  }
+  .ok { color: #8f8; }
+  .err { color: #f88; }
+  .warn { color: #fc8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Proto 2 — Worker PCM → AudioWorklet</h1>
+  <p>
+    Click <b>Start audio</b>.
+    On Android over <code>http://IP</code>, Worklet is blocked → auto <b>ScriptProcessor</b> fallback.
+    Prefer HTTPS/localhost for real AudioWorklet.
+  </p>
+  <div class="row">
+    <button id="start">Start audio</button>
+    <button id="d0">Delay 0</button>
+    <button id="d20">Delay 20</button>
+    <button id="b20">Busy 20 ⚠</button>
+    <label>Hz <input id="hz" type="number" value="440" min="40" max="2000" step="1" style="width:72px"></label>
+    <button id="stop">Stop</button>
+  </div>
+  <div id="log"></div>
+</main>
+<script src="sound_bus_proto.js"></script>
+<script>
+(function () {
+  var logEl = document.getElementById("log");
+  var bus = null;
+  var mainFrames = 0;
+  var lastMain = performance.now();
+  var mainFps = 0;
+
+  function line(cls, text) {
+    var d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.textContent = text;
+    logEl.appendChild(d);
+    while (logEl.childNodes.length > 50) logEl.removeChild(logEl.firstChild);
+  }
+
+  function ensureHud() {
+    var hud = logEl.querySelector(".hud");
+    if (!hud) {
+      hud = document.createElement("div");
+      hud.className = "hud ok";
+      logEl.insertBefore(hud, logEl.firstChild);
+    }
+    return hud;
+  }
+
+  function paintHud() {
+    if (!bus) return;
+    var s = bus.stats;
+    ensureHud().textContent =
+      "main~" + mainFps.toFixed(0) + "fps | rb last=" + s.last_ms.toFixed(2) +
+      " avg=" + s.avg_ms.toFixed(2) + " max=" + s.max_ms.toFixed(2) +
+      " | pcm=" + s.pcm_blocks + " q=" + s.queuedFrames +
+      " underrun=" + s.underruns + " " + (s.stall_mode || "async") + "=" + s.stall_ms +
+      " path=" + (bus.audioPath || "-");
+  }
+
+  function bootWorker() {
+    if (bus) return bus;
+    if (!SoundBusProto.supported()) {
+      line("err", "Unsupported: need Worker + OffscreenCanvas");
+      return null;
+    }
+    bus = SoundBusProto.create({
+      width: 1024,
+      height: 1,
+      blockFrames: 1024,
+      targetFrames: 4096,
+      needFrames: 2048,
+      onReady: function (st, msg) {
+        line("ok", "worker ready renderer=" + (msg.renderer || "?"));
+      },
+      onAudioReady: function () {
+        line("ok", "audio running path=" + (bus.audioPath || "?") +
+          " sampleRate=" + (bus.audioCtx && bus.audioCtx.sampleRate) +
+          " secure=" + SoundBusProto.isSecureEnough());
+      },
+      onStats: function () { paintHud(); },
+      onAudioStats: function () { paintHud(); },
+      onError: function (st, msg) {
+        line("err", "error " + (msg.reason || st.error));
+      }
+    });
+    if (bus.error) line("err", bus.error);
+    return bus;
+  }
+
+  document.getElementById("start").onclick = async function () {
+    try {
+      bootWorker();
+      if (!bus) return;
+      if (!SoundBusProto.audioSupported()) {
+        line("err", "AudioWorklet / AudioContext unavailable");
+        return;
+      }
+      line("warn", "starting AudioWorklet…");
+      await bus.startAudio();
+      var hz = +document.getElementById("hz").value || 440;
+      bus.setTone(hz, 0.12);
+    } catch (e) {
+      line("err", String(e && e.message ? e.message : e));
+    }
+  };
+  document.getElementById("stop").onclick = function () {
+    if (bus) bus.stop();
+    bus = null;
+    line("", "stopped");
+  };
+  document.getElementById("d0").onclick = function () { if (bus) bus.setStall(0, "async"); };
+  document.getElementById("d20").onclick = function () { if (bus) bus.setStall(20, "async"); };
+  document.getElementById("b20").onclick = function () {
+    if (!bus) return;
+    bus.setStall(20, "busy");
+    line("warn", "Busy 20 burns a core — Android FPS often drops; use Delay for isolation test.");
+  };
+  document.getElementById("hz").onchange = function () {
+    if (bus) bus.setTone(+this.value || 440, 0.12);
+  };
+
+  bootWorker();
+
+  function mainLoop(now) {
+    mainFrames++;
+    if (now - lastMain >= 1000) {
+      mainFps = (mainFrames * 1000) / (now - lastMain);
+      mainFrames = 0;
+      lastMain = now;
+      paintHud();
+    }
+    requestAnimationFrame(mainLoop);
+  }
+  requestAnimationFrame(mainLoop);
+})();
+</script>
+</body>
+</html>
