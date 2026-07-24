@@ -29,7 +29,8 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     this.gapStartR = 0;
     this.lastOutL = 0;
     this.lastOutR = 0;
-    this.crossfadeFrames = 192;
+    this.crossfadeFrames = 768;
+    this.holdFrames = 256;
     this.crossfadeLeft = 0;
     this.crossfadeFromL = 0;
     this.crossfadeFromR = 0;
@@ -42,8 +43,8 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     this.renderFrames = 0;
     this.needSentAtFrame = 0;
     this.bufferBoostFrames = 0;
-    this.needThreshold = 2048;
-    this.targetFrames = 4096;
+    this.needThreshold = 4096;
+    this.targetFrames = 8192;
     this.sourcePort = null;
     this._tick = 0;
     this._needSent = false;
@@ -342,14 +343,18 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
           this.underrunFrames++;
           if (this.gapFrames > this.maxGapFrames)
             this.maxGapFrames = this.gapFrames;
-          /* A missing block cannot be reconstructed safely. Fade the last
-           * continuous sample to zero instead of inserting a hard edge. */
-          fade = 1.0 - this.gapFrames / this.crossfadeFrames;
-          if (fade < 0) fade = 0;
-          left[i] = this.gapStartL * fade;
-          right[i] = this.gapStartR * fade;
-          this.lastOutL = left[i];
-          this.lastOutR = right[i];
+          /* Hold last sample briefly then slow fade — avoids clicky fade-to-0. */
+          if (this.gapFrames <= this.holdFrames) {
+            left[i] = this.gapStartL;
+            right[i] = this.gapStartR;
+          } else {
+            fade = 1.0 - (this.gapFrames - this.holdFrames) / this.crossfadeFrames;
+            if (fade < 0) fade = 0;
+            left[i] = this.gapStartL * fade;
+            right[i] = this.gapStartR * fade;
+            this.lastOutL = left[i];
+            this.lastOutR = right[i];
+          }
         } else {
           left[i] = 0.0;
           right[i] = 0.0;
@@ -419,7 +424,12 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     }
 
     this.renderFrames += n;
-    if (this.mode === "pcm") this.requestFill(false);
+    if (this.mode === "pcm") {
+      /* Re-ask every quantum while below target — a single sticky _needSent
+       * left the FIFO draining during slow worker fills. */
+      if (this.queuedFrames < this.targetFrames + (this.bufferBoostFrames >> 1))
+        this.requestFill(this.queuedFrames < this.needThreshold * 2);
+    }
     this._tick++;
     if ((this._tick & 15) === 0) {
       this.port.postMessage({

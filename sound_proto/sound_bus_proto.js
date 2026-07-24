@@ -1,14 +1,16 @@
-/* Proto bus - AudioWorklet inline synth (default) + optional GPU worker PCM.
+/* Proto bus - worker PCM @44.1k → resample → AudioWorklet (desktop + Android).
  *
- * Android note: AudioWorklet requires a secure context (HTTPS or localhost).
- * Testing via http://192.168.x.x fails with audioWorklet === undefined.
- * Fallback uses ScriptProcessorNode on the main thread.
- *
- * inlineSynth (default): NO OffscreenCanvas worker - avoids multi-second WASM/GL
- * cold start. Worker is only spawned when inlineSynth:false (PCM proto path).
+ * Android note: AudioWorklet needs HTTPS/localhost. On plain HTTP the sink falls
+ * back to ScriptProcessor but still consumes the SAME worker PCM (script-pcm),
+ * not a separate inline synth. Prefer HTTPS so FPS cannot starve the sink.
  */
 (function (global) {
   "use strict";
+
+  /* Old App.wasm EM_JS may reference SSOUND_SAMPLE_RATE as a bare JS id
+   * (C macros are not expanded inside EM_JS string bodies). */
+  if (typeof global.SSOUND_SAMPLE_RATE !== "number")
+    global.SSOUND_SAMPLE_RATE = 44100;
 
   function workerSupported(needsCanvas) {
     return (
@@ -66,8 +68,8 @@
   function workletUrl(opts) {
     var workletPath = locate("spin_audio_processor.js", opts && opts.workletUrl);
     /* Cache-bust: browsers pin AudioWorklet modules hard across reloads. */
-    if (workletPath.indexOf("?") < 0) workletPath += "?v=desk16";
-    else workletPath += "&v=desk16";
+    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr33";
+    else workletPath += "&v=andr33";
     return workletPath;
   }
 
@@ -91,6 +93,7 @@
       audioPort: null,
       workletUrl: null,
       _workletModuleReady: false,
+      _workletModulePromise: null,
       _warmPromise: null,
       _startPromise: null,
       _unlockAttempts: 0,
@@ -126,17 +129,36 @@
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 1024,
-      /* Deeper FIFO on mobile — absorbs raytracer stalls without changing timbre. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 12288 : 4096),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 6144 : 2048),
-      /* 0 = device rate. Worker keeps synth at 44.1k and resamples (desktop-good path). */
+      /* Look-ahead FIFO. Deeper cushion = fewer hitch-induced underruns when
+       * Auto scale / GL stalls jitter frame timing. First audible may lag ~0.2s. */
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 12288 : 12288),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 4096 : 4096),
+      /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
+      synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
+      /* 0 until unlock — then AudioContext.sampleRate (may differ → resample). */
       sampleRate: opts.sampleRate > 0 ? opts.sampleRate | 0 : 0,
+      convertPath: "pending",
       legacyTimeScale: opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0,
+      /* SOUND_UNLOCK_FADEIN_SEC — ramp when device first becomes audible. */
+      unlockFadeSec: opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12,
       toneHz: opts.toneHz > 0 ? +opts.toneHz : 440,
       preferCpu: !!opts.preferCpu,
       inlineSynth: inlineSynth,
       mobile: mobile
     };
+
+    function refreshConvertPath() {
+      var cfg = state.synthRate | 0;
+      var dev = state.sampleRate | 0;
+      if (!(cfg > 0)) cfg = 44100;
+      if (!(dev > 0)) {
+        state.convertPath = "pending";
+        return state.convertPath;
+      }
+      state.convertPath =
+        cfg === dev ? "identity" : "resample " + cfg + "\u2192" + dev;
+      return state.convertPath;
+    }
 
     if (!audioSupported()) {
       state.error = "audio-unsupported";
@@ -150,8 +172,8 @@
         return state;
       }
       var url = locate("sound_worker_proto.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=desk16";
-      else url += "&v=desk16";
+      if (url.indexOf("?") < 0) url += "?v=andr33";
+      else url += "&v=andr33";
       var worker;
       try {
         worker = new Worker(url);
@@ -177,7 +199,7 @@
           return;
         }
         if (msg.type === "audio-attached") {
-          state.audioReady = true;
+          markAudioReadyIfRunning();
           if (typeof opts.onAudioAttached === "function") opts.onAudioAttached(state, msg);
           return;
         }
@@ -199,6 +221,9 @@
           state.stats.peak = +msg.peak || 0;
           state.stats.synthRate = msg.synth_rate | 0;
           state.stats.outputRate = msg.output_rate | 0;
+          state.stats.configRate = state.synthRate | 0;
+          state.stats.deviceRate = state.sampleRate | 0;
+          state.stats.convertPath = state.convertPath || "";
           state.stats.synthLastMs = +msg.synth_last_ms || 0;
           state.stats.synthAvgMs = +msg.synth_avg_ms || 0;
           state.stats.synthMaxMs = +msg.synth_max_ms || 0;
@@ -237,7 +262,9 @@
           blockFrames: state.blockFrames,
           targetFrames: state.targetFrames,
           needFrames: state.needFrames,
-          sampleRate: state.sampleRate || 44100,
+          /* Engine clock until device rate is known via set-audio-port. */
+          sampleRate: state.sampleRate || state.synthRate,
+          synthRate: state.synthRate,
           toneHz: state.toneHz,
           preferCpu: state.preferCpu
         };
@@ -265,46 +292,235 @@
 
     state.ok = true;
 
-    /* Prefetch only. Creating/compiling on a suspended AudioContext here made
-     * Android wait before resume(), after the touch activation had expired. */
+    function markAudioReadyIfRunning() {
+      var ctx = state.audioCtx;
+      if (ctx && ctx.state === "running" && (state.worklet || state.scriptNode)) {
+        state.audioReady = true;
+        state.audioStage = "ready";
+        state.error = "";
+        state._gesturePrimed = true;
+        return true;
+      }
+      state.audioReady = false;
+      if (ctx && ctx.state === "suspended") state.audioStage = "suspended";
+      else if (ctx) state.audioStage = String(ctx.state || "none");
+      return false;
+    }
+
+    /* Drop a stuck suspended graph so the next gesture can create a fresh
+     * AudioContext (addModule is per-context — cleared too). */
+    function nukeAudioGraph() {
+      try {
+        if (state.worklet) state.worklet.disconnect();
+      } catch (e0) {}
+      try {
+        if (state.scriptNode) {
+          state.scriptNode.onaudioprocess = null;
+          state.scriptNode.disconnect();
+        }
+      } catch (e1) {}
+      state.worklet = null;
+      state.scriptNode = null;
+      state.audioPort = null;
+      state.audioReady = false;
+      state._workletModuleReady = false;
+      state._workletModulePromise = null;
+      state._gesturePrimed = false;
+      try {
+        if (state.audioCtx && state.audioCtx.state !== "closed") state.audioCtx.close();
+      } catch (e2) {}
+      state.audioCtx = null;
+      state.audioPath = "";
+    }
+
+    function ensureAudioContext() {
+      if (state.audioCtx) return state.audioCtx;
+      var AC = global.AudioContext || global.webkitAudioContext;
+      /* Prefer engine clock (44.1k) so worker can skip resample → fewer clicks. */
+      var acOpts = {
+        latencyHint: "interactive",
+        sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 44100
+      };
+      var ctx;
+      try {
+        ctx = new AC(acOpts);
+      } catch (eAc) {
+        ctx = new AC({ latencyHint: "interactive" });
+      }
+      state.audioCtx = ctx;
+      state.sampleRate = ctx.sampleRate | 0;
+      refreshConvertPath();
+      try {
+        if (typeof Module !== "undefined" && Module.sound_worker_proto) {
+          var stHud = Module.sound_worker_proto;
+          stHud.stats = stHud.stats || {};
+          stHud.stats.synth_rate = state.synthRate | 0;
+          stHud.stats.output_rate = state.sampleRate | 0;
+        }
+      } catch (eHud) {}
+      return ctx;
+    }
+
+    /* Android Chrome often ignores resume() alone on touchstart; a sync silent
+     * buffer start() in the same turn locks user-activation before touchend/click. */
+    function primeHtmlMedia() {
+      try {
+        var a = state._silentAudio;
+        if (!a) {
+          /* Minimal WAV — HTMLMediaElement.play() carries stronger gesture
+           * activation on Android WebView than AudioContext.resume() alone. */
+          a = new Audio(
+            "data:audio/wav;base64,UklGRmgAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+          );
+          a.preload = "auto";
+          a.volume = 0.01;
+          state._silentAudio = a;
+        }
+        var p = a.play();
+        if (p && typeof p.then === "function")
+          p.catch(function () {});
+      } catch (eHtml) {}
+    }
+
+    function primeAudioGesture(ctx) {
+      if (!ctx) return;
+      /* Re-prime every attempt until the context is actually running. */
+      if (ctx.state === "running" && state._gesturePrimed) return;
+      try {
+        var buf = ctx.createBuffer(1, 1, ctx.sampleRate || 44100);
+        var src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+        try {
+          var osc = ctx.createOscillator();
+          var g = ctx.createGain();
+          g.gain.value = 0.0001;
+          osc.connect(g);
+          g.connect(ctx.destination);
+          osc.start(0);
+          osc.stop(ctx.currentTime + 0.02);
+        } catch (eOsc) {}
+        if (ctx.state === "running") state._gesturePrimed = true;
+      } catch (ePrime) {}
+    }
+
+    function attachWorkletNodeSync(ctx) {
+      var node = new AudioWorkletNode(ctx, "spin-audio-processor", {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        processorOptions: {
+          mode: state.inlineSynth ? "inline" : "pcm",
+          maxVoices: state.mobile ? 10 : 20,
+          lightSynth: false,
+          legacyTimeScale: state.legacyTimeScale,
+          unlockFadeSec: state.unlockFadeSec
+        }
+      });
+      node.port.onmessage = function (ev) {
+        var msg = ev.data || {};
+        if (msg.type === "stats") {
+          state.stats.underruns = msg.underruns | 0;
+          state.stats.underrunFrames = msg.underrunFrames | 0;
+          state.stats.maxGapMs = +msg.maxGapMs || 0;
+          state.stats.minQueuedFrames = msg.minQueuedFrames | 0;
+          state.stats.fillWaitMs = +msg.fillWaitMs || 0;
+          state.stats.fillWaitMaxMs = +msg.fillWaitMaxMs || 0;
+          state.stats.bufferBoostFrames = msg.bufferBoostFrames | 0;
+          state.stats.queuedFrames = msg.queuedFrames | 0;
+          state.stats.voices = msg.voices | 0;
+          state.stats.audioMode = msg.mode || (state.inlineSynth ? "inline" : "pcm");
+          if (typeof opts.onAudioStats === "function") opts.onAudioStats(state, msg);
+        }
+      };
+      if (state.inlineSynth) {
+        node.port.postMessage({ type: "set-mode", mode: "inline" });
+        node.connect(ctx.destination);
+        state.worklet = node;
+        state.audioPath = "worklet-inline";
+        markAudioReadyIfRunning();
+        return;
+      }
+      var channel = new MessageChannel();
+      attachWorkerAudioPort(channel.port1);
+      node.port.postMessage(
+        {
+          type: "set-source-port",
+          port: channel.port2,
+          needFrames: state.needFrames,
+          targetFrames: state.targetFrames
+        },
+        [channel.port2]
+      );
+      node.connect(ctx.destination);
+      state.worklet = node;
+      state.audioPath = "worklet-pcm";
+      markAudioReadyIfRunning();
+    }
+
+    /* Prefetch worklet SOURCE only. Do NOT addModule on a suspended context —
+     * Chrome Android can hang addModule for seconds until/after resume, and
+     * unlock was awaiting that same hung promise (~4s silence after tap). */
+    function prefetchWorkletSource() {
+      if (state.workletUrl || state._prefetchPromise) return state._prefetchPromise;
+      state._prefetchPromise = (async function () {
+        var path = workletUrl(opts);
+        var src = await fetch(path, { credentials: "same-origin", cache: "force-cache" }).then(
+          function (r) {
+            if (!r.ok) throw new Error("worklet-fetch");
+            return r.text();
+          }
+        );
+        var blob = new Blob([src], { type: "application/javascript" });
+        state.workletUrl = URL.createObjectURL(blob);
+      })();
+      return state._prefetchPromise;
+    }
+
+    function ensureWorkletModule(ctx) {
+      if (state._workletModuleReady) return Promise.resolve();
+      if (state._workletModulePromise) return state._workletModulePromise;
+      state._workletModulePromise = (async function () {
+        try {
+          await prefetchWorkletSource();
+        } catch (ePref) {}
+        var url = state.workletUrl || workletUrl(opts);
+        await ctx.audioWorklet.addModule(url);
+        state._workletModuleReady = true;
+      })();
+      return state._workletModulePromise;
+    }
+
     state._warmPromise = (async function warmWorklet() {
       if (!hasAudioContext()) return;
       try {
-        var path = workletUrl(opts);
-        try {
-          await fetch(path, { credentials: "same-origin", cache: "force-cache" });
-        } catch (eFetch) {}
-        console.log("[sound_bus] worklet source prefetched" + (mobile ? " mobile" : ""));
+        state.audioStage = "warming";
+        await prefetchWorkletSource();
+        if (!state._unlockStarted) state.audioStage = "waiting-gesture";
+        console.log("[sound_bus] worklet source cached (addModule deferred until after resume)");
       } catch (eWarm) {
-        console.warn("[sound_bus] worklet warm failed (will retry on gesture)", eWarm);
+        console.warn("[sound_bus] worklet prefetch failed (will retry on gesture)", eWarm);
+        if (!state._unlockStarted) state.audioStage = "waiting-gesture";
       }
     })();
 
-    /* Detach Sokol main-thread ScriptProcessor ASAP (FPS must not pace audio). */
-    (function detachMainSaudioSoon() {
-      function kill() {
-        try {
-          if (typeof Module === "undefined") return;
-          if (Module._saudio_node) {
-            try {
-              Module._saudio_node.disconnect();
-            } catch (e0) {}
-            Module._saudio_node.onaudioprocess = null;
-            Module._saudio_node = null;
-          }
-          if (Module._saudio_context) {
-            try {
-              if (state.audioCtx && Module._saudio_context === state.audioCtx) return;
-              Module._saudio_context.close();
-            } catch (e1) {}
-            Module._saudio_context = null;
-          }
-        } catch (e2) {}
+    /* Device ownership is C-side (ssound_set_no_saudio). After App.wasm rebuild,
+     * Sokol never creates _saudio_node. One-shot detach only covers older builds
+     * that still called saudio_setup before the flag existed — not a watchdog. */
+    try {
+      if (typeof Module !== "undefined" && Module._saudio_node) {
+        try { Module._saudio_node.disconnect(); } catch (e0) {}
+        Module._saudio_node.onaudioprocess = null;
+        Module._saudio_node = null;
+        if (Module._saudio_context &&
+            !(state.audioCtx && Module._saudio_context === state.audioCtx)) {
+          try { Module._saudio_context.close(); } catch (e1) {}
+          Module._saudio_context = null;
+        }
+        console.log("[sound_bus] one-shot: detached legacy Sokol saudio (rebuild App.wasm to skip)");
       }
-      kill();
-      setTimeout(kill, 50);
-      setTimeout(kill, 500);
-    })();
+    } catch (eDet) {}
 
     state.setStall = function (ms, mode) {
       if (state.worker)
@@ -354,14 +570,10 @@
     }
 
     state.play = function (desc) {
-      if (state.audioReady) return sendPlayReady(desc || {});
-
-      /* Events emitted before the autoplay gesture are already stale. Replaying
-       * that whole backlog at unlock caused a clipped pop and an owl-like chord. */
-      if (!state._unlockStarted) {
-        state.stats.droppedStarts++;
-        return 1;
-      }
+      /* Start instruments even before AudioContext unlock — worker advances
+       * voice clocks silently; unlock fade-in avoids a hard onset. */
+      if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
+        return sendPlayReady(desc || {});
       if (state._pendingPlays.length >= 32) state._pendingPlays.shift();
       state._pendingPlays.push(desc || {});
       return 1;
@@ -386,7 +598,8 @@
           blockFrames: state.blockFrames,
           targetFrames: state.targetFrames,
           needFrames: state.needFrames,
-          sampleRate: state.sampleRate || 44100,
+          sampleRate: state.sampleRate || state.synthRate || 44100,
+          synthRate: state.synthRate,
           toneHz: state.toneHz
         },
         [port]
@@ -394,162 +607,200 @@
     }
 
     function startScriptProcessorFallback(ctx) {
-      /* Last resort - still main-thread. Prefer Worklet. Inline synth here so we
-       * at least don't depend on a lagging worker FIFO. */
-      console.warn("[sound_bus] ScriptProcessor fallback (main-thread - avoid if possible)");
-      var voices = [];
-      var nextId = 1;
-      var frame = 0;
-      var master = 1.0;
+      /* HTTP Android often has no AudioWorklet. Keep the SAME desktop sound path:
+       * worker synth @44.1k → resample → PCM FIFO → this ScriptProcessor sink.
+       * (Callback still runs on the render thread — prefer HTTPS for Worklet.) */
+      console.warn(
+        "[sound_bus] ScriptProcessor PCM sink (config " +
+          state.synthRate +
+          " Hz → device). HTTPS → AudioWorklet recommended so FPS cannot starve audio."
+      );
+
+      if (!state.worker) {
+        state.error = "script-pcm-needs-worker";
+        throw new Error(state.error);
+      }
+
+      var blocks = [];
+      var queuedFrames = 0;
+      var current = null;
+      var offset = 0;
       var underruns = 0;
+      var primed = false;
+      var needSent = false;
+      var lastOutL = 0;
+      var lastOutR = 0;
+      var gapFrames = 0;
+      var bufferBoostFrames = 0;
+      /* Soft underrun: hold last sample briefly, then slow fade — fast fade-to-0
+       * is what the ear hears as random crackle when FPS hitch drains the FIFO. */
+      var holdFrames = 256;
+      var fadeFrames = 768;
+      var xfadeLeft = 0;
+      var xfadeFromL = 0;
+      var xfadeFromR = 0;
+      var unlockGain = 0;
+      var unlockActive = state.unlockFadeSec > 0;
+      var unlockStep =
+        state.unlockFadeSec > 0
+          ? 1.0 / (state.unlockFadeSec * (ctx.sampleRate || 48000))
+          : 0;
+      var channel = new MessageChannel();
+      var audioPort = channel.port2;
 
-      function hash1(p) {
-        var p2x = (p * 5.3983) % 1; if (p2x < 0) p2x += 1;
-        var p2y = (p * 5.4427) % 1; if (p2y < 0) p2y += 1;
-        var d = p2y * (p2x + 21.5351) + p2x * (p2y + 14.3137);
-        p2x += d;
-        p2y += d;
-        var r = (p2x * p2y * 95.4337) % 1;
-        return r < 0 ? r + 1 : r;
-      }
-      function noise(n) {
-        var f = n - Math.floor(n); n = Math.floor(n);
-        f = f * f * (3 - 2 * f);
-        return hash1(n) * (1 - f) + hash1(n + 1) * f - 0.5;
-      }
-      function noiseSlope(n, loc) {
-        var f = n - Math.floor(n); n = Math.floor(n);
-        if (loc <= 0) f = f >= 1 ? 1 : 0;
-        else {
-          f = f / loc;
-          if (f < 0) f = 0;
-          if (f > 1) f = 1;
-          f = f * f * (3 - 2 * f);
+      audioPort.onmessage = function (ev) {
+        var a = ev.data || {};
+        if (a.type === "pcm" && a.samples) {
+          var samples =
+            a.samples instanceof Float32Array
+              ? a.samples
+              : new Float32Array(a.samples);
+          var frames = a.frames | 0;
+          if (frames > 0) {
+            blocks.push({ samples: samples, frames: frames });
+            queuedFrames += frames;
+            needSent = false;
+            primed = true;
+          }
+        } else if (a.type === "flush") {
+          blocks.length = 0;
+          current = null;
+          offset = 0;
+          queuedFrames = 0;
+          needSent = false;
+          if (Math.max(Math.abs(lastOutL), Math.abs(lastOutR)) > 1e-4) {
+            xfadeLeft = fadeFrames;
+            xfadeFromL = lastOutL;
+            xfadeFromR = lastOutR;
+          }
         }
-        return hash1(n) * (1 - f) + hash1(n + 1) * f;
-      }
-      function smoothstep(edge0, edge1, x) {
-        var k = (x - edge0) / (edge1 - edge0);
-        if (k < 0) k = 0;
-        if (k > 1) k = 1;
-        return k * k * (3 - 2 * k);
-      }
-      function tweetVolume(t) {
-        var n1 = noiseSlope(t * 11.0, 0.3);
-        var n2 = smoothstep(0.0, 1.0, Math.abs(Math.sin(t * 14.0)));
-        var n3 = smoothstep(0.4, 0.9, noiseSlope(t * 0.5 + 4.0, 0.3));
-        var n = n1 * n2 * 0.2 * n3;
-        n *= n;
-        return n < 0 ? 0 : n > 1 ? 1 : n;
-      }
-      function tweet(t) {
-        t -= 1.5;
-        var f = Math.sin(6.2831 * 2.0 * t) * noise(t * 8.1 - 100.0) * 100.0 + 5000.0;
-        f += Math.cos(50.0 * 6.2831 * t);
-        return Math.sin(6.2831 * f * t);
-      }
-      function sampleTweet(t, fx, fy) {
-        return tweet((t + fx) * 0.4) *
-          tweetVolume((t + fy - 0.5) * 0.6) * 20.0;
-      }
-      function decaySeconds(envelop) {
-        var d = envelop > 1e-6 ? Math.log(0.001) / -envelop : 0.5;
-        if (!isFinite(d) || d < 0) d = 0.5;
-        return d > 4 ? 4 : d;
-      }
-
-      state._scriptPlay = function (desc) {
-        var envelop = desc.envelop >= 0 ? +desc.envelop : 8.0;
-        var duration = desc.duration > 0 ? +desc.duration : 0.08;
-        voices.push({
-          start: frame,
-          duration: duration,
-          totalLife: duration + decaySeconds(envelop),
-          volume: desc.volume >= 0 ? +desc.volume : 0.6,
-          fadein: desc.fadein >= 0 ? +desc.fadein : 0.0000006,
-          envelop: envelop,
-          freqX: desc.freqX != null ? +desc.freqX : 2,
-          freqY: desc.freqY != null ? +desc.freqY : 4,
-          id: nextId++
-        });
       };
-      state._scriptStopAll = function () { voices.length = 0; };
+      audioPort.start && audioPort.start();
 
-      /* Large buffer: ScriptProcessor runs on the RENDER thread. Under a heavy
-       * WebGL frame it is the only reason FPS can glitch audio on HTTP Android.
-       * Prefer HTTPS + AudioWorklet (path worklet-inline) to fully decouple. */
-      var bufSize = state.mobile ? 4096 : 2048;
+      function requestFill(force) {
+        var need = (state.needFrames | 0) + (bufferBoostFrames >> 1);
+        if (queuedFrames >= need) {
+          needSent = false;
+          return;
+        }
+        if (!force && needSent) return;
+        needSent = true;
+        audioPort.postMessage({
+          type: "need",
+          queuedFrames: queuedFrames | 0,
+          needFrames: need | 0,
+          targetFrames: ((state.targetFrames | 0) + bufferBoostFrames) | 0
+        });
+      }
+
+      attachWorkerAudioPort(channel.port1);
+
+      /* Larger quantum = fewer main-thread callbacks (script-pcm shares GL thread). */
+      var bufSize = state.mobile ? 4096 : 4096;
       if (!ctx.createScriptProcessor) throw new Error("no-script-processor");
       var sp = ctx.createScriptProcessor(bufSize, 0, 2);
       sp.onaudioprocess = function (e) {
         var left = e.outputBuffer.getChannelData(0);
         var right = e.outputBuffer.getChannelData(1);
         var n = left.length;
-        var sr = ctx.sampleRate;
-        var scale = state.legacyTimeScale > 1e-6 ? state.legacyTimeScale : 1.0;
-        var i, vi, v, t, synthT, env, g, still = [];
-        for (i = 0; i < n; i++) { left[i] = 0; right[i] = 0; }
-        for (vi = 0; vi < voices.length; vi++) {
-          v = voices[vi];
-          if (frame >= v.start + Math.ceil(v.totalLife * sr / scale)) continue;
-          still.push(v);
-          for (i = 0; i < n; i++) {
-            var af = frame + i;
-            if (af < v.start) continue;
-            t = (af - v.start) / sr;
-            synthT = t * scale;
-            env = synthT < v.duration ? 1.0 :
-              Math.exp(-v.envelop * (synthT - v.duration));
-            if (v.fadein > 1e-12 && synthT < v.fadein)
-              env *= synthT / v.fadein;
-            if (env <= 0) continue;
-            g = sampleTweet(synthT, v.freqX, v.freqY) * v.volume * env * master;
-            if (g > 1) g = 1; else if (g < -1) g = -1;
-            left[i] += g; right[i] += g;
+        var i, si, rawL, rawR, fade, phase;
+        /* Ask early in the callback so the worker can fill during this quantum. */
+        requestFill(queuedFrames < state.needFrames + (bufferBoostFrames >> 1));
+        for (i = 0; i < n; i++) {
+          if (!current || offset >= current.frames) {
+            current = blocks.length ? blocks.shift() : null;
+            offset = 0;
+          }
+          if (!current) {
+            if (primed) {
+              if (gapFrames === 0) {
+                underruns++;
+                bufferBoostFrames += 2048;
+                if (bufferBoostFrames > 16384) bufferBoostFrames = 16384;
+              }
+              gapFrames++;
+              if (gapFrames <= holdFrames) {
+                left[i] = lastOutL;
+                right[i] = lastOutR;
+              } else {
+                fade = 1.0 - (gapFrames - holdFrames) / fadeFrames;
+                if (fade < 0) fade = 0;
+                left[i] = lastOutL * fade;
+                right[i] = lastOutR * fade;
+                lastOutL = left[i];
+                lastOutR = right[i];
+              }
+            } else {
+              left[i] = 0;
+              right[i] = 0;
+              lastOutL = 0;
+              lastOutR = 0;
+            }
+            continue;
+          }
+          si = offset * 2;
+          rawL = current.samples[si];
+          rawR = current.samples[si + 1];
+          if (gapFrames > 0) {
+            xfadeLeft = fadeFrames;
+            xfadeFromL = lastOutL;
+            xfadeFromR = lastOutR;
+            gapFrames = 0;
+          }
+          if (xfadeLeft > 0) {
+            phase = 1.0 - xfadeLeft / fadeFrames;
+            left[i] = xfadeFromL * (1.0 - phase) + rawL * phase;
+            right[i] = xfadeFromR * (1.0 - phase) + rawR * phase;
+            xfadeLeft--;
+          } else {
+            left[i] = rawL > 1 ? 1 : rawL < -1 ? -1 : rawL;
+            right[i] = rawR > 1 ? 1 : rawR < -1 ? -1 : rawR;
+          }
+          lastOutL = left[i];
+          lastOutR = right[i];
+          offset++;
+          queuedFrames--;
+          if (queuedFrames < 0) queuedFrames = 0;
+          if (unlockActive) {
+            unlockGain += unlockStep;
+            if (unlockGain >= 1) {
+              unlockGain = 1;
+              unlockActive = false;
+            } else {
+              left[i] *= unlockGain;
+              right[i] *= unlockGain;
+              lastOutL = left[i];
+              lastOutR = right[i];
+            }
           }
         }
-        voices = still;
-        for (i = 0; i < n; i++) {
-          if (left[i] > 1) left[i] = 1; else if (left[i] < -1) left[i] = -1;
-          if (right[i] > 1) right[i] = 1; else if (right[i] < -1) right[i] = -1;
-        }
-        frame += n;
         state.stats.underruns = underruns;
-        state.stats.queuedFrames = voices.length;
-        state.stats.voices = voices.length;
+        state.stats.queuedFrames = queuedFrames | 0;
+        state.stats.bufferBoostFrames = bufferBoostFrames | 0;
+        requestFill(true);
       };
       sp.connect(ctx.destination);
       state.scriptNode = sp;
-      state.audioPath = "script-inline";
-      state.audioReady = true;
-      /* Route play to script when worklet unavailable. */
-      var prevPlay = state.play;
-      state.play = function (desc) {
-        if (!state.audioReady && state.startAudio) try { state.startAudio(); } catch (e) {}
-        if (state._scriptPlay) { state._scriptPlay(desc || {}); return 1; }
-        return prevPlay(desc);
-      };
-      state.stopAll = function () {
-        if (state._scriptStopAll) state._scriptStopAll();
-        if (state.worker) state.worker.postMessage({ type: "stop_all" });
-      };
+      state.audioPath = "script-pcm";
+      markAudioReadyIfRunning();
+      requestFill(true);
+      /* Plays stay on the worker (same as worklet-pcm / desktop). */
     }
 
     async function startWorkletPath(ctx) {
-      var path = workletUrl(opts);
-      if (!state._workletModuleReady) {
-        try {
-          await ctx.audioWorklet.addModule(path);
-        } catch (e1) {
-          var src = await fetch(path).then(function (r) {
-            if (!r.ok) throw new Error("worklet-fetch");
-            return r.text();
-          });
-          var blob = new Blob([src], { type: "application/javascript" });
-          state.workletUrl = URL.createObjectURL(blob);
-          await ctx.audioWorklet.addModule(state.workletUrl);
-        }
-        state._workletModuleReady = true;
+      var modStatus = await Promise.race([
+        ensureWorkletModule(ctx).then(function () {
+          return "ok";
+        }),
+        new Promise(function (resolve) {
+          setTimeout(function () {
+            resolve("timeout");
+          }, 1500);
+        })
+      ]);
+      if (modStatus !== "ok") {
+        state._workletModulePromise = null;
+        throw new Error("worklet-addModule-timeout");
       }
 
       var node = new AudioWorkletNode(ctx, "spin-audio-processor", {
@@ -561,7 +812,8 @@
           maxVoices: state.mobile ? 10 : 20,
           /* Same tweet.sound formula and historical clock on every device. */
           lightSynth: false,
-          legacyTimeScale: state.legacyTimeScale
+          legacyTimeScale: state.legacyTimeScale,
+          unlockFadeSec: state.unlockFadeSec
         }
       });
       node.port.onmessage = function (ev) {
@@ -586,7 +838,7 @@
         node.connect(ctx.destination);
         state.worklet = node;
         state.audioPath = "worklet-inline";
-        state.audioReady = true;
+        markAudioReadyIfRunning();
         return;
       }
 
@@ -605,157 +857,125 @@
       node.connect(ctx.destination);
       state.worklet = node;
       state.audioPath = "worklet-pcm";
-      state.audioReady = true;
-    }
-
-    function killMainThreadSaudio() {
-      /* Sokol WebAudio = ScriptProcessor on the MAIN thread - FPS drops stretch/starve it.
-       * Worklet must be the only device owner. Sokol may recreate saudio after init. */
-      try {
-        if (typeof Module === "undefined") return;
-        if (Module._saudio_node) {
-          try {
-            Module._saudio_node.disconnect();
-          } catch (e0) {}
-          Module._saudio_node.onaudioprocess = null;
-          Module._saudio_node = null;
-        }
-        if (Module._saudio_context) {
-          try {
-            /* Do not close if it is our bus context. */
-            if (state.audioCtx && Module._saudio_context === state.audioCtx) return;
-            Module._saudio_context.close();
-          } catch (e1) {}
-          Module._saudio_context = null;
-        }
-      } catch (eKill) {}
-    }
-
-    /* Keep killing saudio: the raytracer / ssound init can recreate it later. */
-    if (!state._saudioWatch) {
-      state._saudioWatch = setInterval(killMainThreadSaudio, 500);
+      markAudioReadyIfRunning();
     }
 
     state.startAudio = function () {
       var resumePromise;
+      var ctx;
       if (!audioSupported()) {
         state.error = "audio-unsupported";
         state.audioStage = "error";
         return Promise.reject(new Error(state.error));
       }
-      if (!state._unlockStarted) {
-        state.stats.droppedStarts += state._pendingPlays.length;
-        state._pendingPlays.length = 0;
-        state._unlockStarted = true;
-      }
+      if (!state._unlockStarted) state._unlockStarted = true;
       state._unlockAttempts++;
-      if (state.worklet || state.scriptNode) {
-        state.audioStage = "resume";
-        try {
-          resumePromise =
-            state.audioCtx && state.audioCtx.state !== "running"
-              ? state.audioCtx.resume()
-              : Promise.resolve();
-        } catch (resumeErr0) {
-          state.error = "resume:" + String(resumeErr0 && resumeErr0.message ? resumeErr0.message : resumeErr0);
-          return Promise.reject(resumeErr0);
-        }
-        return (async function () {
-          await resumePromise;
-          state.audioReady = true;
-          state.audioStage = "ready";
-          state.error = "";
-          flushPendingPlays();
-          return state;
-        })();
+
+      /* Must stay synchronous in the gesture turn. */
+      primeHtmlMedia();
+
+      /* Stuck suspended context: destroy and recreate inside THIS gesture.
+       * Retap used to no-op because audioReady was true while still suspended. */
+      if (state.audioCtx && state.audioCtx.state !== "running") {
+        console.warn(
+          "[sound_bus] recreating AudioContext (was " + state.audioCtx.state + ")"
+        );
+        nukeAudioGraph();
       }
 
-      killMainThreadSaudio();
-      var AC = global.AudioContext || global.webkitAudioContext;
-      var ctx = state.audioCtx;
-      if (!ctx) {
-        var acOpts = { latencyHint: "interactive" };
-        /* Device native rate. Synth stays @44.1k in the worker and resamples —
-         * same path that sounded correct on desktop WebGL. */
-        if (state.sampleRate > 0) acOpts.sampleRate = state.sampleRate;
-        ctx = new AC(acOpts);
-        state.audioCtx = ctx;
-      }
+      ctx = ensureAudioContext();
+      primeAudioGesture(ctx);
       state.sampleRate = ctx.sampleRate | 0;
+      refreshConvertPath();
       console.log(
-        "[sound_bus] AudioContext " + state.sampleRate + " Hz | synth 44100 → resample"
+        "[sound_bus] AudioContext device=" +
+          state.sampleRate +
+          " Hz | config=" +
+          state.synthRate +
+          " Hz | " +
+          state.convertPath +
+          " | attempt=" +
+          state._unlockAttempts
       );
       state.audioStage = "resume";
       try {
-        /* Invoke resume synchronously inside pointer/touch/key activation. Do not
-         * put any await before this call: Chrome Android expires activation. */
         resumePromise = ctx.state !== "running" ? ctx.resume() : Promise.resolve();
       } catch (resumeErr) {
-        state.error = "resume:" + String(resumeErr && resumeErr.message ? resumeErr.message : resumeErr);
+        state.error =
+          "resume:" + String(resumeErr && resumeErr.message ? resumeErr.message : resumeErr);
         state.audioStage = "error";
+        state.audioReady = false;
         return Promise.reject(resumeErr);
       }
 
-      /* Do not reserve _startPromise until resume resolves. A denied/parked
-       * Android resume must not prevent a later real gesture from retrying. */
-      return Promise.resolve(resumePromise).then(function () {
-        if (state.worklet || state.scriptNode) {
-          state.audioReady = true;
-          state.audioStage = "ready";
-          state.error = "";
-          flushPendingPlays();
-          return state;
-        }
-        if (state._startPromise) return state._startPromise;
-
-        state._startPromise = (async function () {
-          /* Prefetch is deliberately not awaited here: a slow HTTP request used
-           * to leave the HUD on TAP forever after AudioContext had resumed. */
-          if (workletSupported(ctx)) {
+      /* Prefer ScriptProcessor on first unlock — sync, no addModule. Upgrade later. */
+      if (!state.worklet && !state.scriptNode) {
+        try {
+          if (state._workletModuleReady && workletSupported(ctx)) {
             state.audioStage = "worklet";
-            try {
-              await startWorkletPath(ctx);
-            } catch (err) {
-              console.warn("[sound_bus] worklet failed, falling back to ScriptProcessor", err);
-              state.audioStage = "fallback";
-              await startScriptProcessorFallback(ctx);
-            }
+            attachWorkletNodeSync(ctx);
           } else {
             state.audioStage = "fallback";
+            startScriptProcessorFallback(ctx);
+            if (workletSupported(ctx)) {
+              ensureWorkletModule(ctx)
+                .then(function () {
+                  if (state.worklet || !state.scriptNode) return;
+                  if (!state.audioCtx || state.audioCtx.state !== "running") return;
+                  try {
+                    try {
+                      state.scriptNode.disconnect();
+                    } catch (eDisc) {}
+                    state.scriptNode = null;
+                    attachWorkletNodeSync(state.audioCtx);
+                    console.log("[sound_bus] upgraded ScriptProcessor → Worklet");
+                  } catch (eUp) {
+                    console.warn("[sound_bus] worklet upgrade failed", eUp);
+                  }
+                })
+                .catch(function () {});
+            }
+          }
+          markAudioReadyIfRunning();
+          if (state.audioReady && typeof opts.onAudioReady === "function")
+            opts.onAudioReady(state);
+        } catch (eSink) {
+          console.warn("[sound_bus] sync sink attach failed", eSink);
+          state.audioStage = "error";
+          state.error = String(eSink && eSink.message ? eSink.message : eSink);
+          state.audioReady = false;
+        }
+      } else {
+        markAudioReadyIfRunning();
+      }
+
+      flushPendingPlays();
+
+      return Promise.resolve(resumePromise).then(
+        function () {
+          primeAudioGesture(ctx);
+          markAudioReadyIfRunning();
+          if (state.audioReady) flushPendingPlays();
+          else
             console.warn(
-              "[sound_bus] AudioWorklet unavailable (secure context? " +
-                isSecureEnough() +
-                ") - ScriptProcessor fallback"
+              "[sound_bus] ctx still " +
+                (ctx && ctx.state) +
+                " after resume — next tap will recreate"
             );
-            await startScriptProcessorFallback(ctx);
-          }
-
-          killMainThreadSaudio();
-          state.audioReady = true;
-          state.audioStage = "ready";
-          state.error = "";
-          flushPendingPlays();
-
-          if (typeof opts.onAudioReady === "function") opts.onAudioReady(state);
           return state;
-        })();
-        state._startPromise = state._startPromise.then(
-          function (result) {
-            state._startPromise = null;
-            return result;
-          },
-          function (err) {
-            state._startPromise = null;
-            state.audioStage = "error";
-            throw err;
-          }
-        );
-        return state._startPromise;
-      }, function (err) {
-        state.audioStage = "resume-denied";
-        state.error = "resume:" + String(err && err.message ? err.message : err);
-        throw err;
-      });
+        },
+        function (err) {
+          state.audioStage = "resume-denied";
+          state.audioReady = false;
+          state.error = "resume:" + String(err && err.message ? err.message : err);
+          throw err;
+        }
+      );
+    };
+
+    state.primeGesture = function () {
+      primeHtmlMedia();
+      if (state.audioCtx) primeAudioGesture(state.audioCtx);
     };
 
     state.stop = function () {

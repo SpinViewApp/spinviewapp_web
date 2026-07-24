@@ -302,6 +302,16 @@
   var resampleHead = 0;
   var resampleFrames = 0;
   var resamplePos = 0.0;
+  var outScratch = null;
+  var outScratchFrames = 0;
+
+  function acquireOutScratch(frames) {
+    if (!outScratch || outScratchFrames < frames) {
+      outScratch = new Float32Array(frames * 2);
+      outScratchFrames = frames;
+    }
+    return outScratch;
+  }
 
   function resetOutput() {
     /* Source frames already generated into this cache intentionally become
@@ -352,10 +362,16 @@
       resetOutput();
     }
     if (!(outputRate > 0)) outputRate = SR;
-    if (outputRate === SR && resampleFrames === 0)
-      return generateSourceBlock(frames);
+    if (outputRate === SR && resampleFrames === 0) {
+      /* Copy into scratch so caller can transfer a pooled buffer without
+       * relying on a fresh alloc from generateSourceBlock. */
+      var src = generateSourceBlock(frames);
+      var dstId = acquireOutScratch(frames);
+      dstId.set(src);
+      return dstId.subarray(0, frames * 2);
+    }
 
-    var out = new Float32Array(frames * 2);
+    var out = acquireOutScratch(frames);
     var step = SR / outputRate;
     var needed = Math.floor(resamplePos + step * Math.max(0, frames - 1)) + 3;
     var i, ch, base, i0, i1, i2, i3, frac, v, drop;
@@ -386,7 +402,7 @@
       resampleFrames -= drop;
       resamplePos -= drop;
     }
-    return out;
+    return out.subarray(0, frames * 2);
   }
 
   var loadError = "";

@@ -68,8 +68,8 @@
   function workletUrl(opts) {
     var workletPath = locate("spin_audio_processor.js", opts && opts.workletUrl);
     /* Cache-bust: browsers pin AudioWorklet modules hard across reloads. */
-    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr31";
-    else workletPath += "&v=andr31";
+    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr33";
+    else workletPath += "&v=andr33";
     return workletPath;
   }
 
@@ -129,11 +129,10 @@
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 1024,
-      /* Shallow start FIFO — deep mobile buffers delayed first audible audio
-       * by seconds under ScriptProcessor / slow worker fill. Underrun boost
-       * still grows the look-ahead after the first gap. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 8192 : 8192),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 2048 : 2048),
+      /* Look-ahead FIFO. Deeper cushion = fewer hitch-induced underruns when
+       * Auto scale / GL stalls jitter frame timing. First audible may lag ~0.2s. */
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 12288 : 12288),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 4096 : 4096),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
       /* 0 until unlock — then AudioContext.sampleRate (may differ → resample). */
@@ -173,8 +172,8 @@
         return state;
       }
       var url = locate("sound_worker_proto.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr31";
-      else url += "&v=andr31";
+      if (url.indexOf("?") < 0) url += "?v=andr33";
+      else url += "&v=andr33";
       var worker;
       try {
         worker = new Worker(url);
@@ -337,9 +336,17 @@
     function ensureAudioContext() {
       if (state.audioCtx) return state.audioCtx;
       var AC = global.AudioContext || global.webkitAudioContext;
-      var acOpts = { latencyHint: "interactive" };
-      if (state.sampleRate > 0) acOpts.sampleRate = state.sampleRate;
-      var ctx = new AC(acOpts);
+      /* Prefer engine clock (44.1k) so worker can skip resample → fewer clicks. */
+      var acOpts = {
+        latencyHint: "interactive",
+        sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 44100
+      };
+      var ctx;
+      try {
+        ctx = new AC(acOpts);
+      } catch (eAc) {
+        ctx = new AC({ latencyHint: "interactive" });
+      }
       state.audioCtx = ctx;
       state.sampleRate = ctx.sampleRate | 0;
       refreshConvertPath();
@@ -624,7 +631,11 @@
       var lastOutL = 0;
       var lastOutR = 0;
       var gapFrames = 0;
-      var fadeFrames = 192;
+      var bufferBoostFrames = 0;
+      /* Soft underrun: hold last sample briefly, then slow fade — fast fade-to-0
+       * is what the ear hears as random crackle when FPS hitch drains the FIFO. */
+      var holdFrames = 256;
+      var fadeFrames = 768;
       var xfadeLeft = 0;
       var xfadeFromL = 0;
       var xfadeFromR = 0;
@@ -667,7 +678,8 @@
       audioPort.start && audioPort.start();
 
       function requestFill(force) {
-        if (queuedFrames >= state.needFrames) {
+        var need = (state.needFrames | 0) + (bufferBoostFrames >> 1);
+        if (queuedFrames >= need) {
           needSent = false;
           return;
         }
@@ -676,14 +688,15 @@
         audioPort.postMessage({
           type: "need",
           queuedFrames: queuedFrames | 0,
-          needFrames: state.needFrames | 0,
-          targetFrames: state.targetFrames | 0
+          needFrames: need | 0,
+          targetFrames: ((state.targetFrames | 0) + bufferBoostFrames) | 0
         });
       }
 
       attachWorkerAudioPort(channel.port1);
 
-      var bufSize = state.mobile ? 2048 : 2048;
+      /* Larger quantum = fewer main-thread callbacks (script-pcm shares GL thread). */
+      var bufSize = state.mobile ? 4096 : 4096;
       if (!ctx.createScriptProcessor) throw new Error("no-script-processor");
       var sp = ctx.createScriptProcessor(bufSize, 0, 2);
       sp.onaudioprocess = function (e) {
@@ -692,7 +705,7 @@
         var n = left.length;
         var i, si, rawL, rawR, fade, phase;
         /* Ask early in the callback so the worker can fill during this quantum. */
-        requestFill(queuedFrames < state.needFrames);
+        requestFill(queuedFrames < state.needFrames + (bufferBoostFrames >> 1));
         for (i = 0; i < n; i++) {
           if (!current || offset >= current.frames) {
             current = blocks.length ? blocks.shift() : null;
@@ -700,14 +713,23 @@
           }
           if (!current) {
             if (primed) {
-              if (gapFrames === 0) underruns++;
+              if (gapFrames === 0) {
+                underruns++;
+                bufferBoostFrames += 2048;
+                if (bufferBoostFrames > 16384) bufferBoostFrames = 16384;
+              }
               gapFrames++;
-              fade = 1.0 - gapFrames / fadeFrames;
-              if (fade < 0) fade = 0;
-              left[i] = lastOutL * fade;
-              right[i] = lastOutR * fade;
-              lastOutL = left[i];
-              lastOutR = right[i];
+              if (gapFrames <= holdFrames) {
+                left[i] = lastOutL;
+                right[i] = lastOutR;
+              } else {
+                fade = 1.0 - (gapFrames - holdFrames) / fadeFrames;
+                if (fade < 0) fade = 0;
+                left[i] = lastOutL * fade;
+                right[i] = lastOutR * fade;
+                lastOutL = left[i];
+                lastOutR = right[i];
+              }
             } else {
               left[i] = 0;
               right[i] = 0;
@@ -754,6 +776,7 @@
         }
         state.stats.underruns = underruns;
         state.stats.queuedFrames = queuedFrames | 0;
+        state.stats.bufferBoostFrames = bufferBoostFrames | 0;
         requestFill(true);
       };
       sp.connect(ctx.destination);

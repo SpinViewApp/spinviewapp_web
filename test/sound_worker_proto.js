@@ -5,10 +5,10 @@
   "use strict";
 
   try {
-    importScripts("sound_worker_ssound.js?v=andr27");
+    importScripts("sound_worker_ssound.js?v=andr33");
   } catch (e1) {
     try {
-      importScripts("./sound_worker_ssound.js?v=andr27");
+      importScripts("./sound_worker_ssound.js?v=andr33");
     } catch (e2) {
       /* Host may inject SoundWorkerSsound before worker runs. */
     }
@@ -49,6 +49,29 @@
   var fillMaxMs = 0;
   var synthReady = false;
   var pendingPlays = [];
+  /* Reusable transferable PCM buffers — fresh alloc every block caused GC pauses
+   * on the worker → FIFO underruns → random crackle even on HTTPS worklet. */
+  var pcmPool = [];
+  var pcmPoolBytes = 0;
+
+  function acquirePcmBuffer(bytes) {
+    var ab;
+    if (pcmPoolBytes !== bytes) {
+      pcmPool.length = 0;
+      pcmPoolBytes = bytes;
+    }
+    ab = pcmPool.pop();
+    if (!ab || ab.byteLength !== bytes) ab = new ArrayBuffer(bytes);
+    return ab;
+  }
+
+  function recycleHint(bytes) {
+    if (pcmPoolBytes !== bytes) {
+      pcmPool.length = 0;
+      pcmPoolBytes = bytes;
+    }
+    while (pcmPool.length < 4) pcmPool.push(new ArrayBuffer(bytes));
+  }
   var stats = {
     n: 0,
     last_ms: 0,
@@ -251,15 +274,20 @@
       if (be.indexOf("wasm-gpu") !== 0) gpuTick();
     }
     var frames = blockFrames;
+    var bytes = frames * 2 * 4;
     var synthT0 = performance.now();
     var samples = makeToneBlock(frames);
+    var ab = acquirePcmBuffer(bytes);
+    var out = new Float32Array(ab);
+    out.set(samples);
+    recycleHint(bytes);
     synthLastMs = performance.now() - synthT0;
     synthBlocks++;
     synthSumMs += synthLastMs;
     if (synthLastMs > synthMaxMs) synthMaxMs = synthLastMs;
     audioPort.postMessage(
-      { type: "pcm", frames: frames, samples: samples.buffer },
-      [samples.buffer]
+      { type: "pcm", frames: frames, samples: ab },
+      [ab]
     );
     /* Advance local estimate from last known truth + this push. */
     queuedEstimate = estimatedQueued() + frames;
@@ -326,13 +354,13 @@
     }, tickDelayMs > 0 ? tickDelayMs : 16);
   }
 
-  /* Keep topping up even if the sink cannot post `need` (HTTP Android FPS stalls).
-   * Back off while the FIFO is healthy — no need to wake every 8 ms. */
+  /* Keep topping up. Healthy FIFO still wakes often enough that a hitch cannot
+   * drain past need before the next fill (40ms was too sleepy → random ur). */
   function scheduleAudioPump() {
     clearAudioPump();
     if (!running || !audioPort) return;
     var q = estimatedQueued();
-    var delay = q >= targetFrames ? 40 : q >= needFrames ? 16 : 8;
+    var delay = q >= targetFrames ? 16 : q >= needFrames ? 8 : 4;
     audioPumpTimer = setTimeout(function () {
       audioPumpTimer = 0;
       if (!running || !audioPort || !synthReady) return;
@@ -369,8 +397,10 @@
   }
 
   function playSound(msg) {
-    /* Flush only when truly idle. Flushing while the bfx echo still rings
-     * cuts the tail and makes Android echo sound shorter/different. */
+    /* Never flush the sink FIFO here: flush + async PCM races the worklet
+     * quantum and is a common source of random crackle on HTTPS worklet-pcm.
+     * resetOutput only discards stale synth cache so the new voice starts soon;
+     * continuous silence already in the FIFO keeps the cushion intact. */
     var hadAudio =
       SoundWorkerSsound.liveVoices() > 0 ||
       (SoundWorkerSsound.lastPeak && SoundWorkerSsound.lastPeak() > 1e-5) ||
@@ -383,13 +413,8 @@
       scheduleSilentPump();
       return;
     }
-    if (!hadAudio) {
-      noteQueued(0);
-      audioPort.postMessage({ type: "flush" });
-      forcePushBlocks(6);
-    } else {
-      fillToTarget(targetFrames);
-    }
+    if (!hadAudio) forcePushBlocks(4);
+    else fillToTarget(targetFrames);
     scheduleAudioPump();
   }
 

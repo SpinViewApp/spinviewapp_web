@@ -4,10 +4,11 @@
 (function (root) {
   "use strict";
 
-  /* ssound's synthesis clock is fixed at 44.1 kHz. The browser device is
-   * commonly 48 kHz, so synthesize the original grid first, then resample. */
-  var SR = 44100;
-  var outputRate = 44100;
+  /* Engine clock = SSOUND_SAMPLE_RATE from C (-D). Device may differ:
+   * synthesize on the config grid, then resample out if needed. */
+  var CONFIG_SR = 44100;
+  var SR = CONFIG_SR;
+  var outputRate = CONFIG_SR;
   var voices = [];
   var nextId = 1;
   var audioFrame = 0;
@@ -17,8 +18,26 @@
   var loadPromise = null;
   var F32 = Math.fround;
   var jsLastPeak = 0.0;
-  var echoBuffer = new Float32Array(44100 * 2);
+  var echoBuffer = new Float32Array(CONFIG_SR * 2);
   var echoPos = 0;
+  var echoQuietSamples = CONFIG_SR; /* bfx-style idle: skip flush while delay still rings */
+  var ECHO_DELAY = (CONFIG_SR * 0.25) | 0; /* 250 ms — same as bfx_echo_init */
+  var ECHO_MIX = 0.3;
+  var ECHO_FB = 0.4;
+  var ECHO_QUIET_EPS = 1.0e-4;
+
+  function applyConfigRate(sr) {
+    sr = sr > 0 ? sr | 0 : 44100;
+    if (sr === CONFIG_SR) return;
+    CONFIG_SR = sr;
+    SR = CONFIG_SR;
+    ECHO_DELAY = (CONFIG_SR * 0.25) | 0;
+    echoBuffer = new Float32Array(CONFIG_SR * 2);
+    echoPos = 0;
+    echoQuietSamples = CONFIG_SR;
+    jsLastPeak = 0;
+    resetOutput();
+  }
 
   function fadd(a, b) { return F32(F32(a) + F32(b)); }
   function fsub(a, b) { return F32(F32(a) - F32(b)); }
@@ -121,29 +140,48 @@
     echoBuffer.fill(0);
     echoPos = 0;
     jsLastPeak = 0;
+    echoQuietSamples = CONFIG_SR;
+  }
+  function echoIsLive() {
+    /* Match bfx_echo_is_idle inverse: keep ~3 delay periods before treating as dead. */
+    var need = ECHO_DELAY * 3;
+    if (need < 4096) need = 4096;
+    if (need > CONFIG_SR) need = CONFIG_SR;
+    return echoQuietSamples < need;
   }
   function processEcho(out, frames) {
-    var delay = 11025; /* ssound/bfx default: 250 ms at 44.1 kHz */
+    /* Exact bfx defaults: dry=1-mix, wet=mix, feedback, integer delay read. */
+    var delay = ECHO_DELAY;
+    var dry = 1.0 - ECHO_MIX;
+    var wet = ECHO_MIX;
+    var fb = ECHO_FB;
+    var cap = CONFIG_SR;
     var peak = 0, i, ri, inL, inR, wetL, wetR, outL, outR, p;
     for (i = 0; i < frames; i++) {
       ri = echoPos - delay;
-      if (ri < 0) ri += 44100;
+      if (ri < 0) ri += cap;
       inL = out[i * 2];
       inR = out[i * 2 + 1];
       wetL = echoBuffer[ri * 2];
       wetR = echoBuffer[ri * 2 + 1];
-      outL = fadd(fmul(0.7, inL), fmul(0.3, wetL));
-      outR = fadd(fmul(0.7, inR), fmul(0.3, wetR));
-      echoBuffer[echoPos * 2] = softClip(fadd(inL, fmul(wetL, 0.4)));
-      echoBuffer[echoPos * 2 + 1] = softClip(fadd(inR, fmul(wetR, 0.4)));
+      outL = fadd(fmul(dry, inL), fmul(wet, wetL));
+      outR = fadd(fmul(dry, inR), fmul(wet, wetR));
+      echoBuffer[echoPos * 2] = softClip(fadd(inL, fmul(wetL, fb)));
+      echoBuffer[echoPos * 2 + 1] = softClip(fadd(inR, fmul(wetR, fb)));
       out[i * 2] = outL;
       out[i * 2 + 1] = outR;
-      p = Math.max(Math.abs(outL), Math.abs(outR));
+      /* Peak includes delayed wet (bfx) so quiet tails keep the line awake. */
+      p = Math.abs(wetL);
+      if (Math.abs(wetR) > p) p = Math.abs(wetR);
+      if (Math.abs(inL) > p) p = Math.abs(inL);
+      if (Math.abs(inR) > p) p = Math.abs(inR);
       if (p > peak) peak = p;
       echoPos++;
-      if (echoPos >= 44100) echoPos = 0;
+      if (echoPos >= cap) echoPos = 0;
     }
     jsLastPeak = peak;
+    if (peak < ECHO_QUIET_EPS) echoQuietSamples += frames;
+    else echoQuietSamples = 0;
   }
 
   function jsPlay(desc) {
@@ -170,6 +208,14 @@
   function jsGenerateBlock(frames) {
     frames = frames | 0;
     if (frames < 1) frames = 1024;
+    /* Idle: no voices and echo line quiet — skip tweet + bfx walk (bfx idle). */
+    if (voices.length === 0 && !echoIsLive()) {
+      audioFrame += frames;
+      echoQuietSamples += frames;
+      if (echoQuietSamples > CONFIG_SR) echoQuietSamples = CONFIG_SR;
+      jsLastPeak = 0;
+      return new Float32Array(frames * 2);
+    }
     var out = new Float32Array(frames * 2);
     var i, vi, v, t, env, sig, g;
     var still = [];
@@ -227,17 +273,22 @@
     var bytes = frames * 2 * 4;
     var ptr = 0;
     try {
-      ptr = wasm._malloc(bytes);
+      /* Reuse one scratch arena — malloc/free per 1024-frame block was GC noise. */
+      if (!wasm._spinPcmScratch || wasm._spinPcmScratchFrames < frames) {
+        if (wasm._spinPcmScratch) {
+          try { wasm._free(wasm._spinPcmScratch); } catch (eFree) {}
+        }
+        wasm._spinPcmScratch = wasm._malloc(bytes);
+        wasm._spinPcmScratchFrames = frames;
+      }
+      ptr = wasm._spinPcmScratch;
       if (!ptr) return jsGenerateBlock(frames);
       wasm._sound_worker_generate_block(ptr, frames);
-      var out = wasm.HEAPF32.slice(ptr >> 2, (ptr >> 2) + frames * 2);
-      wasm._free(ptr);
+      var out = new Float32Array(frames * 2);
+      out.set(wasm.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + frames * 2));
       return out;
     } catch (eGen) {
       console.warn("[SoundWorkerSsound] generate failed, JS fallback", eGen);
-      try {
-        if (ptr) wasm._free(ptr);
-      } catch (e2) {}
       /* Permanent soft-fallback for this session if GPU path is broken. */
       if (backend.indexOf("wasm-gpu") === 0) backend = "wasm";
       return jsGenerateBlock(frames);
@@ -246,11 +297,21 @@
 
   /* Linear cache avoids join/slice allocations on every 1024-frame refill.
    * Only the generated transferable block is allocated in the worker hot path. */
-  var RESAMPLE_CAP = 16384;
+  var RESAMPLE_CAP = 32768;
   var resampleSamples = new Float32Array(RESAMPLE_CAP * 2);
   var resampleHead = 0;
   var resampleFrames = 0;
   var resamplePos = 0.0;
+  var outScratch = null;
+  var outScratchFrames = 0;
+
+  function acquireOutScratch(frames) {
+    if (!outScratch || outScratchFrames < frames) {
+      outScratch = new Float32Array(frames * 2);
+      outScratchFrames = frames;
+    }
+    return outScratch;
+  }
 
   function resetOutput() {
     /* Source frames already generated into this cache intentionally become
@@ -301,10 +362,16 @@
       resetOutput();
     }
     if (!(outputRate > 0)) outputRate = SR;
-    if (outputRate === SR && resampleFrames === 0)
-      return generateSourceBlock(frames);
+    if (outputRate === SR && resampleFrames === 0) {
+      /* Copy into scratch so caller can transfer a pooled buffer without
+       * relying on a fresh alloc from generateSourceBlock. */
+      var src = generateSourceBlock(frames);
+      var dstId = acquireOutScratch(frames);
+      dstId.set(src);
+      return dstId.subarray(0, frames * 2);
+    }
 
-    var out = new Float32Array(frames * 2);
+    var out = acquireOutScratch(frames);
     var step = SR / outputRate;
     var needed = Math.floor(resamplePos + step * Math.max(0, frames - 1)) + 3;
     var i, ch, base, i0, i1, i2, i3, frac, v, drop;
@@ -335,7 +402,7 @@
       resampleFrames -= drop;
       resamplePos -= drop;
     }
-    return out;
+    return out.subarray(0, frames * 2);
   }
 
   var loadError = "";
@@ -348,10 +415,10 @@
       if (typeof importScripts === "function") {
         var loaded = false;
         var names = [
-          "SoundWorker.js?v=desk16",
-          "./SoundWorker.js?v=desk16",
-          "App.js?v=desk16",
-          "./App.js?v=desk16"
+          "SoundWorker.js?v=andr27",
+          "./SoundWorker.js?v=andr27",
+          "App.js?v=andr27",
+          "./App.js?v=andr27"
         ];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
@@ -428,7 +495,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "desk16");
+            u.searchParams.set("v", "andr27");
             return u.href;
           } catch (e) {
             return p;
@@ -518,6 +585,13 @@
   function load(opts) {
     if (opts && opts.preferCpu) preferCpu = true;
     if (loadPromise) return loadPromise;
+    /* preferCpu: JS tweet synth is the production path — do not block
+     * synthReady on SoundWorker.wasm (can take seconds on mobile). */
+    if (preferCpu) {
+      backend = "js";
+      loadPromise = Promise.resolve("js");
+      return loadPromise;
+    }
     loadPromise = tryLoadWasm().then(function (ok) {
       if (!ok) backend = "js";
       return backend;
@@ -577,6 +651,13 @@
         return +wasm._sound_worker_last_peak();
       return jsLastPeak;
     },
+    echoLive: function () {
+      if (backend.indexOf("wasm") === 0 && wasm && wasm._sound_worker_last_peak) {
+        /* WASM bfx keeps ringing below voice peak; treat small peaks as live echo. */
+        return +wasm._sound_worker_last_peak() > 1e-5;
+      }
+      return echoIsLive();
+    },
     setSampleRate: function (sr) {
       if (sr > 0 && (sr | 0) !== outputRate) {
         outputRate = sr | 0;
@@ -589,6 +670,8 @@
       }
     },
     resetOutput: resetOutput,
+    setConfigRate: applyConfigRate,
+    getConfigRate: function () { return CONFIG_SR; },
     getSynthesisRate: function () { return SR; },
     getOutputRate: function () { return outputRate; }
   };

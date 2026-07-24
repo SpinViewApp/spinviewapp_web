@@ -5,10 +5,10 @@
   "use strict";
 
   try {
-    importScripts("sound_worker_ssound.js?v=desk16");
+    importScripts("sound_worker_ssound.js?v=andr33");
   } catch (e1) {
     try {
-      importScripts("./sound_worker_ssound.js?v=desk16");
+      importScripts("./sound_worker_ssound.js?v=andr33");
     } catch (e2) {
       /* Host may inject SoundWorkerSsound before worker runs. */
     }
@@ -35,8 +35,11 @@
   var toneGain = 0.12;
   var phase = 0;
   var queuedEstimate = 0;
+  var queuedWallMs = 0; /* performance.now() when queuedEstimate was last truth from sink */
   var pcmBlocksSent = 0;
   var filling = false;
+  var audioPumpTimer = 0;
+  var silentPumpTimer = 0;
   var preferCpu = false;
   var synthBlocks = 0;
   var synthLastMs = 0;
@@ -46,6 +49,29 @@
   var fillMaxMs = 0;
   var synthReady = false;
   var pendingPlays = [];
+  /* Reusable transferable PCM buffers — fresh alloc every block caused GC pauses
+   * on the worker → FIFO underruns → random crackle even on HTTPS worklet. */
+  var pcmPool = [];
+  var pcmPoolBytes = 0;
+
+  function acquirePcmBuffer(bytes) {
+    var ab;
+    if (pcmPoolBytes !== bytes) {
+      pcmPool.length = 0;
+      pcmPoolBytes = bytes;
+    }
+    ab = pcmPool.pop();
+    if (!ab || ab.byteLength !== bytes) ab = new ArrayBuffer(bytes);
+    return ab;
+  }
+
+  function recycleHint(bytes) {
+    if (pcmPoolBytes !== bytes) {
+      pcmPool.length = 0;
+      pcmPoolBytes = bytes;
+    }
+    while (pcmPool.length < 4) pcmPool.push(new ArrayBuffer(bytes));
+  }
   var stats = {
     n: 0,
     last_ms: 0,
@@ -164,7 +190,7 @@
       stall_mode: stallMode,
       sample0: stats.sample0,
       pcm_blocks: pcmBlocksSent,
-      queued_est: queuedEstimate,
+      queued_est: estimatedQueued(),
       synth_rate:
         typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getSynthesisRate
           ? SoundWorkerSsound.getSynthesisRate() : 44100,
@@ -218,27 +244,54 @@
     return buf;
   }
 
+  function noteQueued(frames) {
+    queuedEstimate = frames > 0 ? frames | 0 : 0;
+    queuedWallMs = performance.now();
+  }
+
+  /* When the sink is starved (Android ScriptProcessor on a busy GL thread),
+   * `need` messages stop arriving and queuedEstimate freezes HIGH → underruns.
+   * Subtract estimated device consumption since the last real report. */
+  function estimatedQueued() {
+    if (!(sampleRate > 0) || !(queuedWallMs > 0)) return queuedEstimate;
+    var elapsed = (performance.now() - queuedWallMs) / 1000;
+    if (elapsed < 0) elapsed = 0;
+    if (elapsed > 0.5) elapsed = 0.5;
+    var consumed = Math.floor(elapsed * sampleRate);
+    var q = queuedEstimate - consumed;
+    return q > 0 ? q : 0;
+  }
+
   function sendPcmBlock() {
     if (!audioPort) return false;
-    /* Do not touch the proto timing GL while Sokol owns another OffscreenCanvas —
-     * switching WebGL contexts mid-tick aborts the worker on play/generate. */
-    var be =
-      typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getBackend
-        ? SoundWorkerSsound.getBackend()
-        : "";
-    if (be.indexOf("wasm-gpu") !== 0) gpuTick();
+    /* Proto timing GL is only for non-CPU experiments. Production preferCpu
+     * has gl===null — skip the backend string check every block. */
+    if (!preferCpu) {
+      var be =
+        typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getBackend
+          ? SoundWorkerSsound.getBackend()
+          : "";
+      if (be.indexOf("wasm-gpu") !== 0) gpuTick();
+    }
     var frames = blockFrames;
+    var bytes = frames * 2 * 4;
     var synthT0 = performance.now();
     var samples = makeToneBlock(frames);
+    var ab = acquirePcmBuffer(bytes);
+    var out = new Float32Array(ab);
+    out.set(samples);
+    recycleHint(bytes);
     synthLastMs = performance.now() - synthT0;
     synthBlocks++;
     synthSumMs += synthLastMs;
     if (synthLastMs > synthMaxMs) synthMaxMs = synthLastMs;
     audioPort.postMessage(
-      { type: "pcm", frames: frames, samples: samples.buffer },
-      [samples.buffer]
+      { type: "pcm", frames: frames, samples: ab },
+      [ab]
     );
-    queuedEstimate += frames;
+    /* Advance local estimate from last known truth + this push. */
+    queuedEstimate = estimatedQueued() + frames;
+    queuedWallMs = performance.now();
     pcmBlocksSent += 1;
     emitStats(false);
     return true;
@@ -258,8 +311,8 @@
     var want = target > 0 ? target : targetFrames;
     var guard = 0;
     var fillT0 = performance.now();
-    if (want < 8192) want = 8192;
-    while (running && audioPort && queuedEstimate < want && guard < 32) {
+    if (want < 2048) want = 2048;
+    while (running && audioPort && estimatedQueued() < want && guard < 64) {
       sendPcmBlock();
       guard++;
     }
@@ -267,45 +320,102 @@
     if (fillLastMs > fillMaxMs) fillMaxMs = fillLastMs;
   }
 
+  function clearAudioPump() {
+    if (audioPumpTimer) {
+      clearTimeout(audioPumpTimer);
+      audioPumpTimer = 0;
+    }
+  }
+
+  function clearSilentPump() {
+    if (silentPumpTimer) {
+      clearTimeout(silentPumpTimer);
+      silentPumpTimer = 0;
+    }
+  }
+
+  /* Advance synth clocks before the device sink exists so bounce instruments
+   * are already mid-envelope when unlock fade-in begins. */
+  function scheduleSilentPump() {
+    clearSilentPump();
+    if (!running || audioPort || !synthReady) return;
+    silentPumpTimer = setTimeout(function () {
+      silentPumpTimer = 0;
+      if (!running || audioPort || !synthReady) return;
+      try {
+        if (typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.generateBlock)
+          SoundWorkerSsound.generateBlock(blockFrames, sampleRate);
+      } catch (eSilent) {}
+      var live =
+        typeof SoundWorkerSsound !== "undefined" &&
+        ((SoundWorkerSsound.liveVoices && SoundWorkerSsound.liveVoices() > 0) ||
+          (SoundWorkerSsound.echoLive && SoundWorkerSsound.echoLive()));
+      if (live) scheduleSilentPump();
+    }, tickDelayMs > 0 ? tickDelayMs : 16);
+  }
+
+  /* Keep topping up. Healthy FIFO still wakes often enough that a hitch cannot
+   * drain past need before the next fill (40ms was too sleepy → random ur). */
+  function scheduleAudioPump() {
+    clearAudioPump();
+    if (!running || !audioPort) return;
+    var q = estimatedQueued();
+    var delay = q >= targetFrames ? 16 : q >= needFrames ? 8 : 4;
+    audioPumpTimer = setTimeout(function () {
+      audioPumpTimer = 0;
+      if (!running || !audioPort || !synthReady) return;
+      if (estimatedQueued() < targetFrames) fillToTarget(targetFrames);
+      scheduleAudioPump();
+    }, delay);
+  }
+
   function onAudioMessage(ev) {
     var msg = ev.data || {};
     if (msg.type === "need") {
-      queuedEstimate = msg.queuedFrames | 0;
+      noteQueued(msg.queuedFrames | 0);
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
-      if (targetFrames < 8192) targetFrames = 8192;
-      if (needFrames < 4096) needFrames = 4096;
+      if (targetFrames < 2048) targetFrames = 2048;
+      if (needFrames < 1024) needFrames = 1024;
       fillToTarget(targetFrames);
+      scheduleAudioPump();
     }
   }
 
   function attachAudioPort(port) {
+    clearSilentPump();
     audioPort = port;
     audioPort.onmessage = onAudioMessage;
     audioPort.start && audioPort.start();
-    queuedEstimate = 0;
-    if (synthReady) fillToTarget(targetFrames);
+    noteQueued(0);
+    if (synthReady) {
+      fillToTarget(targetFrames);
+      forcePushBlocks(8);
+    }
+    scheduleAudioPump();
     postMessage({ type: "audio-attached", blockFrames: blockFrames, targetFrames: targetFrames });
   }
 
   function playSound(msg) {
-    /* Only queued silence may be discarded safely. Flushing every play
-     * skipped the already-buffered tail of live birds and transformed
-     * overlapping bounce notes. */
+    /* Never flush the sink FIFO here: flush + async PCM races the worklet
+     * quantum and is a common source of random crackle on HTTPS worklet-pcm.
+     * resetOutput only discards stale synth cache so the new voice starts soon;
+     * continuous silence already in the FIFO keeps the cushion intact. */
     var hadAudio =
       SoundWorkerSsound.liveVoices() > 0 ||
-      (SoundWorkerSsound.lastPeak && SoundWorkerSsound.lastPeak() > 1e-4);
+      (SoundWorkerSsound.lastPeak && SoundWorkerSsound.lastPeak() > 1e-5) ||
+      (SoundWorkerSsound.echoLive && SoundWorkerSsound.echoLive());
     if (!hadAudio && SoundWorkerSsound.resetOutput)
       SoundWorkerSsound.resetOutput();
     var id = SoundWorkerSsound.play(msg);
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
-    if (audioPort && !hadAudio) {
-      queuedEstimate = 0;
-      audioPort.postMessage({ type: "flush" });
-      forcePushBlocks(4);
-    } else {
-      fillToTarget(targetFrames);
+    if (!audioPort) {
+      scheduleSilentPump();
+      return;
     }
+    if (!hadAudio) forcePushBlocks(4);
+    else fillToTarget(targetFrames);
+    scheduleAudioPump();
   }
 
   function clearTick() {
@@ -338,13 +448,19 @@
         blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 1024;
         targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;
         needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;
-        sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : 44100;
+        if (msg.synthRate > 0 &&
+            typeof SoundWorkerSsound !== "undefined" &&
+            SoundWorkerSsound.setConfigRate)
+          SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
+        sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : (
+          typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getConfigRate
+            ? SoundWorkerSsound.getConfigRate() : 44100);
         toneHz = msg.toneHz > 0 ? +msg.toneHz : 440;
         preferCpu = msg.preferCpu !== false; /* default CPU — avoids GPU contention with scene */
         synthReady = false;
         pendingPlays.length = 0;
-        if (targetFrames < 8192) targetFrames = 8192;
-        if (needFrames < 4096) needFrames = 4096;
+        if (targetFrames < 2048) targetFrames = 2048;
+        if (needFrames < 1024) needFrames = 1024;
         if (!preferCpu) {
           if (!msg.canvas) {
             fail("missing-canvas");
@@ -395,6 +511,10 @@
         if (msg.blockFrames > 0) blockFrames = msg.blockFrames | 0;
         if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
         if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
+        if (msg.synthRate > 0 &&
+            typeof SoundWorkerSsound !== "undefined" &&
+            SoundWorkerSsound.setConfigRate)
+          SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         if (msg.sampleRate > 0) {
           sampleRate = +msg.sampleRate;
           if (typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.setSampleRate)
@@ -434,7 +554,7 @@
           if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
         }
         if (audioPort) {
-          queuedEstimate = 0;
+          noteQueued(0);
           audioPort.postMessage({ type: "flush" });
           if (synthReady) forcePushBlocks(4);
         }
@@ -468,6 +588,7 @@
         running = false;
         audioPort = null;
         clearTick();
+        clearAudioPump();
         postMessage({ type: "stopped", n: stats.n, pcm_blocks: pcmBlocksSent });
         return;
       }
@@ -475,6 +596,7 @@
       fail("worker-exception", err && err.message ? err.message : err);
       running = false;
       clearTick();
+      clearAudioPump();
     }
   };
 })();

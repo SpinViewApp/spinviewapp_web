@@ -12,6 +12,11 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     this.lightSynth = !!opts.lightSynth;
     this.legacyTimeScale =
       opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0;
+    /* SOUND_UNLOCK_FADEIN_SEC — soft onset when device first becomes audible. */
+    this.unlockFadeSec =
+      opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12;
+    this.unlockGain = 0;
+    this.unlockActive = this.unlockFadeSec > 0;
     this.blocks = [];
     this.queuedFrames = 0;
     this.current = null;
@@ -24,7 +29,8 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     this.gapStartR = 0;
     this.lastOutL = 0;
     this.lastOutR = 0;
-    this.crossfadeFrames = 128;
+    this.crossfadeFrames = 768;
+    this.holdFrames = 256;
     this.crossfadeLeft = 0;
     this.crossfadeFromL = 0;
     this.crossfadeFromR = 0;
@@ -37,8 +43,8 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     this.renderFrames = 0;
     this.needSentAtFrame = 0;
     this.bufferBoostFrames = 0;
-    this.needThreshold = 2048;
-    this.targetFrames = 4096;
+    this.needThreshold = 4096;
+    this.targetFrames = 8192;
     this.sourcePort = null;
     this._tick = 0;
     this._needSent = false;
@@ -91,7 +97,10 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
                   this.fillWaitMaxFrames = this.fillWaitLastFrames;
               }
               this._needSent = false;
-              if (this.queuedFrames >= this.needThreshold) this.primed = true;
+              /* First PCM block → audible immediately (unlock fade covers onset).
+               * Waiting for a deep needThreshold caused multi-second silence on
+               * Android ScriptProcessor when the main thread was busy. */
+              this.primed = true;
             }
           } else if (a.type === "flush") {
             /* Drop stale pre-buffered silence so a newly played bird starts at
@@ -327,21 +336,25 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
             this.gapStartL = this.lastOutL;
             this.gapStartR = this.lastOutR;
             /* Grow look-ahead only after a real starvation event. */
-            this.bufferBoostFrames += 1024;
-            if (this.bufferBoostFrames > 8192) this.bufferBoostFrames = 8192;
+            this.bufferBoostFrames += 2048;
+            if (this.bufferBoostFrames > 16384) this.bufferBoostFrames = 16384;
           }
           this.gapFrames++;
           this.underrunFrames++;
           if (this.gapFrames > this.maxGapFrames)
             this.maxGapFrames = this.gapFrames;
-          /* A missing block cannot be reconstructed safely. Fade the last
-           * continuous sample to zero instead of inserting a hard edge. */
-          fade = 1.0 - this.gapFrames / this.crossfadeFrames;
-          if (fade < 0) fade = 0;
-          left[i] = this.gapStartL * fade;
-          right[i] = this.gapStartR * fade;
-          this.lastOutL = left[i];
-          this.lastOutR = right[i];
+          /* Hold last sample briefly then slow fade — avoids clicky fade-to-0. */
+          if (this.gapFrames <= this.holdFrames) {
+            left[i] = this.gapStartL;
+            right[i] = this.gapStartR;
+          } else {
+            fade = 1.0 - (this.gapFrames - this.holdFrames) / this.crossfadeFrames;
+            if (fade < 0) fade = 0;
+            left[i] = this.gapStartL * fade;
+            right[i] = this.gapStartR * fade;
+            this.lastOutL = left[i];
+            this.lastOutR = right[i];
+          }
         } else {
           left[i] = 0.0;
           right[i] = 0.0;
@@ -394,8 +407,29 @@ class SpinAudioProcessor extends AudioWorkletProcessor {
     if (this.mode === "inline") this.processInline(left, right, n);
     else this.processPcm(left, right, n);
 
+    if (this.unlockActive) {
+      var step = 1.0 / (this.unlockFadeSec * sampleRate);
+      var i, g;
+      for (i = 0; i < n; i++) {
+        this.unlockGain += step;
+        if (this.unlockGain >= 1) {
+          this.unlockGain = 1;
+          this.unlockActive = false;
+          break;
+        }
+        g = this.unlockGain;
+        left[i] *= g;
+        right[i] *= g;
+      }
+    }
+
     this.renderFrames += n;
-    if (this.mode === "pcm") this.requestFill(false);
+    if (this.mode === "pcm") {
+      /* Re-ask every quantum while below target — a single sticky _needSent
+       * left the FIFO draining during slow worker fills. */
+      if (this.queuedFrames < this.targetFrames + (this.bufferBoostFrames >> 1))
+        this.requestFill(this.queuedFrames < this.needThreshold * 2);
+    }
     this._tick++;
     if ((this._tick & 15) === 0) {
       this.port.postMessage({
