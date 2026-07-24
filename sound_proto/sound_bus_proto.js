@@ -68,8 +68,8 @@
   function workletUrl(opts) {
     var workletPath = locate("spin_audio_processor.js", opts && opts.workletUrl);
     /* Cache-bust: browsers pin AudioWorklet modules hard across reloads. */
-    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr33";
-    else workletPath += "&v=andr33";
+    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr34";
+    else workletPath += "&v=andr34";
     return workletPath;
   }
 
@@ -172,8 +172,8 @@
         return state;
       }
       var url = locate("sound_worker_proto.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr33";
-      else url += "&v=andr33";
+      if (url.indexOf("?") < 0) url += "?v=andr34";
+      else url += "&v=andr34";
       var worker;
       try {
         worker = new Worker(url);
@@ -591,6 +591,14 @@
 
     function attachWorkerAudioPort(port) {
       if (!state.worker) return;
+      /* Match synth clock to device when possible → true identity, no cubic resample. */
+      var dev = state.sampleRate | 0;
+      var cfg = state.synthRate | 0;
+      if (dev > 0 && cfg > 0 && dev !== cfg) {
+        state.synthRate = dev;
+        cfg = dev;
+        refreshConvertPath();
+      }
       state.worker.postMessage(
         {
           type: "set-audio-port",
@@ -599,7 +607,7 @@
           targetFrames: state.targetFrames,
           needFrames: state.needFrames,
           sampleRate: state.sampleRate || state.synthRate || 44100,
-          synthRate: state.synthRate,
+          synthRate: state.synthRate || state.sampleRate || 44100,
           toneHz: state.toneHz
         },
         [port]
@@ -908,10 +916,53 @@
         return Promise.reject(resumeErr);
       }
 
-      /* Prefer ScriptProcessor on first unlock — sync, no addModule. Upgrade later. */
+      /* Secure (HTTPS/localhost): Worklet first. ScriptProcessor on the GL thread
+       * causes rare crackles with ur=0 (browser glitch before our FIFO check).
+       * Insecure HTTP: ScriptProcessor immediately, optional Worklet upgrade. */
       if (!state.worklet && !state.scriptNode) {
         try {
-          if (state._workletModuleReady && workletSupported(ctx)) {
+          if (workletSupported(ctx) && isSecureEnough()) {
+            if (state._workletModuleReady) {
+              state.audioStage = "worklet";
+              attachWorkletNodeSync(ctx);
+            } else {
+              state.audioStage = "worklet-loading";
+              ensureWorkletModule(ctx)
+                .then(function () {
+                  if (state.worklet) return;
+                  if (!state.audioCtx || state.audioCtx !== ctx) return;
+                  try {
+                    if (state.scriptNode) {
+                      try {
+                        state.scriptNode.disconnect();
+                      } catch (eDisc0) {}
+                      state.scriptNode = null;
+                    }
+                    state.audioStage = "worklet";
+                    attachWorkletNodeSync(ctx);
+                    markAudioReadyIfRunning();
+                    if (state.audioReady && typeof opts.onAudioReady === "function")
+                      opts.onAudioReady(state);
+                    console.log("[sound_bus] Worklet ready (HTTPS path)");
+                  } catch (eWl) {
+                    console.warn("[sound_bus] Worklet attach failed → script-pcm", eWl);
+                    state.error = "worklet-attach:" + (eWl && eWl.message ? eWl.message : eWl);
+                    if (!state.scriptNode) startScriptProcessorFallback(ctx);
+                    markAudioReadyIfRunning();
+                  }
+                })
+                .catch(function (eMod) {
+                  console.warn("[sound_bus] Worklet addModule failed → script-pcm", eMod);
+                  state.error = "worklet-module:" + (eMod && eMod.message ? eMod.message : eMod);
+                  if (!state.worklet && !state.scriptNode) {
+                    try {
+                      startScriptProcessorFallback(ctx);
+                      markAudioReadyIfRunning();
+                    } catch (eFb) {}
+                  }
+                });
+            }
+          } else if (state._workletModuleReady && workletSupported(ctx)) {
             state.audioStage = "worklet";
             attachWorkletNodeSync(ctx);
           } else {
@@ -931,6 +982,7 @@
                     console.log("[sound_bus] upgraded ScriptProcessor → Worklet");
                   } catch (eUp) {
                     console.warn("[sound_bus] worklet upgrade failed", eUp);
+                    state.error = "worklet-upgrade:" + (eUp && eUp.message ? eUp.message : eUp);
                   }
                 })
                 .catch(function () {});

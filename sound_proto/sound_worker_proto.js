@@ -5,10 +5,10 @@
   "use strict";
 
   try {
-    importScripts("sound_worker_ssound.js?v=andr33");
+    importScripts("sound_worker_ssound.js?v=andr34");
   } catch (e1) {
     try {
-      importScripts("./sound_worker_ssound.js?v=andr33");
+      importScripts("./sound_worker_ssound.js?v=andr34");
     } catch (e2) {
       /* Host may inject SoundWorkerSsound before worker runs. */
     }
@@ -511,15 +511,21 @@
         if (msg.blockFrames > 0) blockFrames = msg.blockFrames | 0;
         if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
         if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
-        if (msg.synthRate > 0 &&
-            typeof SoundWorkerSsound !== "undefined" &&
-            SoundWorkerSsound.setConfigRate)
-          SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         if (msg.sampleRate > 0) {
           sampleRate = +msg.sampleRate;
-          if (typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.setSampleRate)
-            SoundWorkerSsound.setSampleRate(sampleRate);
+          /* Prefer native device rate for synth too → skip resample path. */
+          if (typeof SoundWorkerSsound !== "undefined") {
+            if (SoundWorkerSsound.setConfigRate)
+              SoundWorkerSsound.setConfigRate(sampleRate);
+            if (SoundWorkerSsound.setSampleRate)
+              SoundWorkerSsound.setSampleRate(sampleRate);
+          }
         }
+        if (msg.synthRate > 0 &&
+            typeof SoundWorkerSsound !== "undefined" &&
+            SoundWorkerSsound.setConfigRate &&
+            !(msg.sampleRate > 0))
+          SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         if (msg.toneHz > 0) toneHz = +msg.toneHz;
         if (!msg.port) {
           fail("missing-audio-port");
