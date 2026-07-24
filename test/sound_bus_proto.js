@@ -68,8 +68,8 @@
   function workletUrl(opts) {
     var workletPath = locate("spin_audio_processor.js", opts && opts.workletUrl);
     /* Cache-bust: browsers pin AudioWorklet modules hard across reloads. */
-    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr29";
-    else workletPath += "&v=andr29";
+    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr31";
+    else workletPath += "&v=andr31";
     return workletPath;
   }
 
@@ -173,8 +173,8 @@
         return state;
       }
       var url = locate("sound_worker_proto.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr29";
-      else url += "&v=andr29";
+      if (url.indexOf("?") < 0) url += "?v=andr31";
+      else url += "&v=andr31";
       var worker;
       try {
         worker = new Worker(url);
@@ -200,7 +200,7 @@
           return;
         }
         if (msg.type === "audio-attached") {
-          state.audioReady = true;
+          markAudioReadyIfRunning();
           if (typeof opts.onAudioAttached === "function") opts.onAudioAttached(state, msg);
           return;
         }
@@ -292,6 +292,47 @@
     }
 
     state.ok = true;
+
+    function markAudioReadyIfRunning() {
+      var ctx = state.audioCtx;
+      if (ctx && ctx.state === "running" && (state.worklet || state.scriptNode)) {
+        state.audioReady = true;
+        state.audioStage = "ready";
+        state.error = "";
+        state._gesturePrimed = true;
+        return true;
+      }
+      state.audioReady = false;
+      if (ctx && ctx.state === "suspended") state.audioStage = "suspended";
+      else if (ctx) state.audioStage = String(ctx.state || "none");
+      return false;
+    }
+
+    /* Drop a stuck suspended graph so the next gesture can create a fresh
+     * AudioContext (addModule is per-context — cleared too). */
+    function nukeAudioGraph() {
+      try {
+        if (state.worklet) state.worklet.disconnect();
+      } catch (e0) {}
+      try {
+        if (state.scriptNode) {
+          state.scriptNode.onaudioprocess = null;
+          state.scriptNode.disconnect();
+        }
+      } catch (e1) {}
+      state.worklet = null;
+      state.scriptNode = null;
+      state.audioPort = null;
+      state.audioReady = false;
+      state._workletModuleReady = false;
+      state._workletModulePromise = null;
+      state._gesturePrimed = false;
+      try {
+        if (state.audioCtx && state.audioCtx.state !== "closed") state.audioCtx.close();
+      } catch (e2) {}
+      state.audioCtx = null;
+      state.audioPath = "";
+    }
 
     function ensureAudioContext() {
       if (state.audioCtx) return state.audioCtx;
@@ -391,7 +432,7 @@
         node.connect(ctx.destination);
         state.worklet = node;
         state.audioPath = "worklet-inline";
-        state.audioReady = true;
+        markAudioReadyIfRunning();
         return;
       }
       var channel = new MessageChannel();
@@ -408,7 +449,7 @@
       node.connect(ctx.destination);
       state.worklet = node;
       state.audioPath = "worklet-pcm";
-      state.audioReady = true;
+      markAudioReadyIfRunning();
     }
 
     /* Prefetch worklet SOURCE only. Do NOT addModule on a suspended context —
@@ -718,7 +759,7 @@
       sp.connect(ctx.destination);
       state.scriptNode = sp;
       state.audioPath = "script-pcm";
-      state.audioReady = true;
+      markAudioReadyIfRunning();
       requestFill(true);
       /* Plays stay on the worker (same as worklet-pcm / desktop). */
     }
@@ -774,7 +815,7 @@
         node.connect(ctx.destination);
         state.worklet = node;
         state.audioPath = "worklet-inline";
-        state.audioReady = true;
+        markAudioReadyIfRunning();
         return;
       }
 
@@ -793,44 +834,33 @@
       node.connect(ctx.destination);
       state.worklet = node;
       state.audioPath = "worklet-pcm";
-      state.audioReady = true;
+      markAudioReadyIfRunning();
     }
 
     state.startAudio = function () {
       var resumePromise;
+      var ctx;
       if (!audioSupported()) {
         state.error = "audio-unsupported";
         state.audioStage = "error";
         return Promise.reject(new Error(state.error));
       }
-      if (!state._unlockStarted) {
-        state._unlockStarted = true;
-      }
+      if (!state._unlockStarted) state._unlockStarted = true;
       state._unlockAttempts++;
-      if (state.worklet || state.scriptNode) {
-        state.audioStage = "resume";
-        try {
-          resumePromise =
-            state.audioCtx && state.audioCtx.state !== "running"
-              ? state.audioCtx.resume()
-              : Promise.resolve();
-        } catch (resumeErr0) {
-          state.error = "resume:" + String(resumeErr0 && resumeErr0.message ? resumeErr0.message : resumeErr0);
-          return Promise.reject(resumeErr0);
-        }
-        return (async function () {
-          await resumePromise;
-          state.audioReady = true;
-          state.audioStage = "ready";
-          state.error = "";
-          flushPendingPlays();
-          return state;
-        })();
+
+      /* Must stay synchronous in the gesture turn. */
+      primeHtmlMedia();
+
+      /* Stuck suspended context: destroy and recreate inside THIS gesture.
+       * Retap used to no-op because audioReady was true while still suspended. */
+      if (state.audioCtx && state.audioCtx.state !== "running") {
+        console.warn(
+          "[sound_bus] recreating AudioContext (was " + state.audioCtx.state + ")"
+        );
+        nukeAudioGraph();
       }
 
-      var ctx = ensureAudioContext();
-      /* Must stay synchronous in the gesture turn (pointerdown/touchstart). */
-      primeHtmlMedia();
+      ctx = ensureAudioContext();
       primeAudioGesture(ctx);
       state.sampleRate = ctx.sampleRate | 0;
       refreshConvertPath();
@@ -841,21 +871,21 @@
           state.synthRate +
           " Hz | " +
           state.convertPath +
-          (state._workletModuleReady ? " | worklet=ready" : " | worklet=compiling")
+          " | attempt=" +
+          state._unlockAttempts
       );
       state.audioStage = "resume";
       try {
-        /* Invoke resume synchronously inside pointer/touch/key activation. Do not
-         * put any await before this call: Chrome Android expires activation. */
         resumePromise = ctx.state !== "running" ? ctx.resume() : Promise.resolve();
       } catch (resumeErr) {
-        state.error = "resume:" + String(resumeErr && resumeErr.message ? resumeErr.message : resumeErr);
+        state.error =
+          "resume:" + String(resumeErr && resumeErr.message ? resumeErr.message : resumeErr);
         state.audioStage = "error";
+        state.audioReady = false;
         return Promise.reject(resumeErr);
       }
 
-      /* Attach a sink SYNCHRONOUSLY in this gesture turn. Waiting for
-       * audioWorklet.addModule made first audio land on touchend/release. */
+      /* Prefer ScriptProcessor on first unlock — sync, no addModule. Upgrade later. */
       if (!state.worklet && !state.scriptNode) {
         try {
           if (state._workletModuleReady && workletSupported(ctx)) {
@@ -864,52 +894,60 @@
           } else {
             state.audioStage = "fallback";
             startScriptProcessorFallback(ctx);
-            /* Upgrade to Worklet in the background once compiled (no gesture needed). */
             if (workletSupported(ctx)) {
               ensureWorkletModule(ctx)
                 .then(function () {
                   if (state.worklet || !state.scriptNode) return;
+                  if (!state.audioCtx || state.audioCtx.state !== "running") return;
                   try {
                     try {
                       state.scriptNode.disconnect();
                     } catch (eDisc) {}
                     state.scriptNode = null;
-                    attachWorkletNodeSync(ctx);
+                    attachWorkletNodeSync(state.audioCtx);
                     console.log("[sound_bus] upgraded ScriptProcessor → Worklet");
                   } catch (eUp) {
-                    console.warn("[sound_bus] worklet upgrade failed, keeping ScriptProcessor", eUp);
+                    console.warn("[sound_bus] worklet upgrade failed", eUp);
                   }
                 })
                 .catch(function () {});
             }
           }
-          state.audioReady = true;
-          state.audioStage = "ready";
-          state.error = "";
-          flushPendingPlays();
-          if (typeof opts.onAudioReady === "function") opts.onAudioReady(state);
+          markAudioReadyIfRunning();
+          if (state.audioReady && typeof opts.onAudioReady === "function")
+            opts.onAudioReady(state);
         } catch (eSink) {
           console.warn("[sound_bus] sync sink attach failed", eSink);
           state.audioStage = "error";
           state.error = String(eSink && eSink.message ? eSink.message : eSink);
+          state.audioReady = false;
         }
+      } else {
+        markAudioReadyIfRunning();
       }
 
-      return Promise.resolve(resumePromise).then(function () {
-        primeAudioGesture(ctx);
-        if (ctx.state === "running") state._gesturePrimed = true;
-        if (!state.audioReady && (state.worklet || state.scriptNode)) {
-          state.audioReady = true;
-          state.audioStage = "ready";
-          state.error = "";
-          flushPendingPlays();
+      flushPendingPlays();
+
+      return Promise.resolve(resumePromise).then(
+        function () {
+          primeAudioGesture(ctx);
+          markAudioReadyIfRunning();
+          if (state.audioReady) flushPendingPlays();
+          else
+            console.warn(
+              "[sound_bus] ctx still " +
+                (ctx && ctx.state) +
+                " after resume — next tap will recreate"
+            );
+          return state;
+        },
+        function (err) {
+          state.audioStage = "resume-denied";
+          state.audioReady = false;
+          state.error = "resume:" + String(err && err.message ? err.message : err);
+          throw err;
         }
-        return state;
-      }, function (err) {
-        state.audioStage = "resume-denied";
-        state.error = "resume:" + String(err && err.message ? err.message : err);
-        throw err;
-      });
+      );
     };
 
     state.primeGesture = function () {
