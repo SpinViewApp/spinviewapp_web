@@ -1,4 +1,4 @@
-/* Proto bus - worker PCM @44.1k → resample → AudioWorklet (desktop + Android).
+/* Proto bus - worker PCM @44.1k â†’ resample â†’ AudioWorklet (desktop + Android).
  *
  * Android note: AudioWorklet needs HTTPS/localhost. On plain HTTP the sink falls
  * back to ScriptProcessor but still consumes the SAME worker PCM (script-pcm),
@@ -54,6 +54,8 @@
       typeof AudioWorkletNode !== "undefined"
     );
   }
+  /* Embedded AudioWorklet processor (andr36) — no separate spin_audio_processor.js fetch. */
+  var SPIN_AUDIO_PROCESSOR_SRC = "/* AudioWorklet: realtime tweet/tone synth (priority path).\n *\n * Envelope matches ssound/sbase.ginc (sustain + exp(-envelop*(t-duration))).\n * legacyTimeScale remains configurable for A/B tests; production uses 1.0 so\n * one device frame advances exactly one sample of tweet.sound time.\n */\nclass SpinAudioProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    var opts = (options && options.processorOptions) || {};\n    this.mode = opts.mode === \"pcm\" ? \"pcm\" : \"inline\";\n    this.lightSynth = !!opts.lightSynth;\n    this.legacyTimeScale =\n      opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0;\n    /* SOUND_UNLOCK_FADEIN_SEC \u2014 soft onset when device first becomes audible. */\n    this.unlockFadeSec =\n      opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12;\n    this.unlockGain = 0;\n    this.unlockActive = this.unlockFadeSec > 0;\n    this.blocks = [];\n    this.queuedFrames = 0;\n    this.current = null;\n    this.offset = 0;\n    this.underruns = 0; /* gap events, not individual samples */\n    this.underrunFrames = 0;\n    this.maxGapFrames = 0;\n    this.gapFrames = 0;\n    this.gapStartL = 0;\n    this.gapStartR = 0;\n    this.lastOutL = 0;\n    this.lastOutR = 0;\n    this.crossfadeFrames = 768;\n    this.holdFrames = 256;\n    this.crossfadeLeft = 0;\n    this.crossfadeFromL = 0;\n    this.crossfadeFromR = 0;\n    this.recoveryLeft = 0;\n    this.recoveryFromL = 0;\n    this.recoveryFromR = 0;\n    this.minQueuedFrames = 0x7fffffff;\n    this.fillWaitLastFrames = 0;\n    this.fillWaitMaxFrames = 0;\n    this.renderFrames = 0;\n    this.needSentAtFrame = 0;\n    this.bufferBoostFrames = 0;\n    this.needThreshold = 4096;\n    this.targetFrames = 8192;\n    this.sourcePort = null;\n    this._tick = 0;\n    this._needSent = false;\n    this.primed = false;\n    this.master = 1.0;\n    this.voices = [];\n    this.nextId = 1;\n    this.frame = 0;\n    this.maxVoices = opts.maxVoices > 0 ? opts.maxVoices | 0 : 24;\n    if (this.maxVoices < 4) this.maxVoices = 4;\n    if (this.maxVoices > 48) this.maxVoices = 48;\n\n    this.port.onmessage = (event) => {\n      var msg = event.data || {};\n      if (msg.type === \"set-mode\") {\n        this.mode = msg.mode === \"pcm\" ? \"pcm\" : \"inline\";\n        return;\n      }\n      if (msg.type === \"play\") {\n        this.playVoice(msg);\n        return;\n      }\n      if (msg.type === \"stop_all\") {\n        this.voices.length = 0;\n        return;\n      }\n      if (msg.type === \"set_master\") {\n        this.master = msg.volume >= 0 ? +msg.volume : 1;\n        return;\n      }\n      if (msg.type === \"set-source-port\") {\n        this.sourcePort = msg.port;\n        this.needThreshold = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;\n        this.targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;\n        this.sourcePort.onmessage = (audioEvent) => {\n          var a = audioEvent.data || {};\n          if (a.type === \"pcm\" && a.samples) {\n            var samples =\n              a.samples instanceof Float32Array\n                ? a.samples\n                : new Float32Array(a.samples);\n            var frames = a.frames | 0;\n            if (frames > 0) {\n              this.blocks.push({ samples: samples, frames: frames });\n              this.queuedFrames += frames;\n              if (this._needSent) {\n                this.fillWaitLastFrames =\n                  this.renderFrames - this.needSentAtFrame;\n                if (this.fillWaitLastFrames > this.fillWaitMaxFrames)\n                  this.fillWaitMaxFrames = this.fillWaitLastFrames;\n              }\n              this._needSent = false;\n              /* First PCM block \u2192 audible immediately (unlock fade covers onset).\n               * Waiting for a deep needThreshold caused multi-second silence on\n               * Android ScriptProcessor when the main thread was busy. */\n              this.primed = true;\n            }\n          } else if (a.type === \"flush\") {\n            /* Drop stale pre-buffered silence so a newly played bird starts at\n             * the next render quantum instead of behind ~170 ms of FIFO. */\n            this.blocks.length = 0;\n            this.current = null;\n            this.offset = 0;\n            this.queuedFrames = 0;\n            this._needSent = false;\n            /* An idle queue ends at zero, so the exact tweet attack can pass\n             * unchanged. Keep the de-zipper only for a real discontinuity. */\n            this.crossfadeLeft =\n              Math.max(Math.abs(this.lastOutL), Math.abs(this.lastOutR)) > 1e-4\n                ? this.crossfadeFrames\n                : 0;\n            this.crossfadeFromL = this.lastOutL;\n            this.crossfadeFromR = this.lastOutR;\n          }\n        };\n        this.sourcePort.start();\n        if (this.mode === \"pcm\") this.requestFill(true);\n        return;\n      }\n      if (msg.type === \"set-thresholds\") {\n        if (msg.needFrames > 0) this.needThreshold = msg.needFrames | 0;\n        if (msg.targetFrames > 0) this.targetFrames = msg.targetFrames | 0;\n      }\n    };\n  }\n\n  envelopDecaySeconds(envelop) {\n    if (!(envelop > 1e-6)) return 0.5;\n    var d = Math.log(0.001) / -envelop;\n    if (!isFinite(d) || d < 0) return 0.5;\n    if (d > 4) return 4;\n    return d;\n  }\n\n  playVoice(desc) {\n    if (this.voices.length >= this.maxVoices) this.voices.shift();\n    var fadein = desc.fadein >= 0 ? +desc.fadein : 0.0000006;\n    if (fadein < 0) fadein = 0;\n    var envelop = desc.envelop >= 0 ? +desc.envelop : 8.0;\n    var duration = desc.duration > 0 ? +desc.duration : 0.08;\n    var decay = this.envelopDecaySeconds(envelop);\n    this.voices.push({\n      id: this.nextId++,\n      start: this.frame + (desc.startOffsetFrames | 0),\n      duration: duration,\n      totalLife: duration + decay,\n      volume: desc.volume >= 0 ? +desc.volume : 0.6,\n      fadein: fadein,\n      envelop: envelop,\n      freqX: desc.freqX != null ? +desc.freqX : 2.0,\n      freqY: desc.freqY != null ? +desc.freqY : 4.0,\n      freqZ: desc.freqZ != null ? +desc.freqZ : 0.0,\n      type: desc.soundType === \"tone\" ? \"tone\" : \"tweet\",\n      phase: 0\n    });\n    this.primed = true;\n  }\n\n  hash1(p) {\n    var p2x = (p * 5.3983) % 1;\n    if (p2x < 0) p2x += 1;\n    var p2y = (p * 5.4427) % 1;\n    if (p2y < 0) p2y += 1;\n    var d = p2y * (p2x + 21.5351) + p2x * (p2y + 14.3137);\n    p2x += d;\n    p2y += d;\n    var r = (p2x * p2y * 95.4337) % 1;\n    return r < 0 ? r + 1 : r;\n  }\n  noise(n) {\n    var f = n - Math.floor(n);\n    n = Math.floor(n);\n    f = f * f * (3.0 - 2.0 * f);\n    return this.hash1(n) * (1 - f) + this.hash1(n + 1) * f - 0.5;\n  }\n  noiseSlope(n, loc) {\n    var f = n - Math.floor(n);\n    n = Math.floor(n);\n    if (loc <= 0) f = f >= 1 ? 1 : 0;\n    else {\n      f = f / loc;\n      if (f < 0) f = 0;\n      if (f > 1) f = 1;\n      f = f * f * (3 - 2 * f);\n    }\n    return this.hash1(n) * (1 - f) + this.hash1(n + 1) * f;\n  }\n  smoothstep(edge0, edge1, x) {\n    var t = (x - edge0) / (edge1 - edge0);\n    if (t < 0) t = 0;\n    if (t > 1) t = 1;\n    return t * t * (3 - 2 * t);\n  }\n  tweetVolume(t) {\n    var n1 = this.noiseSlope(t * 11.0, 0.3);\n    var n2 = this.smoothstep(0.0, 1.0, Math.abs(Math.sin(t * 14.0)));\n    var n3 = this.smoothstep(0.4, 0.9, this.noiseSlope(t * 0.5 + 4.0, 0.3));\n    var n = n1 * n2 * 0.2 * n3;\n    n = n * n;\n    if (n < 0) n = 0;\n    if (n > 1) n = 1;\n    return n;\n  }\n  /* Full Shadertoy FM - desktop. Aliases hard above ~Nyquist/4. */\n  tweetHeavy(t) {\n    t = t - 1.5;\n    var f =\n      Math.sin(6.2831 * 2.0 * t) * this.noise(t * 8.1 - 100.0) * 100.0 + 5000.0;\n    f += Math.cos(50.0 * 6.2831 * t);\n    return Math.sin(6.2831 * f * t);\n  }\n  sampleTweetHeavy(t, freqX, freqY) {\n    var volume = this.tweetVolume((t + freqY - 0.5) * 0.6) * 20.0;\n    /* Match tweet.sound exactly; final device mixing performs the clamp. */\n    return this.tweetHeavy((t + freqX) * 0.4) * volume;\n  }\n  /* Mobile: phase-accum chirp in bird range (1.8\u20134.5 kHz), same gate feel. */\n  sampleTweetLight(t, freqX, freqY, voice, dt) {\n    var gate = this.tweetVolume((t + freqY * 0.08) * 0.6);\n    if (gate < 1e-4) {\n      voice.phase = 0;\n      return 0;\n    }\n    /* Phrase offset without jumping into chaotic FM region. */\n    var phrase = (freqX * 0.015) % 0.4;\n    var tt = t + phrase;\n    var sweep =\n      1900 +\n      2200 * (0.5 + 0.5 * Math.sin(tt * 16.0 + freqX * 0.25)) +\n      350 * Math.sin(tt * 37.0);\n    if (sweep > 4500) sweep = 4500;\n    if (sweep < 1200) sweep = 1200;\n    voice.phase += sweep * dt;\n    if (voice.phase > 1e6) voice.phase -= 1e6;\n    var sig = Math.sin(6.28318530718 * voice.phase);\n    sig *= 0.6 + 0.4 * Math.sin(tt * 42.0);\n    return sig * gate * 0.55;\n  }\n  panSimple(pos) {\n    if (pos > 1.25) pos = 1.25;\n    if (pos < -1.25) pos = -1.25;\n    var e0 = 1 - pos,\n      e1 = 1 + pos;\n    var len = Math.sqrt(e0 * e0 + e1 * e1);\n    if (len < 1e-8) return [0.707, 0.707];\n    return [e0 / len, e1 / len];\n  }\n  envelope(t, v) {\n    if (t < 0 || t > v.totalLife) return 0;\n    var e = t < v.duration ? 1.0 : Math.exp(-v.envelop * (t - v.duration));\n    if (v.fadein > 1e-12 && t < v.fadein) e *= t / v.fadein;\n    return e < 0 ? 0 : e > 1 ? 1 : e;\n  }\n\n  requestFill(force) {\n    var effectiveNeed;\n    if (this.mode !== \"pcm\" || !this.sourcePort) return;\n    effectiveNeed = this.needThreshold + (this.bufferBoostFrames >> 1);\n    if (this.queuedFrames >= effectiveNeed) {\n      this._needSent = false;\n      return;\n    }\n    if (!force && this._needSent) return;\n    this._needSent = true;\n    this.needSentAtFrame = this.renderFrames;\n    this.sourcePort.postMessage({\n      type: \"need\",\n      queuedFrames: this.queuedFrames | 0,\n      needFrames: effectiveNeed | 0,\n      targetFrames: (this.targetFrames + this.bufferBoostFrames) | 0\n    });\n  }\n\n  processInline(left, right, n) {\n    var sr = sampleRate;\n    var dt = 1.0 / sr;\n    var i, vi, v, t, env, sig, pan, g, absFrame, endFrame;\n    var still = [];\n    for (i = 0; i < n; i++) {\n      left[i] = 0;\n      right[i] = 0;\n    }\n    for (vi = 0; vi < this.voices.length; vi++) {\n      v = this.voices[vi];\n      endFrame = v.start + Math.ceil(v.totalLife * sr);\n      if (this.frame >= endFrame) continue;\n      still.push(v);\n      /* Legacy tweet.sound writes the same signal to both channels and ignores\n       * freq.z. Keep panning only for tone/mobile voices. */\n      pan = v.type === \"tweet\" && !this.lightSynth ? [1.0, 1.0] : this.panSimple(v.freqZ);\n      for (i = 0; i < n; i++) {\n        absFrame = this.frame + i;\n        if (absFrame < v.start) continue;\n        t = (absFrame - v.start) * dt;\n        if (v.type === \"tweet\") t *= this.legacyTimeScale;\n        env = this.envelope(t, v);\n        if (env <= 1e-5) continue;\n        if (v.type === \"tone\")\n          sig = Math.sin(6.28318530718 * (v.freqX > 20 ? v.freqX : 440) * t) * 0.15;\n        else if (this.lightSynth)\n          sig = this.sampleTweetLight(t, v.freqX, v.freqY, v, dt);\n        else sig = this.sampleTweetHeavy(t, v.freqX, v.freqY);\n        g = sig * v.volume * env * this.master;\n        left[i] += g * pan[0];\n        right[i] += g * pan[1];\n      }\n    }\n    this.voices = still;\n    for (i = 0; i < n; i++) {\n      if (left[i] > 1) left[i] = 1;\n      else if (left[i] < -1) left[i] = -1;\n      if (right[i] > 1) right[i] = 1;\n      else if (right[i] < -1) right[i] = -1;\n    }\n    this.frame += n;\n  }\n\n  processPcm(left, right, n) {\n    var i, si, rawL, rawR, phase, fade;\n    for (i = 0; i < n; i++) {\n      if (!this.current || this.offset >= this.current.frames) {\n        this.current = this.blocks.length ? this.blocks.shift() : null;\n        this.offset = 0;\n      }\n      if (!this.current) {\n        if (this.primed) {\n          if (this.gapFrames === 0) {\n            this.underruns++;\n            this.gapStartL = this.lastOutL;\n            this.gapStartR = this.lastOutR;\n            /* Grow look-ahead only after a real starvation event. */\n            this.bufferBoostFrames += 2048;\n            if (this.bufferBoostFrames > 16384) this.bufferBoostFrames = 16384;\n          }\n          this.gapFrames++;\n          this.underrunFrames++;\n          if (this.gapFrames > this.maxGapFrames)\n            this.maxGapFrames = this.gapFrames;\n          /* Hold last sample briefly then slow fade \u2014 avoids clicky fade-to-0. */\n          if (this.gapFrames <= this.holdFrames) {\n            left[i] = this.gapStartL;\n            right[i] = this.gapStartR;\n          } else {\n            fade = 1.0 - (this.gapFrames - this.holdFrames) / this.crossfadeFrames;\n            if (fade < 0) fade = 0;\n            left[i] = this.gapStartL * fade;\n            right[i] = this.gapStartR * fade;\n            this.lastOutL = left[i];\n            this.lastOutR = right[i];\n          }\n        } else {\n          left[i] = 0.0;\n          right[i] = 0.0;\n          this.lastOutL = 0.0;\n          this.lastOutR = 0.0;\n        }\n        continue;\n      }\n      si = this.offset * 2;\n      rawL = this.current.samples[si];\n      rawR = this.current.samples[si + 1];\n      if (this.gapFrames > 0) {\n        if (this.crossfadeLeft <= 0) {\n          this.recoveryLeft = this.crossfadeFrames;\n          this.recoveryFromL = this.lastOutL;\n          this.recoveryFromR = this.lastOutR;\n        } else this.recoveryLeft = 0;\n        this.gapFrames = 0;\n      }\n      if (this.crossfadeLeft > 0) {\n        phase = 1.0 - this.crossfadeLeft / this.crossfadeFrames;\n        left[i] = this.crossfadeFromL * (1.0 - phase) + rawL * phase;\n        right[i] = this.crossfadeFromR * (1.0 - phase) + rawR * phase;\n        this.crossfadeLeft--;\n      } else if (this.recoveryLeft > 0) {\n        phase = 1.0 - this.recoveryLeft / this.crossfadeFrames;\n        left[i] = this.recoveryFromL * (1.0 - phase) + rawL * phase;\n        right[i] = this.recoveryFromR * (1.0 - phase) + rawR * phase;\n        this.recoveryLeft--;\n      } else {\n        left[i] = rawL;\n        right[i] = rawR;\n      }\n      this.lastOutL = left[i];\n      this.lastOutR = right[i];\n      this.offset++;\n      this.queuedFrames--;\n      if (this.queuedFrames < 0) this.queuedFrames = 0;\n      if (this.primed && this.queuedFrames < this.minQueuedFrames)\n        this.minQueuedFrames = this.queuedFrames;\n    }\n  }\n\n  process(inputs, outputs) {\n    var output = outputs[0];\n    var left = output[0];\n    var right = output[1] || output[0];\n    var n = left.length;\n\n    if (this.mode === \"inline\") this.processInline(left, right, n);\n    else this.processPcm(left, right, n);\n\n    if (this.unlockActive) {\n      var step = 1.0 / (this.unlockFadeSec * sampleRate);\n      var i, g;\n      for (i = 0; i < n; i++) {\n        this.unlockGain += step;\n        if (this.unlockGain >= 1) {\n          this.unlockGain = 1;\n          this.unlockActive = false;\n          break;\n        }\n        g = this.unlockGain;\n        left[i] *= g;\n        right[i] *= g;\n      }\n    }\n\n    this.renderFrames += n;\n    if (this.mode === \"pcm\") {\n      /* Re-ask every quantum while below target \u2014 a single sticky _needSent\n       * left the FIFO draining during slow worker fills. */\n      if (this.queuedFrames < this.targetFrames + (this.bufferBoostFrames >> 1))\n        this.requestFill(this.queuedFrames < this.needThreshold * 2);\n    }\n    this._tick++;\n    if ((this._tick & 15) === 0) {\n      this.port.postMessage({\n        type: \"stats\",\n        underruns: this.underruns,\n        underrunFrames: this.underrunFrames,\n        maxGapMs: (this.maxGapFrames * 1000) / sampleRate,\n        minQueuedFrames:\n          this.minQueuedFrames === 0x7fffffff ? this.queuedFrames : this.minQueuedFrames,\n        fillWaitMs: (this.fillWaitLastFrames * 1000) / sampleRate,\n        fillWaitMaxMs: (this.fillWaitMaxFrames * 1000) / sampleRate,\n        bufferBoostFrames: this.bufferBoostFrames,\n        queuedFrames:\n          this.mode === \"inline\" ? this.voices.length : this.queuedFrames | 0,\n        blocks: this.blocks.length | 0,\n        mode: this.mode,\n        voices: this.voices.length | 0\n      });\n    }\n    return true;\n  }\n}\n\nregisterProcessor(\"spin-audio-processor\", SpinAudioProcessor);\n";
 
   function locate(name, explicit) {
     if (explicit) return explicit;
@@ -66,18 +68,21 @@
   }
 
   function workletUrl(opts) {
-    var workletPath = locate("spin_audio_processor.js", opts && opts.workletUrl);
-    /* Cache-bust: browsers pin AudioWorklet modules hard across reloads. */
-    if (workletPath.indexOf("?") < 0) workletPath += "?v=andr34";
-    else workletPath += "&v=andr34";
-    return workletPath;
+    /* Optional override still allowed for A/B; default is embedded blob. */
+    if (opts && opts.workletUrl) return opts.workletUrl;
+    return null;
+  }
+
+  function workletBlobUrl() {
+    var blob = new Blob([SPIN_AUDIO_PROCESSOR_SRC], { type: "application/javascript" });
+    return URL.createObjectURL(blob);
   }
 
   function createBus(opts) {
     opts = opts || {};
     var mobile = isMobileUa();
-    /* Desktop-correct path (conversation start): worker synth @44.1k → Worklet PCM.
-     * Old App.wasm may still pass inlineSynth:true — ignore it. Use forceInlineSynth
+    /* Desktop-correct path (conversation start): worker synth @44.1k â†’ Worklet PCM.
+     * Old App.wasm may still pass inlineSynth:true â€” ignore it. Use forceInlineSynth
      * only for deliberate A/B tests. */
     var inlineSynth = !!opts.forceInlineSynth;
     var state = {
@@ -135,11 +140,11 @@
       needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 4096 : 4096),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
-      /* 0 until unlock — then AudioContext.sampleRate (may differ → resample). */
+      /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
       sampleRate: opts.sampleRate > 0 ? opts.sampleRate | 0 : 0,
       convertPath: "pending",
       legacyTimeScale: opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0,
-      /* SOUND_UNLOCK_FADEIN_SEC — ramp when device first becomes audible. */
+      /* SOUND_UNLOCK_FADEIN_SEC â€” ramp when device first becomes audible. */
       unlockFadeSec: opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12,
       toneHz: opts.toneHz > 0 ? +opts.toneHz : 440,
       preferCpu: !!opts.preferCpu,
@@ -171,9 +176,9 @@
         state.error = "worker-unsupported";
         return state;
       }
-      var url = locate("sound_worker_proto.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr34";
-      else url += "&v=andr34";
+      var url = locate("sound_worker.js", opts.workerUrl);
+      if (url.indexOf("?") < 0) url += "?v=andr36";
+      else url += "&v=andr36";
       var worker;
       try {
         worker = new Worker(url);
@@ -308,7 +313,7 @@
     }
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
-     * AudioContext (addModule is per-context — cleared too). */
+     * AudioContext (addModule is per-context â€” cleared too). */
     function nukeAudioGraph() {
       try {
         if (state.worklet) state.worklet.disconnect();
@@ -336,7 +341,7 @@
     function ensureAudioContext() {
       if (state.audioCtx) return state.audioCtx;
       var AC = global.AudioContext || global.webkitAudioContext;
-      /* Prefer engine clock (44.1k) so worker can skip resample → fewer clicks. */
+      /* Prefer engine clock (44.1k) so worker can skip resample â†’ fewer clicks. */
       var acOpts = {
         latencyHint: "interactive",
         sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 44100
@@ -367,7 +372,7 @@
       try {
         var a = state._silentAudio;
         if (!a) {
-          /* Minimal WAV — HTMLMediaElement.play() carries stronger gesture
+          /* Minimal WAV â€” HTMLMediaElement.play() carries stronger gesture
            * activation on Android WebView than AudioContext.resume() alone. */
           a = new Audio(
             "data:audio/wav;base64,UklGRmgAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
@@ -459,22 +464,26 @@
       markAudioReadyIfRunning();
     }
 
-    /* Prefetch worklet SOURCE only. Do NOT addModule on a suspended context —
+    /* Prefetch worklet SOURCE only. Do NOT addModule on a suspended context â€”
      * Chrome Android can hang addModule for seconds until/after resume, and
      * unlock was awaiting that same hung promise (~4s silence after tap). */
     function prefetchWorkletSource() {
       if (state.workletUrl || state._prefetchPromise) return state._prefetchPromise;
-      state._prefetchPromise = (async function () {
-        var path = workletUrl(opts);
-        var src = await fetch(path, { credentials: "same-origin", cache: "force-cache" }).then(
-          function (r) {
-            if (!r.ok) throw new Error("worklet-fetch");
-            return r.text();
-          }
-        );
-        var blob = new Blob([src], { type: "application/javascript" });
-        state.workletUrl = URL.createObjectURL(blob);
-      })();
+      state._prefetchPromise = Promise.resolve().then(function () {
+        var override = workletUrl(opts);
+        if (override) {
+          return fetch(override, { credentials: "same-origin", cache: "force-cache" }).then(
+            function (r) {
+              if (!r.ok) throw new Error("worklet-fetch");
+              return r.text();
+            }
+          ).then(function (src) {
+            var blob = new Blob([src], { type: "application/javascript" });
+            state.workletUrl = URL.createObjectURL(blob);
+          });
+        }
+        state.workletUrl = workletBlobUrl();
+      });
       return state._prefetchPromise;
     }
 
@@ -485,7 +494,7 @@
         try {
           await prefetchWorkletSource();
         } catch (ePref) {}
-        var url = state.workletUrl || workletUrl(opts);
+        var url = state.workletUrl || workletBlobUrl();
         await ctx.audioWorklet.addModule(url);
         state._workletModuleReady = true;
       })();
@@ -507,7 +516,7 @@
 
     /* Device ownership is C-side (ssound_set_no_saudio). After App.wasm rebuild,
      * Sokol never creates _saudio_node. One-shot detach only covers older builds
-     * that still called saudio_setup before the flag existed — not a watchdog. */
+     * that still called saudio_setup before the flag existed â€” not a watchdog. */
     try {
       if (typeof Module !== "undefined" && Module._saudio_node) {
         try { Module._saudio_node.disconnect(); } catch (e0) {}
@@ -570,7 +579,7 @@
     }
 
     state.play = function (desc) {
-      /* Start instruments even before AudioContext unlock — worker advances
+      /* Start instruments even before AudioContext unlock â€” worker advances
        * voice clocks silently; unlock fade-in avoids a hard onset. */
       if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
         return sendPlayReady(desc || {});
@@ -591,7 +600,7 @@
 
     function attachWorkerAudioPort(port) {
       if (!state.worker) return;
-      /* Match synth clock to device when possible → true identity, no cubic resample. */
+      /* Match synth clock to device when possible â†’ true identity, no cubic resample. */
       var dev = state.sampleRate | 0;
       var cfg = state.synthRate | 0;
       if (dev > 0 && cfg > 0 && dev !== cfg) {
@@ -616,12 +625,12 @@
 
     function startScriptProcessorFallback(ctx) {
       /* HTTP Android often has no AudioWorklet. Keep the SAME desktop sound path:
-       * worker synth @44.1k → resample → PCM FIFO → this ScriptProcessor sink.
-       * (Callback still runs on the render thread — prefer HTTPS for Worklet.) */
+       * worker synth @44.1k â†’ resample â†’ PCM FIFO â†’ this ScriptProcessor sink.
+       * (Callback still runs on the render thread â€” prefer HTTPS for Worklet.) */
       console.warn(
         "[sound_bus] ScriptProcessor PCM sink (config " +
           state.synthRate +
-          " Hz → device). HTTPS → AudioWorklet recommended so FPS cannot starve audio."
+          " Hz â†’ device). HTTPS â†’ AudioWorklet recommended so FPS cannot starve audio."
       );
 
       if (!state.worker) {
@@ -640,7 +649,7 @@
       var lastOutR = 0;
       var gapFrames = 0;
       var bufferBoostFrames = 0;
-      /* Soft underrun: hold last sample briefly, then slow fade — fast fade-to-0
+      /* Soft underrun: hold last sample briefly, then slow fade â€” fast fade-to-0
        * is what the ear hears as random crackle when FPS hitch drains the FIFO. */
       var holdFrames = 256;
       var fadeFrames = 768;
@@ -945,14 +954,14 @@
                       opts.onAudioReady(state);
                     console.log("[sound_bus] Worklet ready (HTTPS path)");
                   } catch (eWl) {
-                    console.warn("[sound_bus] Worklet attach failed → script-pcm", eWl);
+                    console.warn("[sound_bus] Worklet attach failed â†’ script-pcm", eWl);
                     state.error = "worklet-attach:" + (eWl && eWl.message ? eWl.message : eWl);
                     if (!state.scriptNode) startScriptProcessorFallback(ctx);
                     markAudioReadyIfRunning();
                   }
                 })
                 .catch(function (eMod) {
-                  console.warn("[sound_bus] Worklet addModule failed → script-pcm", eMod);
+                  console.warn("[sound_bus] Worklet addModule failed â†’ script-pcm", eMod);
                   state.error = "worklet-module:" + (eMod && eMod.message ? eMod.message : eMod);
                   if (!state.worklet && !state.scriptNode) {
                     try {
@@ -979,7 +988,7 @@
                     } catch (eDisc) {}
                     state.scriptNode = null;
                     attachWorkletNodeSync(state.audioCtx);
-                    console.log("[sound_bus] upgraded ScriptProcessor → Worklet");
+                    console.log("[sound_bus] upgraded ScriptProcessor â†’ Worklet");
                   } catch (eUp) {
                     console.warn("[sound_bus] worklet upgrade failed", eUp);
                     state.error = "worklet-upgrade:" + (eUp && eUp.message ? eUp.message : eUp);
@@ -1012,7 +1021,7 @@
             console.warn(
               "[sound_bus] ctx still " +
                 (ctx && ctx.state) +
-                " after resume — next tap will recreate"
+                " after resume â€” next tap will recreate"
             );
           return state;
         },
@@ -1090,8 +1099,10 @@
     isSecureEnough: isSecureEnough,
     create: createBus
   };
-  global.SoundBusProto = api;
+  global.SoundBus = api;
+  global.SoundBusProto = api; /* alias */
   if (typeof global.Module !== "undefined") {
+    global.Module.SoundBus = api;
     global.Module.SoundBusProto = api;
   }
 })(typeof self !== "undefined" ? self : this);
