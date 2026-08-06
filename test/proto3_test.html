@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sound worker proto 3</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; background: #111; color: #ddd; font: 14px/1.4 Consolas, monospace; }
+  main { max-width: 760px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 18px; color: #fff; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+  button { font: inherit; padding: 8px 12px; }
+  #log {
+    white-space: pre-wrap; background: #000; border: 1px solid #333;
+    padding: 12px; min-height: 240px; border-radius: 6px;
+  }
+  .ok { color: #8f8; }
+  .err { color: #f88; }
+  .warn { color: #fc8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Proto 3 — Worker tweet (ssound port)</h1>
+  <p>
+    Start audio, then <b>Play tweet</b>. Synth runs in the worker (tweet.sound math), not on the main thread.
+    Android HTTP → ScriptProcessor fallback OK.
+  </p>
+  <div class="row">
+    <button id="start">Start audio</button>
+    <button id="tweet">Play tweet</button>
+    <button id="tweet2">Play tweet ×3</button>
+    <button id="tone">Play tone</button>
+    <button id="stopall">Stop all</button>
+    <button id="d20">Delay 20</button>
+    <button id="stop">Stop bus</button>
+  </div>
+  <div id="log"></div>
+</main>
+<script src="sound_bus_proto.js"></script>
+<script>
+(function () {
+  var logEl = document.getElementById("log");
+  var bus = null;
+  var mainFrames = 0, lastMain = performance.now(), mainFps = 0;
+
+  function line(cls, text) {
+    var d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.textContent = text;
+    logEl.appendChild(d);
+    while (logEl.childNodes.length > 50) logEl.removeChild(logEl.firstChild);
+  }
+  function hud() {
+    if (!bus) return;
+    var s = bus.stats;
+    var el = logEl.querySelector(".hud");
+    if (!el) { el = document.createElement("div"); el.className = "hud ok"; logEl.insertBefore(el, logEl.firstChild); }
+    el.textContent = "main~" + mainFps.toFixed(0) + "fps | rb " + s.last_ms.toFixed(2) +
+      " | pcm=" + s.pcm_blocks + " q=" + s.queuedFrames + " ur=" + s.underruns +
+      " voices=" + (s.voices|0) + " path=" + (bus.audioPath||"-") +
+      " ssound=" + (s.ssound|0) + " wasm=" + (s.wasm|0) +
+      (s.backend ? " be=" + s.backend : "") +
+      (s.peak != null ? " pk=" + (+s.peak).toFixed(3) : "");
+  }
+
+  function boot() {
+    if (bus) return bus;
+    bus = SoundBusProto.create({
+      preferCpu: true,
+      inlineSynth: false, /* same as desktop WebGL app: worker @44.1k → Worklet PCM */
+      blockFrames: 1024,
+      targetFrames: 8192,
+      needFrames: 4096,
+      targetFrames: 8192,
+      needFrames: 4096,
+      onReady: function (st, msg) {
+        line("ok", "worker ready ssound=" + (msg.ssound|0) +
+          " backend=" + (msg.backend || (msg.wasm ? "wasm" : "js")) +
+          (msg.gpu ? " GPU" : "") +
+          " " + (msg.renderer||""));
+        if (!(msg.ssound|0)) line("err", "SoundWorkerSsound failed to load (importScripts)");
+        if (!(msg.wasm|0)) {
+          line("warn", "WASM synth not loaded — using JS fallback");
+          if (msg.load_error) line("err", "wasm: " + msg.load_error);
+        } else if (!(msg.gpu|0)) {
+          line("warn", "WASM CPU synth (GPU ssound not active)");
+          if (msg.load_error) line("warn", msg.load_error);
+        }
+      },
+      onAudioReady: function () {
+        line("ok", "audio path=" + bus.audioPath + " secure=" + SoundBusProto.isSecureEnough());
+        if (bus.audioPath && bus.audioPath.indexOf("inline") < 0)
+          line("warn", "expected worklet-inline for lag-proof audio");
+      },
+      onStats: hud,
+      onAudioStats: hud,
+      onError: function (st, msg) {
+        line("err", (msg.reason || st.error || "error") +
+          (msg.detail ? " — " + msg.detail : ""));
+      }
+    });
+    if (bus.error) line("err", bus.error);
+    return bus;
+  }
+
+  document.getElementById("start").onclick = async function () {
+    try {
+      boot();
+      await bus.startAudio();
+    } catch (e) { line("err", String(e.message || e)); }
+  };
+  document.getElementById("tweet").onclick = function () {
+    if (!bus) return;
+    bus.play({
+      soundType: "tweet",
+      volume: 1.0,
+      duration: 0.55,
+      fadein: 0.0,
+      envelop: 0.08,
+      freqX: 2.0,
+      freqY: 4.0,
+      freqZ: 0.0,
+      freqW: 1.0
+    });
+    line("", "play tweet");
+  };
+  document.getElementById("tweet2").onclick = function () {
+    if (!bus) return;
+    for (var i = 0; i < 3; i++) {
+      bus.play({
+        soundType: "tweet",
+        volume: 0.35 + 0.15 * i,
+        duration: 0.35 + 0.1 * i,
+        envelop: 6 + i,
+        freqX: 2.0 * (i + 1),
+        freqY: 4.0 * (i + 1),
+        freqZ: (i - 1) * 0.5,
+        startOffsetFrames: i * 512
+      });
+    }
+    line("", "play tweet x3");
+  };
+  document.getElementById("tone").onclick = function () {
+    if (!bus) return;
+    bus.play({ soundType: "tone", volume: 0.35, duration: 0.5, freqX: 523.25 });
+  };
+  document.getElementById("stopall").onclick = function () { if (bus) bus.stopAll(); };
+  document.getElementById("d20").onclick = function () { if (bus) bus.setStall(20, "async"); };
+  document.getElementById("stop").onclick = function () {
+    if (bus) bus.stop();
+    bus = null;
+    line("", "stopped");
+  };
+
+  boot();
+  function loop(now) {
+    mainFrames++;
+    if (now - lastMain >= 1000) {
+      mainFps = (mainFrames * 1000) / (now - lastMain);
+      mainFrames = 0; lastMain = now; hud();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

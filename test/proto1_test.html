@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sound worker proto 1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; background: #111; color: #ddd; font: 14px/1.4 Consolas, monospace; }
+  main { max-width: 720px; margin: 24px auto; padding: 0 16px; }
+  h1 { font-size: 18px; color: #fff; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  button, input { font: inherit; padding: 6px 10px; }
+  #log {
+    white-space: pre-wrap; background: #000; border: 1px solid #333;
+    padding: 12px; min-height: 220px; border-radius: 6px;
+  }
+  .ok { color: #8f8; }
+  .err { color: #f88; }
+  .warn { color: #fc8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Proto 1 — OffscreenCanvas WebGL2 worker readPixels</h1>
+  <p>
+    <b>Delay</b> = async pause between ticks (fair mobile test — main FPS should stay up).<br>
+    <b>Busy</b> = CPU spin after readPixels (old test — often tanks Android FPS via core/GPU contention).
+  </p>
+  <div class="row">
+    <button id="start">Start</button>
+    <button id="d0">Delay 0</button>
+    <button id="d10">Delay 10</button>
+    <button id="d20">Delay 20</button>
+    <button id="b20">Busy 20 ⚠</button>
+    <button id="stop">Stop</button>
+  </div>
+  <div id="log"></div>
+</main>
+<script src="sound_bus_proto.js"></script>
+<script>
+(function () {
+  var logEl = document.getElementById("log");
+  var bus = null;
+  var mainFrames = 0;
+  var lastMain = performance.now();
+  var mainFps = 0;
+
+  function line(cls, text) {
+    var d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.textContent = text;
+    logEl.appendChild(d);
+    while (logEl.childNodes.length > 40) logEl.removeChild(logEl.firstChild);
+  }
+
+  function paintHud() {
+    if (!bus) return;
+    var s = bus.stats;
+    var hud = logEl.querySelector(".hud");
+    if (!hud) {
+      hud = document.createElement("div");
+      hud.className = "hud ok";
+      logEl.insertBefore(hud, logEl.firstChild);
+    }
+    hud.textContent = "main~" + mainFps.toFixed(0) + "fps | worker rb last=" +
+      s.last_ms.toFixed(2) + " avg=" + s.avg_ms.toFixed(2) +
+      " max=" + s.max_ms.toFixed(2) + " ms | n=" + s.n +
+      " " + (s.stall_mode || "async") + "=" + s.stall_ms +
+      " sample0=" + s.sample0;
+  }
+
+  function start() {
+    if (bus) bus.stop();
+    logEl.innerHTML = "";
+    if (!SoundBusProto.supported()) {
+      line("err", "Unsupported: need Worker + OffscreenCanvas");
+      return;
+    }
+    bus = SoundBusProto.create({
+      width: 1024,
+      height: 1,
+      tickMs: 16,
+      onReady: function (st, msg) {
+        line("ok", "ready renderer=" + (msg.renderer || "?"));
+      },
+      onStats: function () { paintHud(); },
+      onError: function (st, msg) {
+        line("err", "error " + (msg.reason || st.error));
+      }
+    });
+    if (bus.error) line("err", bus.error);
+  }
+
+  document.getElementById("start").onclick = start;
+  document.getElementById("stop").onclick = function () {
+    if (bus) bus.stop();
+    bus = null;
+    line("", "stopped");
+  };
+  document.getElementById("d0").onclick = function () { if (bus) bus.setStall(0, "async"); };
+  document.getElementById("d10").onclick = function () { if (bus) bus.setStall(10, "async"); };
+  document.getElementById("d20").onclick = function () { if (bus) bus.setStall(20, "async"); };
+  document.getElementById("b20").onclick = function () {
+    if (!bus) return;
+    bus.setStall(20, "busy");
+    line("warn", "Busy 20: expect main FPS drop on Android (CPU spin) — not the isolation test.");
+  };
+
+  function mainLoop(now) {
+    mainFrames++;
+    if (now - lastMain >= 1000) {
+      mainFps = (mainFrames * 1000) / (now - lastMain);
+      mainFrames = 0;
+      lastMain = now;
+      paintHud();
+    }
+    requestAnimationFrame(mainLoop);
+  }
+  requestAnimationFrame(mainLoop);
+  start();
+})();
+</script>
+</body>
+</html>
