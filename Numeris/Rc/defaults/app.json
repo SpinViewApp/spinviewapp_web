@@ -1,0 +1,408 @@
+{
+"config_defaults_rev": 3,
+"mainpan": {
+  "1": {
+    "1": {
+      "active_tab": 0,
+      "ratio": 0,
+      "type": "empty"
+    },
+    "2": {
+      "1": {
+        "active_tab": 0,
+        "ratio": 0,
+        "type": "empty"
+      },
+      "2": {
+        "1": {
+          "active_tab": 0,
+          "ratio": 0,
+          "type": "empty"
+        },
+        "2": {
+          "active_tab": 0,
+          "ratio": 0,
+          "type": "empty"
+        },
+        "ratio": 0.560897,
+        "type": "V"
+      },
+      "ratio": 0.195726,
+      "type": "V"
+    },
+    "ratio": 0.382763,
+    "type": "V"
+  },
+  "2": {
+    "1": {
+      "active_tab": 1,
+      "ratio": 0,
+      "s0": {
+        "app": {
+          "cmd": "view",
+          "func": "numeris_render_fmap",
+          "pane_uid": 4
+        }
+      },
+      "s1": {
+        "app": {
+          "cmd": "options",
+          "func": "numeris_options_fmap",
+          "pane_uid": 3,
+          "state": {
+            "ui_state": {
+              "sections": {
+                "section:Challenge share": {
+                  "open": false
+                }
+              },
+              "tabs": {
+                "ui:numeris_options_tabs": {
+                  "active": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      "s2": {
+        "app": {
+          "cmd": "Waveform",
+          "func": "soundui_fmap",
+          "pane_uid": 5
+        }
+      },
+      "s3": {
+        "app": {
+          "cmd": "history",
+          "func": "panhistory_fmap",
+          "pane_uid": 3
+        }
+      },
+      "s4": {
+        "app": {
+          "cmd": "Prefs",
+          "func": "soundui_fmap",
+          "pane_uid": 6
+        }
+      },
+      "type": "T"
+    },
+    "2": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "render",
+        "func": "numeris_sokol_render_fmap",
+        "pane_uid": 5
+      },
+      "ratio": 0,
+      "type": ""
+    },
+    "ratio": 0.186975,
+    "type": "V"
+  },
+  "ratio": 0.362086,
+  "type": "H"
+},
+"numeris": {
+  "android_drag_lift_ease": 18,
+  "android_drag_lift_px": 72,
+  "auto_check_solver": true,
+  "bg_color": {
+    "a": 0.85,
+    "b": 0.08,
+    "g": 0.07,
+    "r": 0.05
+  },
+  "campaign_depth": 587,
+  "campaign_mode": true,
+  "campaign_seed": 12648430,
+  "cellfx_bank_border_color": {
+    "a": 0.72,
+    "b": 0.44,
+    "g": 0.4,
+    "r": 0.32
+  },
+  "cellfx_bank_border_glow_strength": 0.954,
+  "cellfx_bank_border_glow_width": 8.184,
+  "cellfx_bank_border_living": 0.12,
+  "cellfx_bank_border_width": 3.954,
+  "cellfx_bank_dim": 0.439,
+  "cellfx_bank_tile_pad": 2.427,
+  "cellfx_bank_view_tilt_ratio": 0.105,
+  "cellfx_board_elevation_shadow_enabled": false,
+  "cellfx_board_light_glow_color": {
+    "a": 1,
+    "b": 1,
+    "g": 0.91,
+    "r": 0.82
+  },
+  "cellfx_board_light_glow_enabled": false,
+  "cellfx_board_light_glow_strength": 0.24,
+  "cellfx_board_light_glow_width": 1.65,
+  "cellfx_board_shadow_offset_x": 2.5,
+  "cellfx_board_shadow_offset_y": 4,
+  "cellfx_board_shadow_softness": 1.15,
+  "cellfx_board_shadow_strength": 0.85,
+  "cellfx_border": {
+    "a": 1,
+    "b": 1,
+    "g": 0.113725,
+    "r": 0.00784314
+  },
+  "cellfx_border_width": 0.5,
+  "cellfx_corner": 0.75,
+  "cellfx_enabled": true,
+  "cellfx_fill": {
+    "a": 0.92,
+    "b": 0.1,
+    "g": 0.08,
+    "r": 0.06
+  },
+  "cellfx_glow_boost": 1.15,
+  "cellfx_glow_pad": 2.427,
+  "cellfx_iris": 0.819,
+  "cellfx_place_quake_deg": 5.986,
+  "cellfx_place_quake_depth": 5,
+  "cellfx_place_quake_duration": 1.072,
+  "cellfx_place_quake_falloff": 0.52,
+  "cellfx_place_quake_penalty": 2.15,
+  "cellfx_place_quake_random": 0.766,
+  "cellfx_place_quake_success": 1.65,
+  "cellfx_place_quake_warning": 1.9,
+  "cellfx_place_quake_wave_speed": 18,
+  "cellfx_pulse": 0.85,
+  "cellfx_react": 1.017,
+  "cellfx_scan": 0.95,
+  "cellfx_shadow": 0.756,
+  "cellfx_socket_alpha": 0.84,
+  "cellfx_socket_brightness": 0.39,
+  "cellfx_socket_depth": 0.641,
+  "cellfx_socket_glow": 0.271,
+  "cellfx_socket_inset": 0,
+  "cellfx_socket_outer_strength": 0.85,
+  "cellfx_socket_outer_width": 22,
+  "cellfx_socket_shadow": 1.282,
+  "cellfx_speed": 0.603,
+  "cellfx_strength": 0.518,
+  "cellfx_success_wave_duration": 0.62,
+  "cellfx_success_wave_glow": 0.82,
+  "cellfx_success_wave_scale": 0.14,
+  "cellfx_success_wave_speed": 8.5,
+  "cellfx_success_wave_width": 0.85,
+  "cellfx_tile_tilt_bank_ratio": 0.577,
+  "cellfx_tile_tilt_dephase": 1.826,
+  "cellfx_tile_tilt_ratio": 1.752,
+  "desktop_mouse_tilt_ratio": 0.34,
+  "difficulty_filter": 0,
+  "echo_delay_ms": 80,
+  "echo_feedback": 0.4,
+  "echo_mix": 0.3,
+  "hud_sdf_aa": 1.133,
+  "hud_sdf_border1": 0.9,
+  "hud_sdf_border1_color": {
+    "a": 1,
+    "b": 0.11,
+    "g": 0.08,
+    "r": 0.02
+  },
+  "hud_sdf_border2": 0,
+  "hud_sdf_border2_color": {
+    "a": 1,
+    "b": 0.62,
+    "g": 0.42,
+    "r": 0.12
+  },
+  "hud_sdf_effect_padding": 20,
+  "hud_sdf_fill_color": {
+    "a": 0.96,
+    "b": 1,
+    "g": 0.93,
+    "r": 0.72
+  },
+  "hud_sdf_glow_color": {
+    "a": 1,
+    "b": 1,
+    "g": 0.72,
+    "r": 0.18
+  },
+  "hud_sdf_glow_radius": 9.409,
+  "hud_sdf_glow_strength": 0.229,
+  "hud_sdf_hollow": false,
+  "hud_sdf_thickness": 2.434,
+  "hud_text_scale": 1.48,
+  "language": "en",
+  "letter_fade_enabled": true,
+  "letter_fade_in": 0,
+  "letter_fade_out": 0.03,
+  "letter_op_pad": 0.35,
+  "letter_overlap": 0,
+  "letter_vanish_mode": 1,
+  "level_index": 590,
+  "level_seed": 193661559,
+  "message_appear_sec": 2.182,
+  "message_fade_enabled": true,
+  "message_fade_in": 0.177,
+  "message_fade_out": 0.12,
+  "message_hold_sec": 3.942,
+  "message_letter_overlap": 0.72,
+  "message_marquee_enabled": true,
+  "message_marquee_speed": 54,
+  "message_vanish_sec": 1.6,
+  "messages_on_complete": true,
+  "messages_on_start": true,
+  "mind_level": 1,
+  "phone_orientation_lock": true,
+  "phone_tilt_intensity": 1.15,
+  "phone_tilt_response_speed": 14,
+  "phone_tilt_return_speed": 9,
+  "practice_mode": false,
+  "practice_seed": 2095744845,
+  "reward_duration": 1.55,
+  "reward_enabled": true,
+  "reward_frequency": 0.34,
+  "reward_glow_strength": 0.72,
+  "reward_scale": 1.18,
+  "reward_tilt_deg": 7,
+  "show_eq_debug": false,
+  "sht_animate": true,
+  "sht_custom_time": 0,
+  "sht_dim": 0.305,
+  "sht_enabled": true,
+  "sht_flash_color": {
+    "a": 1,
+    "b": 1,
+    "g": 0.95,
+    "r": 0.92
+  },
+  "sht_flash_decay": 4.5,
+  "sht_flash_intensity": 0.55,
+  "sht_fractal_random_level": true,
+  "sht_fractal_transition": 1.35,
+  "sht_fractal_v0": {
+    "a": -0.756767,
+    "b": 206.889,
+    "g": 0.56743,
+    "r": -0.583681
+  },
+  "sht_fractal_v1": {
+    "a": 0.344721,
+    "b": 0.142664,
+    "g": 0.491431,
+    "r": -0.0423777
+  },
+  "sht_fractal_v2": {
+    "a": 0.19062,
+    "b": 0.0621405,
+    "g": 229.62,
+    "r": 62.4639
+  },
+  "sht_fractal_v3": {
+    "a": 20.0726,
+    "b": 0.00462012,
+    "g": 0.0397791,
+    "r": 7.81369
+  },
+  "sht_fractal_v4": {
+    "a": 0.182693,
+    "b": 0.742727,
+    "g": 0.644738,
+    "r": 36.3665
+  },
+  "sht_fractal_v5": {
+    "a": 0.321007,
+    "b": 0.10272,
+    "g": 0.141867,
+    "r": 0.202278
+  },
+  "sht_fractal_v6": {
+    "a": 1.17686,
+    "b": 0.667959,
+    "g": 0.657699,
+    "r": 0.74169
+  },
+  "sht_fractal_v7": {
+    "a": 0.791133,
+    "b": 1.04596,
+    "g": 1.30183,
+    "r": 1.28008
+  },
+  "sht_fractal_v8": {
+    "a": 1,
+    "b": 1,
+    "g": 1,
+    "r": 2
+  },
+  "sht_fractal_v9": {
+    "a": 0.634767,
+    "b": 0.376695,
+    "g": 0.764267,
+    "r": 0.730967
+  },
+  "sht_fractal_variation": 0.82,
+  "sht_hit_lag": 0.12,
+  "sht_local_speed": 0.35,
+  "sht_neutral_flash": 0.035,
+  "sht_neutral_flash_color": {
+    "a": 1,
+    "b": 1,
+    "g": 0.88,
+    "r": 0.78
+  },
+  "sht_neutral_hit_lag": 0.012,
+  "sht_opacity": 1,
+  "sht_paused": false,
+  "sht_penalty_bank_tilt": 0.3,
+  "sht_penalty_flash": 0.42,
+  "sht_penalty_flash_color": {
+    "a": 1,
+    "b": 0.08,
+    "g": 0.12,
+    "r": 1
+  },
+  "sht_penalty_flash_per_line": 0.12,
+  "sht_penalty_hit_lag": 0.09,
+  "sht_penalty_lag_per_line": 0.045,
+  "sht_penalty_motion": 0.32,
+  "sht_penalty_motion_per_line": 0.07,
+  "sht_penalty_shake": 10,
+  "sht_penalty_tilt": 6,
+  "sht_place_twist_amount": 0.24,
+  "sht_place_twist_penalty": 1.8,
+  "sht_place_twist_return": 7.5,
+  "sht_place_twist_success": 1.45,
+  "sht_place_twist_warning": 1.62,
+  "sht_shader_index": 0,
+  "sht_shader_name": "mandelbrot",
+  "sht_shader_pan_response": 0.14,
+  "sht_shader_tilt_response": 0.24,
+  "sht_shader_zoom_response": 0.28,
+  "sht_success_flash_per_line": 0.14,
+  "sht_success_lag_per_line": 0.055,
+  "sht_time_scale": 0,
+  "sht_warning_flash": 0.32,
+  "sht_warning_flash_color": {
+    "a": 1,
+    "b": 0.1,
+    "g": 0.68,
+    "r": 1
+  },
+  "sht_warning_flash_per_line": 0.08,
+  "sht_warning_hit_lag": 0.075,
+  "sht_warning_lag_per_line": 0.035,
+  "tile_sdf_materialize": true,
+  "tile_sdf_materialize_glow": 0.85,
+  "tile_sdf_materialize_strength": 0.92,
+  "user_name": "",
+  "visual_ease_speed": 8.5
+},
+"panlayout_current_layout": "(default)",
+"panlayout_last_session": "",
+"window": {
+  "h": 1032,
+  "w": 1920,
+  "x": 0,
+  "y": 0
+}
+
+}

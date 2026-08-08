@@ -9,7 +9,8 @@
   var ASSETS = [
     "pane/options.pane",
     "layout/layout.json",
-    "Rc/font/legacy_clean.sdffont.json"
+    "Rc/font/legacy_clean.sdffont.json",
+    "Rc/defaults/app.json"
   ];
 
   function ensureDir(path) {

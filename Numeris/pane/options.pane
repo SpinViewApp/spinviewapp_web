@@ -1,71 +1,25 @@
 {
-
   "title": "SpinMind: Numeris",
-
   "elements": [
-
     { "type": "text", "text": "SpinMind: Numeris" },
-
-    { "type": "separator" },
-
-    { "type": "numeris_status" },
-
-    { "type": "separator" },
-
-    { "type": "slider_int", "label": "Level index", "path": "level_index", "min": 0, "max": 9999, "default": 0 },
-
-    { "type": "text_disabled", "text": "0-2 tutorials, then campaign: difficulty rises linearly (≈D1 at start → D999 at level 9999)." },
-
-    { "type": "slider_int", "label": "Override difficulty", "path": "difficulty_filter", "min": 0, "max": 999, "default": 0 },
-
-    { "type": "text_disabled", "text": "Keep at 0 for linear campaign scaling. Any override freezes D (changing Level clears Override)." },
-
-    { "type": "checkbox", "label": "Auto solver check", "path": "auto_check_solver", "default": false },
-
-    { "type": "checkbox", "label": "Equation debug", "path": "show_eq_debug", "default": false },
-
-    { "type": "separator" },
-
-    { "type": "numeris_level_nav" },
-
-    { "type": "numeris_board_anim" },
-
-    { "type": "numeris_cell_fx" },
-
-    { "type": "numeris_regen", "label": "New random puzzle" },
-
-    { "type": "numeris_reveal" },
-
-    { "type": "numeris_eq_debug" },
-
-    { "type": "separator" },
-
     {
-
-      "type": "section",
-
-      "label": "Challenge share",
-
-      "default_open": true,
-
-      "elements": [
-
-        { "type": "text_disabled", "text": "Share the challenge code — same code = same puzzle on every device." },
-
-        { "type": "numeris_challenge" }
-
+      "type": "button_tabs",
+      "ui_id": "numeris_options_tabs",
+      "items": [
+        { "label": "Game", "pane": "game" },
+        { "label": "Brain", "pane": "brain" },
+        { "label": "Letters", "pane": "letters" },
+        { "label": "Frame", "pane": "cell_frame" },
+        { "label": "Depth", "pane": "board_depth" },
+        { "label": "Motion", "pane": "phone_motion" },
+        { "label": "Socket", "pane": "socket" },
+        { "label": "Living", "pane": "living" },
+        { "label": "Colors", "pane": "state_colors" },
+        { "label": "Hitstop", "pane": "hitstop" },
+        { "label": "Background", "pane": "background" },
+        { "label": "Shader", "pane": "shader" },
+        { "label": "Share", "pane": "challenge" }
       ]
-
-    },
-
-    { "type": "separator" },
-
-    { "type": "color", "label": "Background", "path": "bg_color", "default_r": 0.05, "default_g": 0.07, "default_b": 0.08, "default_a": 0.85 },
-
-    { "type": "numeris_reset_defaults", "label": "Reset defaults" }
-
+    }
   ]
-
 }
-
-

@@ -134,10 +134,10 @@
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 1024,
-      /* Look-ahead FIFO. Deeper cushion = fewer hitch-induced underruns when
-       * Auto scale / GL stalls jitter frame timing. First audible may lag ~0.2s. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 12288 : 12288),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 4096 : 4096),
+      /* Look-ahead FIFO. Mobile keeps a deeper cushion (GL/ScriptProcessor hitches).
+       * Desktop stays short so SFX are not buried behind ~170–250 ms of silence. */
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 6144 : 2048),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 2048 : 1024),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
@@ -145,7 +145,7 @@
       convertPath: "pending",
       legacyTimeScale: opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0,
       /* SOUND_UNLOCK_FADEIN_SEC â€” ramp when device first becomes audible. */
-      unlockFadeSec: opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12,
+      unlockFadeSec: opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.04,
       toneHz: opts.toneHz > 0 ? +opts.toneHz : 440,
       preferCpu: !!opts.preferCpu,
       inlineSynth: inlineSynth,
@@ -712,8 +712,8 @@
 
       attachWorkerAudioPort(channel.port1);
 
-      /* Larger quantum = fewer main-thread callbacks (script-pcm shares GL thread). */
-      var bufSize = state.mobile ? 4096 : 4096;
+      /* Mobile: large quantum (fewer GL-thread callbacks). Desktop: smaller for latency. */
+      var bufSize = state.mobile ? 4096 : 1024;
       if (!ctx.createScriptProcessor) throw new Error("no-script-processor");
       var sp = ctx.createScriptProcessor(bufSize, 0, 2);
       sp.onaudioprocess = function (e) {

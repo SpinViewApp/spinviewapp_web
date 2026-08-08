@@ -24,7 +24,7 @@
   var echoBuffer = new Float32Array(CONFIG_SR * 2);
   var echoPos = 0;
   var echoQuietSamples = CONFIG_SR; /* bfx-style idle: skip flush while delay still rings */
-  var ECHO_DELAY = (CONFIG_SR * 0.25) | 0; /* 250 ms â€” same as bfx_echo_init */
+  var ECHO_DELAY = (CONFIG_SR * 0.08) | 0; /* Numeris default: 80 ms */
   var ECHO_MIX = 0.3;
   var ECHO_FB = 0.4;
   var ECHO_QUIET_EPS = 1.0e-4;
@@ -34,7 +34,7 @@
     if (sr === CONFIG_SR) return;
     CONFIG_SR = sr;
     SR = CONFIG_SR;
-    ECHO_DELAY = (CONFIG_SR * 0.25) | 0;
+    ECHO_DELAY = (CONFIG_SR * 0.08) | 0;
     echoBuffer = new Float32Array(CONFIG_SR * 2);
     echoPos = 0;
     echoQuietSamples = CONFIG_SR;
@@ -130,6 +130,82 @@
   function sampleTweet(t, freqX, freqY) {
     var volume = fmul(TweetVolume(fmul(fsub(fadd(t, freqY), 0.5), 0.6)), 20.0);
     return fmul(Tweet(fmul(fadd(t, freqX), 0.4)), volume);
+  }
+  var PI2 = 6.28318530718;
+  /* Approximate GPU .sound timbres for Numeris SFX (web has no GPU audio pump). */
+  function sampleSound1(t, freqX, freqY, freqZ, freqW) {
+    var hz = fmul(110.0, freqX > 0.25 ? freqX : 0.25);
+    var harm = fadd(1.0, fmul(freqW < 0 ? 0 : freqW > 4 ? 4 : freqW, 0.25));
+    var gain = fadd(6.0, fmul(Math.abs(freqY), 2.0));
+    var env = fmul(fexp(fmul(-8.0, t)), smoothstep32(0.0, 0.002, t));
+    var s0 = fmul(fsin(fmul(fmul(PI2, hz), t)), env);
+    var s1 = fmul(fsin(fmul(fmul(PI2, fmul(hz, fmul(harm, 2.0))), t)), fmul(env, 0.35));
+    return fmul(fadd(s0, s1), gain);
+  }
+  function sampleJoyHop(hz, t, decay, bright) {
+    if (t < 0) return 0;
+    var env = fmul(fexp(fmul(-decay, t)), smoothstep32(0.0, 0.0035, t));
+    var body = fsin(fmul(fmul(PI2, hz), t));
+    var ping = fmul(fsin(fmul(fmul(PI2, fmul(hz, fadd(2.0, fmul(bright, 0.35)))), t)), 0.32);
+    return fmul(fadd(body, ping), fmul(env, 2.2));
+  }
+  function sampleJoy(t, freqX, freqY, freqZ, freqW) {
+    var pitch = freqX > 0.35 ? freqX : 0.35;
+    var sparkle = freqY < 0 ? 0 : freqY > 4 ? 4 : freqY;
+    var bounce = freqW < 0 ? 0 : freqW > 4 ? 4 : freqW;
+    var hz = fmul(246.0, pitch);
+    var mono = 0.0;
+    mono = fadd(mono, sampleJoyHop(hz, t, 10.0, sparkle));
+    mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.125), fsub(t, 0.042), 11.0, sparkle), 0.88));
+    mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.25), fsub(t, 0.084), 11.5, sparkle), 0.78));
+    mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.5), fsub(t, 0.13), 10.5, sparkle), 0.92));
+    if (bounce > 0.6) {
+      mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.5), fsub(t, 0.195), 12.0, sparkle), fmul(0.55, bounce)));
+      mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 2.0), fsub(t, 0.25), 9.5, sparkle), fmul(0.7, bounce > 2 ? 2 : bounce)));
+    }
+    return softClip(fmul(mono, fadd(3.8, fmul(sparkle, 0.35))));
+  }
+  function sampleMalice(t, freqX, freqY, freqZ, freqW) {
+    var growl = freqX < 0.3 ? 0.3 : freqX > 4 ? 4 : freqX;
+    var rasp = freqY < 0 ? 0 : freqY > 5 ? 5 : freqY;
+    var bite = freqW < 0 ? 0 : freqW > 4 ? 4 : freqW;
+    var hit = fmul(smoothstep32(0.0, 0.008, t), fsub(1.0, smoothstep32(0.12, 0.28, t)));
+    var f0 = fadd(55.0, fmul(growl, 28.0));
+    var body = fsin(fmul(fmul(PI2, f0), t));
+    body = fadd(body, fmul(fsin(fmul(fmul(PI2, fmul(f0, 1.41)), t)), 0.7));
+    body = fadd(body, fmul(fsin(fmul(fmul(PI2, fmul(f0, 1.89)), t)), 0.45));
+    var grit = fmul(
+      fsub(fmul(Hash1(fmul(t, fadd(900.0, fmul(rasp, 400.0)))), 2.0), 1.0),
+      fmul(fexp(fmul(-t, fadd(10.0, fmul(bite, 4.0)))), fadd(0.35, fmul(rasp, 0.15)))
+    );
+    return softClip(fmul(fadd(fmul(body, hit), grit), fadd(3.0, fmul(bite, 0.4))));
+  }
+  function sampleElectric(t, freqX, freqY, freqZ, freqW) {
+    var tone = freqX < 0.25 ? 0.25 : freqX > 3 ? 3 : freqX;
+    var settle = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var dur = 0.12;
+    var hitLen = fmul(dur, fadd(1.0, fmul(fsub(0.35, 1.0), settle)));
+    if (hitLen < 0.04) hitLen = 0.04;
+    if (t > hitLen) return 0;
+    var hitEnv = fmul(smoothstep32(0.0, 0.012, t), fsub(1.0, smoothstep32(fmul(hitLen, 0.65), hitLen, t)));
+    var bright = fdiv(fsub(tone, 0.25), 2.75);
+    var fHi = fadd(400.0, fmul(fmul(tone, tone), 2800.0));
+    var bolt = fsin(fmul(fmul(PI2, fHi), t));
+    var crack = fmul(
+      fsub(fmul(Hash1(fmul(t, 11000.0)), 2.0), 1.0),
+      fmul(fsin(fmul(fmul(PI2, fadd(900.0, fmul(bright, 2300.0))), t)), 0.35)
+    );
+    return softClip(fmul(fadd(bolt, crack), fmul(hitEnv, 2.8)));
+  }
+  function sampleVoice(v, t) {
+    var ty = v.type || "tweet";
+    if (ty === "tone")
+      return fmul(fsin(fmul(fmul(PI2, v.freqX > 20 ? v.freqX : 440), t)), 0.15);
+    if (ty === "sound1") return sampleSound1(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "joy") return sampleJoy(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "malice") return sampleMalice(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "electric") return sampleElectric(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    return sampleTweet(t, v.freqX, v.freqY);
   }
   function softClip(x) {
     x = F32(x);
@@ -234,16 +310,19 @@
         t = F32((absFrame - v.startFrame) / SR);
         env = envelope(t, v.duration, v.fadein, v.envelop);
         if (env <= 0) continue;
-        if (v.type === "tone")
-          sig = fmul(
-            fsin(fmul(fmul(F32(2 * Math.PI), v.freqX > 20 ? v.freqX : 440), t)),
-            0.15
-          );
-        else sig = sampleTweet(t, v.freqX, v.freqY);
+        sig = sampleVoice(v, t);
         g = fmul(fmul(fmul(sig, v.volume), env), master);
-        /* tweet.sound returns vec2(signal): the legacy bird is centred, not panned. */
-        out[i * 2] = fadd(out[i * 2], g);
-        out[i * 2 + 1] = fadd(out[i * 2 + 1], g);
+        /* Centre most SFX; slight pan via freqZ for non-tweet. */
+        if (v.type === "tweet" || v.type === "tone") {
+          out[i * 2] = fadd(out[i * 2], g);
+          out[i * 2 + 1] = fadd(out[i * 2 + 1], g);
+        } else {
+          var pan = v.freqZ * 0.12;
+          if (pan > 0.7) pan = 0.7;
+          if (pan < -0.7) pan = -0.7;
+          out[i * 2] = fadd(out[i * 2], fmul(g, fsub(1.0, fmul(pan, 0.75))));
+          out[i * 2 + 1] = fadd(out[i * 2 + 1], fmul(g, fadd(1.0, fmul(pan, 0.75))));
+        }
       }
     }
     voices = still;
@@ -611,6 +690,10 @@
       return loadError;
     },
     play: function (desc) {
+      desc = desc || {};
+      var ty = desc.soundType || "tweet";
+      /* WASM path only knows tweet/tone — Numeris SFX stay on JS synth. */
+      if (ty !== "tweet" && ty !== "tone") return jsPlay(desc);
       return (backend.indexOf("wasm") === 0) && wasm ? wasmPlay(desc) : jsPlay(desc);
     },
     stopAll: function () {
@@ -700,8 +783,8 @@
   var tickTimer = 0;
   var audioPort = null;
   var blockFrames = 1024;
-  var targetFrames = 4096;
-  var needFrames = 2048;
+  var targetFrames = 2048;
+  var needFrames = 1024;
   var sampleRate = 44100;
   var toneHz = 440;
   var toneGain = 0.12;
@@ -983,7 +1066,8 @@
     var want = target > 0 ? target : targetFrames;
     var guard = 0;
     var fillT0 = performance.now();
-    if (want < 2048) want = 2048;
+    /* Allow short interactive cushions (desktop ~2048); don't force 2048 floor. */
+    if (want < 1024) want = 1024;
     while (running && audioPort && estimatedQueued() < want && guard < 64) {
       sendPcmBlock();
       guard++;
@@ -1047,8 +1131,8 @@
       noteQueued(msg.queuedFrames | 0);
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
-      if (targetFrames < 2048) targetFrames = 2048;
-      if (needFrames < 1024) needFrames = 1024;
+      if (targetFrames < 1024) targetFrames = 1024;
+      if (needFrames < 512) needFrames = 512;
       fillToTarget(targetFrames);
       scheduleAudioPump();
     }
@@ -1061,32 +1145,38 @@
     audioPort.start && audioPort.start();
     noteQueued(0);
     if (synthReady) {
+      /* Prime only to target — avoid force-pushing 8k frames of silence ahead. */
       fillToTarget(targetFrames);
-      forcePushBlocks(8);
     }
     scheduleAudioPump();
     postMessage({ type: "audio-attached", blockFrames: blockFrames, targetFrames: targetFrames });
   }
 
   function playSound(msg) {
-    /* Never flush the sink FIFO here: flush + async PCM races the worklet
-     * quantum and is a common source of random crackle on HTTPS worklet-pcm.
-     * resetOutput only discards stale synth cache so the new voice starts soon;
-     * continuous silence already in the FIFO keeps the cushion intact. */
+    /* Latency = queuedFrames/sampleRate until a new voice's PCM reaches the sink.
+     * Idle + deep FIFO: flush stale silence (worklet/script have soft xfade).
+     * Always force-push at least one block so the attack isn't stuck waiting for
+     * the sink to drain below needFrames before the next fill. */
     var hadAudio =
       SoundWorkerSsound.liveVoices() > 0 ||
       (SoundWorkerSsound.lastPeak && SoundWorkerSsound.lastPeak() > 1e-5) ||
       (SoundWorkerSsound.echoLive && SoundWorkerSsound.echoLive());
-    if (!hadAudio && SoundWorkerSsound.resetOutput)
+    var q = estimatedQueued();
+    var deepIdle = !hadAudio && q > (needFrames > 0 ? needFrames : 1024);
+    if (deepIdle && audioPort) {
+      audioPort.postMessage({ type: "flush" });
+      noteQueued(0);
+      if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
+    } else if (!hadAudio && SoundWorkerSsound.resetOutput) {
       SoundWorkerSsound.resetOutput();
+    }
     var id = SoundWorkerSsound.play(msg);
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
     if (!audioPort) {
       scheduleSilentPump();
       return;
     }
-    if (!hadAudio) forcePushBlocks(4);
-    else fillToTarget(targetFrames);
+    forcePushBlocks(hadAudio ? 1 : 2);
     scheduleAudioPump();
   }
 
@@ -1118,8 +1208,8 @@
         stallMode = msg.stall_mode === "busy" ? "busy" : "async";
         tickDelayMs = msg.tick_ms > 0 ? msg.tick_ms | 0 : 16;
         blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 1024;
-        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;
-        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;
+        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 2048;
+        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 1024;
         if (msg.synthRate > 0 &&
             typeof SoundWorkerSsound !== "undefined" &&
             SoundWorkerSsound.setConfigRate)
@@ -1131,8 +1221,8 @@
         preferCpu = msg.preferCpu !== false; /* default CPU â€” avoids GPU contention with scene */
         synthReady = false;
         pendingPlays.length = 0;
-        if (targetFrames < 2048) targetFrames = 2048;
-        if (needFrames < 1024) needFrames = 1024;
+        if (targetFrames < 1024) targetFrames = 1024;
+        if (needFrames < 512) needFrames = 512;
         if (!preferCpu) {
           if (!msg.canvas) {
             fail("missing-canvas");
