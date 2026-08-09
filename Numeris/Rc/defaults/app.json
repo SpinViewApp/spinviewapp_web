@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 4,
+"config_defaults_rev": 7,
 "mainpan": {
   "1": {
     "1": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 3
+                  "active": 6
                 }
               }
             }
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.279937,
+    "ratio": 0.316176,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -114,7 +114,7 @@
     "g": 0.07,
     "r": 0.05
   },
-  "campaign_depth": 606,
+  "campaign_depth": 610,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -265,8 +265,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 609,
-  "level_seed": 1891763003,
+  "level_index": 613,
+  "level_seed": 1717567934,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -298,7 +298,9 @@
   "music_variation": 0.18,
   "music_visual_reactivity": 1.5,
   "music_world_crossfade": 8,
-  "phone_orientation_lock": true,
+  "pan_limit": true,
+  "pan_limit_radius": 0.169,
+  "phone_orientation_lock": false,
   "phone_tilt_intensity": 1.15,
   "phone_tilt_response_speed": 14,
   "phone_tilt_return_speed": 9,
@@ -311,9 +313,12 @@
   "reward_scale": 1.18,
   "reward_tilt_deg": 7,
   "show_eq_debug": false,
+  "show_hitbox": true,
+  "show_pan_limit": false,
   "sht_animate": true,
   "sht_custom_time": 0,
-  "sht_dim": 0.268,
+  "sht_dim": 0.183,
+  "sht_dim_zoom": 0.4,
   "sht_enabled": true,
   "sht_flash_color": {
     "a": 1,
@@ -326,52 +331,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.423055,
-    "b": 212.974,
-    "g": 0.568674,
-    "r": -0.581747
+    "a": -0.406054,
+    "b": 213.899,
+    "g": 0.568747,
+    "r": -0.582197
   },
   "sht_fractal_v1": {
-    "a": 0.345824,
-    "b": 0.152609,
-    "g": 0.504668,
-    "r": -0.0226673
+    "a": 0.35192,
+    "b": 0.151635,
+    "g": 0.496984,
+    "r": -0.0198237
   },
   "sht_fractal_v2": {
-    "a": 0.185111,
-    "b": 0.0602037,
-    "g": 210.214,
+    "a": 0.189168,
+    "b": 0.0592182,
+    "g": 215.602,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 17.7973,
-    "b": 0.00430609,
-    "g": 0.0342162,
-    "r": 8.00096
+    "a": 17.6802,
+    "b": 0.00445939,
+    "g": 0.0342761,
+    "r": 8.08695
   },
   "sht_fractal_v4": {
-    "a": 0.176887,
-    "b": 0.687051,
-    "g": 0.703856,
-    "r": 33.9751
+    "a": 0.180996,
+    "b": 0.689653,
+    "g": 0.702046,
+    "r": 34.1647
   },
   "sht_fractal_v5": {
-    "a": 0.242669,
-    "b": 0.117296,
-    "g": 0.122038,
-    "r": 0.241744
+    "a": 0.230478,
+    "b": 0.120709,
+    "g": 0.123521,
+    "r": 0.244595
   },
   "sht_fractal_v6": {
-    "a": 1.08785,
-    "b": 0.722579,
-    "g": 0.701371,
-    "r": 0.761605
+    "a": 1.10908,
+    "b": 0.727674,
+    "g": 0.694892,
+    "r": 0.747912
   },
   "sht_fractal_v7": {
-    "a": 0.805265,
-    "b": 0.976764,
-    "g": 1.26956,
-    "r": 1.19205
+    "a": 0.803398,
+    "b": 0.981026,
+    "g": 1.25879,
+    "r": 1.20213
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -380,10 +385,10 @@
     "r": 2
   },
   "sht_fractal_v9": {
-    "a": 0.629323,
-    "b": 0.423371,
-    "g": 0.748467,
-    "r": 0.715244
+    "a": 0.633444,
+    "b": 0.423594,
+    "g": 0.750628,
+    "r": 0.721125
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -446,6 +451,7 @@
   "sht_warning_flash_per_line": 0.08,
   "sht_warning_hit_lag": 0.075,
   "sht_warning_lag_per_line": 0.035,
+  "tile_hitbox_ratio": 1,
   "tile_sdf_materialize": true,
   "tile_sdf_materialize_glow": 0.85,
   "tile_sdf_materialize_strength": 0.92,

@@ -11,6 +11,8 @@
         { "label": "Letters", "pane": "letters" },
         { "label": "Frame", "pane": "cell_frame" },
         { "label": "Depth", "pane": "board_depth" },
+        { "label": "Board", "pane": "board" },
+        { "label": "Debug", "pane": "debug" },
         { "label": "Motion", "pane": "phone_motion" },
         { "label": "Socket", "pane": "socket" },
         { "label": "Living", "pane": "living" },
