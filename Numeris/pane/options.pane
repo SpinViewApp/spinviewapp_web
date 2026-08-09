@@ -18,6 +18,7 @@
         { "label": "Hitstop", "pane": "hitstop" },
         { "label": "Background", "pane": "background" },
         { "label": "Shader", "pane": "shader" },
+        { "label": "Melody", "pane": "melody" },
         { "label": "Share", "pane": "challenge" }
       ]
     }

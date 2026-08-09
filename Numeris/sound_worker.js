@@ -197,6 +197,94 @@
     );
     return softClip(fmul(fadd(bolt, crack), fmul(hitEnv, 2.8)));
   }
+
+  /* CPU mirrors for the four Numeris GPU instruments.  They deliberately use
+   * the same slot1 contract as the .sound shaders so native and Web keep the
+   * same musical roles even when WebGL audio runs through this worker. */
+  function sampleNumerisPulse(t, freqX, freqY, freqZ, freqW) {
+    var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
+    var warmth = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
+    var click = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var hz = 55.0 * ratio;
+    var attack = smoothstep32(0.0, 0.004, t);
+    var env = attack * Math.exp(-t * (8.0 + (3.0 - 8.0) * warmth));
+    var bend = Math.exp(-28.0 * t) * (0.45 + click * 1.6);
+    var phase = PI2 * hz * t + bend;
+    var body = Math.sin(phase);
+    body += Math.sin(phase * 0.5) * (0.28 + warmth * 0.22);
+    body += Math.sin(phase * 2.01) * (0.20 - warmth * 0.10);
+    body += Math.sin(PI2 * hz * (5.0 + click * 3.0) * t)
+      * Math.exp(-32.0 * t) * click * 0.32;
+    return body * env * 1.45 / (1.0 + Math.abs(body * env * 1.45));
+  }
+
+  function sampleNumerisOrbit(t, freqX, freqY, freqZ, freqW) {
+    var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
+    var bright = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
+    var character = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var hz = 110.0 * ratio;
+    var attackEnd = 0.003 + (0.018 - 0.003) * character;
+    var attack = smoothstep32(0.0, attackEnd, t);
+    var env = attack * Math.exp(-t * (7.0 + (2.8 - 7.0) * character));
+    var orbitRatio = 1.4983 + (2.0031 - 1.4983) * character;
+    var modEnv = Math.exp(-t * (4.0 + bright * 3.0));
+    var modulator = Math.sin(PI2 * hz * orbitRatio * t
+      + Math.sin(PI2 * 0.37 * t) * 0.35);
+    var carrier = Math.sin(PI2 * hz * t
+      + modulator * (0.5 + bright * 3.0) * modEnv);
+    var halo = Math.sin(PI2 * hz * 2.001 * t + 0.4)
+      * (0.10 + bright * 0.20);
+    var sub = Math.sin(PI2 * hz * 0.5 * t) * character * 0.18;
+    var mono = (carrier + halo + sub) * env * 1.55;
+    return mono / (1.0 + Math.abs(mono));
+  }
+
+  function sampleNumerisPrism(t, freqX, freqY, freqZ, freqW) {
+    var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
+    var bright = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
+    var glass = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var hz = 220.0 * ratio;
+    var attack = smoothstep32(0.0, 0.0025, t);
+    var e0 = attack * Math.exp(-t * (4.8 + (2.6 - 4.8) * glass));
+    var e1 = attack * Math.exp(-t * (8.5 + (5.2 - 8.5) * bright));
+    var e2 = attack * Math.exp(-t * 12.0);
+    var r2 = 2.0 + 0.071 * glass;
+    var r3 = 3.0 + 0.119 * glass;
+    var r5 = 5.0 + 0.337 * glass;
+    var mono = Math.sin(PI2 * hz * t) * e0;
+    mono += Math.sin(PI2 * hz * r2 * t + 0.23) * e1 * (0.24 + bright * 0.24);
+    mono += Math.sin(PI2 * hz * r3 * t + 0.61) * e1 * (0.10 + bright * 0.18);
+    mono += Math.sin(PI2 * hz * r5 * t + 1.07) * e2 * bright * 0.12;
+    mono *= 1.65;
+    return mono / (1.0 + Math.abs(mono));
+  }
+
+  function sampleNumerisChimeNote(hz, age, bright) {
+    if (age < 0) return 0;
+    var env = smoothstep32(0.0, 0.0025, age)
+      * Math.exp(-age * (5.6 + bright * 1.8));
+    var value = Math.sin(PI2 * hz * age);
+    value += Math.sin(PI2 * hz * 2.003 * age + 0.3) * (0.22 + bright * 0.18);
+    value += Math.sin(PI2 * hz * 3.997 * age + 0.9) * bright * 0.10;
+    return value * env;
+  }
+
+  function sampleNumerisChime(t, freqX, freqY, freqZ, freqW) {
+    var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
+    var bright = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
+    var shape = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var hz = 220.0 * ratio;
+    var r1 = 1.125 + (1.20 - 1.125) * shape;
+    var r2 = 1.25 + (1.3333333 - 1.25) * shape;
+    var r3 = 1.50 + (1.60 - 1.50) * shape;
+    var mono = sampleNumerisChimeNote(hz, t, bright);
+    mono += sampleNumerisChimeNote(hz * r1, t - 0.060, bright) * 0.82;
+    mono += sampleNumerisChimeNote(hz * r2, t - 0.122, bright) * 0.76;
+    mono += sampleNumerisChimeNote(hz * r3, t - 0.190, bright) * 0.92;
+    mono *= 1.45;
+    return mono / (1.0 + Math.abs(mono));
+  }
+
   function sampleVoice(v, t) {
     var ty = v.type || "tweet";
     if (ty === "tone")
@@ -205,6 +293,10 @@
     if (ty === "joy") return sampleJoy(t, v.freqX, v.freqY, v.freqZ, v.freqW);
     if (ty === "malice") return sampleMalice(t, v.freqX, v.freqY, v.freqZ, v.freqW);
     if (ty === "electric") return sampleElectric(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "numeris_pulse") return sampleNumerisPulse(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "numeris_orbit") return sampleNumerisOrbit(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "numeris_prism") return sampleNumerisPrism(t, v.freqX, v.freqY, v.freqZ, v.freqW);
+    if (ty === "numeris_chime") return sampleNumerisChime(t, v.freqX, v.freqY, v.freqZ, v.freqW);
     return sampleTweet(t, v.freqX, v.freqY);
   }
   function softClip(x) {

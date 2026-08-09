@@ -8,14 +8,9 @@
       "1": { "fmap": "numeris_options_fmap", "cmd": "options" },
       "2": {
         "type": "V",
-        "ratio": 0.40,
-        "1": { "fmap": "panhistory_fmap", "cmd": "history" },
-        "2": {
-          "type": "V",
-          "ratio": 0.55,
-          "1": { "fmap": "soundui_fmap", "cmd": "Waveform" },
-          "2": { "fmap": "soundui_fmap", "cmd": "Prefs" }
-        }
+        "ratio": 0.55,
+        "1": { "fmap": "soundui_fmap", "cmd": "Waveform" },
+        "2": { "fmap": "soundui_fmap", "cmd": "Prefs" }
       }
     },
     "2": {

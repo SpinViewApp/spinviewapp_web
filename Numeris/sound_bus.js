@@ -560,7 +560,23 @@
         for (k in desc)
           if (Object.prototype.hasOwnProperty.call(desc, k)) msg[k] = desc[k];
       if (state.inlineSynth && state.worklet && state.worklet.port) {
-        state.worklet.port.postMessage(msg);
+        /* The emergency inline worklet intentionally stays tiny.  Preserve
+         * Numeris pitch/voice roles with a clean sine fallback; the normal
+         * worker path below renders the full GPU-inspired timbres. */
+        var inlineMsg = msg;
+        var inlineBase = 0;
+        if (msg.soundType === "numeris_pulse") inlineBase = 55;
+        else if (msg.soundType === "numeris_orbit") inlineBase = 110;
+        else if (msg.soundType === "numeris_prism" || msg.soundType === "numeris_chime")
+          inlineBase = 220;
+        if (inlineBase > 0) {
+          inlineMsg = {};
+          for (k in msg)
+            if (Object.prototype.hasOwnProperty.call(msg, k)) inlineMsg[k] = msg[k];
+          inlineMsg.soundType = "tone";
+          inlineMsg.freqX = inlineBase * (msg.freqX > 0 ? +msg.freqX : 1);
+        }
+        state.worklet.port.postMessage(inlineMsg);
         return 1;
       }
       if (state._scriptPlay) {

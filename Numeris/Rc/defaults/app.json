@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 3,
+"config_defaults_rev": 4,
 "mainpan": {
   "1": {
     "1": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 1
+                  "active": 0
                 }
               }
             }
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.186975,
+    "ratio": 0.279937,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -106,7 +106,7 @@
 },
 "numeris": {
   "android_drag_lift_ease": 18,
-  "android_drag_lift_px": 72,
+  "android_drag_lift_px": 48,
   "auto_check_solver": true,
   "bg_color": {
     "a": 0.85,
@@ -114,7 +114,7 @@
     "g": 0.07,
     "r": 0.05
   },
-  "campaign_depth": 587,
+  "campaign_depth": 598,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -238,8 +238,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 590,
-  "level_seed": 193661559,
+  "level_index": 601,
+  "level_seed": 2106898335,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -252,6 +252,25 @@
   "messages_on_complete": true,
   "messages_on_start": true,
   "mind_level": 1,
+  "music_bpm_scale": 1,
+  "music_complexity_response": 1.6,
+  "music_difficulty_influence": 0.12,
+  "music_enabled": true,
+  "music_jingle_gain": 0.78,
+  "music_level_influence": 0.2,
+  "music_lookahead": 0.085,
+  "music_master_gain": 0.34,
+  "music_note_length": 1,
+  "music_ornaments": 0.22,
+  "music_progress_influence": 0.22,
+  "music_puzzle_gain": 0.62,
+  "music_quantize": 8,
+  "music_running": true,
+  "music_silence": 0.15,
+  "music_theme_override": -1,
+  "music_variation": 0.18,
+  "music_visual_reactivity": 0.42,
+  "music_world_crossfade": 8,
   "phone_orientation_lock": true,
   "phone_tilt_intensity": 1.15,
   "phone_tilt_response_speed": 14,
@@ -280,52 +299,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.35,
   "sht_fractal_v0": {
-    "a": -0.756767,
-    "b": 206.889,
-    "g": 0.56743,
-    "r": -0.583681
+    "a": -0.581091,
+    "b": 208.616,
+    "g": 0.568216,
+    "r": -0.584352
   },
   "sht_fractal_v1": {
-    "a": 0.344721,
-    "b": 0.142664,
-    "g": 0.491431,
-    "r": -0.0423777
+    "a": 0.346437,
+    "b": 0.13391,
+    "g": 0.496006,
+    "r": -0.0376351
   },
   "sht_fractal_v2": {
-    "a": 0.19062,
-    "b": 0.0621405,
-    "g": 229.62,
+    "a": 0.191876,
+    "b": 0.0606742,
+    "g": 228.183,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 20.0726,
-    "b": 0.00462012,
-    "g": 0.0397791,
-    "r": 7.81369
+    "a": 20.2121,
+    "b": 0.00468909,
+    "g": 0.0387915,
+    "r": 7.66435
   },
   "sht_fractal_v4": {
-    "a": 0.182693,
-    "b": 0.742727,
-    "g": 0.644738,
-    "r": 36.3665
+    "a": 0.175864,
+    "b": 0.753146,
+    "g": 0.64864,
+    "r": 36.2524
   },
   "sht_fractal_v5": {
-    "a": 0.321007,
-    "b": 0.10272,
-    "g": 0.141867,
-    "r": 0.202278
+    "a": 0.300416,
+    "b": 0.100821,
+    "g": 0.139574,
+    "r": 0.199101
   },
   "sht_fractal_v6": {
-    "a": 1.17686,
-    "b": 0.667959,
-    "g": 0.657699,
-    "r": 0.74169
+    "a": 1.17458,
+    "b": 0.666145,
+    "g": 0.677953,
+    "r": 0.734417
   },
   "sht_fractal_v7": {
-    "a": 0.791133,
-    "b": 1.04596,
-    "g": 1.30183,
-    "r": 1.28008
+    "a": 0.790637,
+    "b": 1.04912,
+    "g": 1.29757,
+    "r": 1.27828
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -334,14 +353,24 @@
     "r": 2
   },
   "sht_fractal_v9": {
-    "a": 0.634767,
-    "b": 0.376695,
-    "g": 0.764267,
-    "r": 0.730967
+    "a": 0.632172,
+    "b": 0.370079,
+    "g": 0.762292,
+    "r": 0.732216
   },
   "sht_fractal_variation": 0.82,
   "sht_hit_lag": 0.12,
   "sht_local_speed": 0.35,
+  "sht_music_visual_bass": 0.86,
+  "sht_music_visual_branch": 0.58,
+  "sht_music_visual_color": 0.34,
+  "sht_music_visual_enabled": true,
+  "sht_music_visual_high": 0.62,
+  "sht_music_visual_intensity": 0.18,
+  "sht_music_visual_mid": 0.72,
+  "sht_music_visual_tail": 0.72,
+  "sht_music_visual_travel": 0.82,
+  "sht_music_visual_width": 0.085,
   "sht_neutral_flash": 0.035,
   "sht_neutral_flash_color": {
     "a": 1,
@@ -374,8 +403,8 @@
   "sht_place_twist_warning": 1.62,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
-  "sht_shader_pan_response": 0.14,
-  "sht_shader_tilt_response": 0.24,
+  "sht_shader_pan_response": 0.38,
+  "sht_shader_tilt_response": 0.42,
   "sht_shader_zoom_response": 0.28,
   "sht_success_flash_per_line": 0.14,
   "sht_success_lag_per_line": 0.055,
@@ -394,13 +423,15 @@
   "tile_sdf_materialize_glow": 0.85,
   "tile_sdf_materialize_strength": 0.92,
   "user_name": "",
+  "view_empty_pan": true,
+  "view_zoom_to_cursor": false,
   "visual_ease_speed": 8.5
 },
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 1032,
-  "w": 1920,
+  "h": 600,
+  "w": 800,
   "x": 0,
   "y": 0
 }
