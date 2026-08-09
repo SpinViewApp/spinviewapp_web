@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 7,
+"config_defaults_rev": 8,
 "mainpan": {
   "1": {
     "1": {
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.316176,
+    "ratio": 0.323004,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -108,13 +108,14 @@
   "android_drag_lift_ease": 18,
   "android_drag_lift_tiles": 2,
   "auto_check_solver": true,
+  "bank_hitbox_ratio": 2.006,
   "bg_color": {
     "a": 0.85,
     "b": 0.08,
     "g": 0.07,
     "r": 0.05
   },
-  "campaign_depth": 610,
+  "campaign_depth": 611,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -220,8 +221,11 @@
   "cellfx_tile_tilt_bank_ratio": 0.577,
   "cellfx_tile_tilt_dephase": 1.826,
   "cellfx_tile_tilt_ratio": 1.752,
-  "desktop_mouse_tilt_ratio": 0.34,
+  "desktop_mouse_tilt_ratio": 0.153,
   "difficulty_filter": 0,
+  "drag_insert_min": 22,
+  "drag_insert_scale": 0.82,
+  "drag_size_zone": 0.25,
   "echo_delay_ms": 80,
   "echo_feedback": 0.4,
   "echo_mix": 0.3,
@@ -265,8 +269,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 613,
-  "level_seed": 1717567934,
+  "level_index": 614,
+  "level_seed": -2006209018,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -299,11 +303,12 @@
   "music_visual_reactivity": 1.5,
   "music_world_crossfade": 8,
   "pan_limit": true,
-  "pan_limit_radius": 0.169,
+  "pan_limit_radius": 0.163,
   "phone_orientation_lock": false,
   "phone_tilt_intensity": 1.15,
   "phone_tilt_response_speed": 14,
-  "phone_tilt_return_speed": 9,
+  "phone_tilt_return_speed": 3.97351,
+  "phone_tilt_settle_sec": 0.755,
   "practice_mode": false,
   "practice_seed": 2095744845,
   "reward_duration": 1.55,
@@ -313,11 +318,11 @@
   "reward_scale": 1.18,
   "reward_tilt_deg": 7,
   "show_eq_debug": false,
-  "show_hitbox": true,
+  "show_hitbox": false,
   "show_pan_limit": false,
   "sht_animate": true,
   "sht_custom_time": 0,
-  "sht_dim": 0.183,
+  "sht_dim": 0.208,
   "sht_dim_zoom": 0.4,
   "sht_enabled": true,
   "sht_flash_color": {
@@ -331,52 +336,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.406054,
-    "b": 213.899,
-    "g": 0.568747,
-    "r": -0.582197
+    "a": -0.426477,
+    "b": 215.067,
+    "g": 0.569374,
+    "r": -0.581579
   },
   "sht_fractal_v1": {
-    "a": 0.35192,
-    "b": 0.151635,
-    "g": 0.496984,
-    "r": -0.0198237
+    "a": 0.347974,
+    "b": 0.147346,
+    "g": 0.494922,
+    "r": -0.0177029
   },
   "sht_fractal_v2": {
-    "a": 0.189168,
-    "b": 0.0592182,
-    "g": 215.602,
+    "a": 0.181319,
+    "b": 0.0588615,
+    "g": 210.767,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 17.6802,
-    "b": 0.00445939,
-    "g": 0.0342761,
-    "r": 8.08695
+    "a": 17.8993,
+    "b": 0.00440867,
+    "g": 0.0334878,
+    "r": 8.02595
   },
   "sht_fractal_v4": {
-    "a": 0.180996,
-    "b": 0.689653,
-    "g": 0.702046,
-    "r": 34.1647
+    "a": 0.174966,
+    "b": 0.692274,
+    "g": 0.708191,
+    "r": 32.6632
   },
   "sht_fractal_v5": {
-    "a": 0.230478,
-    "b": 0.120709,
-    "g": 0.123521,
-    "r": 0.244595
+    "a": 0.223722,
+    "b": 0.120677,
+    "g": 0.117437,
+    "r": 0.238648
   },
   "sht_fractal_v6": {
-    "a": 1.10908,
-    "b": 0.727674,
-    "g": 0.694892,
-    "r": 0.747912
+    "a": 1.08354,
+    "b": 0.725733,
+    "g": 0.700603,
+    "r": 0.7522
   },
   "sht_fractal_v7": {
-    "a": 0.803398,
-    "b": 0.981026,
-    "g": 1.25879,
-    "r": 1.20213
+    "a": 0.802202,
+    "b": 0.988555,
+    "g": 1.26242,
+    "r": 1.19997
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -385,10 +390,10 @@
     "r": 2
   },
   "sht_fractal_v9": {
-    "a": 0.633444,
-    "b": 0.423594,
-    "g": 0.750628,
-    "r": 0.721125
+    "a": 0.635097,
+    "b": 0.409873,
+    "g": 0.757218,
+    "r": 0.721177
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -451,21 +456,22 @@
   "sht_warning_flash_per_line": 0.08,
   "sht_warning_hit_lag": 0.075,
   "sht_warning_lag_per_line": 0.035,
-  "tile_hitbox_ratio": 1,
+  "tile_hitbox_ratio": 2,
   "tile_sdf_materialize": true,
   "tile_sdf_materialize_glow": 0.85,
   "tile_sdf_materialize_strength": 0.92,
+  "touch_tilt_ratio": 0.34,
   "user_name": "",
   "view_empty_pan": true,
-  "view_twist_snap_deg": 30,
+  "view_twist_snap_deg": 15.383,
   "view_zoom_to_cursor": false,
   "visual_ease_speed": 8.808
 },
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 1032,
-  "w": 1920,
+  "h": 600,
+  "w": 800,
   "x": 0,
   "y": 0
 }
