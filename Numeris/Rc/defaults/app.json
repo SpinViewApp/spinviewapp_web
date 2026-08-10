@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 16,
+"config_defaults_rev": 17,
 "mainpan": {
   "1": {
     "1": {
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.323004,
+    "ratio": 0.25105,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -106,7 +106,7 @@
 },
 "numeris": {
   "android_drag_lift_ease": 18,
-  "android_drag_lift_tiles": 2,
+  "android_drag_lift_tiles": 0.867,
   "auto_check_solver": true,
   "bank_hitbox_ratio": 2.006,
   "bg_color": {
@@ -115,7 +115,7 @@
     "g": 0.07,
     "r": 0.05
   },
-  "campaign_depth": 611,
+  "campaign_depth": 617,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -223,8 +223,10 @@
   "cellfx_tile_tilt_ratio": 1.752,
   "desktop_mouse_tilt_ratio": 0.153,
   "difficulty_filter": 0,
+  "drag_finger_hit": true,
   "drag_insert_min": 22,
   "drag_insert_scale": 0.82,
+  "drag_mouse_lift_ratio": 0.5,
   "drag_size_zone": 0.25,
   "echo_delay_ms": 80,
   "echo_feedback": 0.4,
@@ -269,8 +271,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 614,
-  "level_seed": -2006209018,
+  "level_index": 620,
+  "level_seed": -1688481754,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -322,6 +324,13 @@
   "show_pan_limit": false,
   "sht_animate": true,
   "sht_custom_time": 0,
+  "sht_depth_fog": 1.939,
+  "sht_depth_fog_color": {
+    "a": 1,
+    "b": 0,
+    "g": 0,
+    "r": 0
+  },
   "sht_dim": 0.208,
   "sht_dim_zoom": 0.4,
   "sht_enabled": true,
@@ -336,52 +345,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.426477,
-    "b": 215.067,
-    "g": 0.569374,
-    "r": -0.581579
+    "a": -0.340372,
+    "b": 214.505,
+    "g": 0.569031,
+    "r": -0.581454
   },
   "sht_fractal_v1": {
-    "a": 0.347974,
-    "b": 0.147346,
-    "g": 0.494922,
-    "r": -0.0177029
+    "a": 0.348933,
+    "b": 0.143126,
+    "g": 0.494549,
+    "r": -0.0218786
   },
   "sht_fractal_v2": {
-    "a": 0.181319,
-    "b": 0.0588615,
-    "g": 210.767,
+    "a": 0.188308,
+    "b": 0.0603631,
+    "g": 212.391,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 17.8993,
-    "b": 0.00440867,
-    "g": 0.0334878,
-    "r": 8.02595
+    "a": 18.1633,
+    "b": 0.00429071,
+    "g": 0.0340614,
+    "r": 8.09946
   },
   "sht_fractal_v4": {
-    "a": 0.174966,
-    "b": 0.692274,
-    "g": 0.708191,
-    "r": 32.6632
+    "a": 0.178414,
+    "b": 0.688852,
+    "g": 0.7035,
+    "r": 33.8424
   },
   "sht_fractal_v5": {
-    "a": 0.223722,
-    "b": 0.120677,
-    "g": 0.117437,
-    "r": 0.238648
+    "a": 0.226207,
+    "b": 0.118477,
+    "g": 0.118872,
+    "r": 0.241624
   },
   "sht_fractal_v6": {
-    "a": 1.08354,
-    "b": 0.725733,
-    "g": 0.700603,
-    "r": 0.7522
+    "a": 1.10257,
+    "b": 0.729621,
+    "g": 0.716051,
+    "r": 0.764525
   },
   "sht_fractal_v7": {
-    "a": 0.802202,
-    "b": 0.988555,
-    "g": 1.26242,
-    "r": 1.19997
+    "a": 0.807708,
+    "b": 0.986035,
+    "g": 1.26469,
+    "r": 1.19311
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -390,10 +399,10 @@
     "r": 2
   },
   "sht_fractal_v9": {
-    "a": 0.635097,
-    "b": 0.409873,
-    "g": 0.757218,
-    "r": 0.721177
+    "a": 0.628405,
+    "b": 0.40342,
+    "g": 0.753686,
+    "r": 0.724947
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -456,7 +465,7 @@
   "sht_warning_flash_per_line": 0.08,
   "sht_warning_hit_lag": 0.075,
   "sht_warning_lag_per_line": 0.035,
-  "tile_hitbox_ratio": 2,
+  "tile_hitbox_ratio": 1.512,
   "tile_sdf_materialize": true,
   "tile_sdf_materialize_glow": 0.85,
   "tile_sdf_materialize_strength": 0.92,

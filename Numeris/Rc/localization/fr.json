@@ -2,11 +2,26 @@
   "language": "fr",
   "name": "Francais",
   "hud": {
-    "world": "MONDE",
-    "tier": "PALIER",
-    "level": "NIVEAU",
-    "difficulty": "DIFFICULTE",
-    "mind_level": "NIVEAU MENTAL"
+    "world": "w",
+    "tier": "t",
+    "level": "Niv",
+    "difficulty": "D",
+    "mind_level": "MIND",
+    "tiers": {
+      "t1": "Simple",
+      "t2": "Facile",
+      "t3": "Modere",
+      "t4": "Avance",
+      "t5": "Complexe",
+      "t6": "Exigeant",
+      "t7": "Difficile",
+      "t8": "Intense",
+      "t9": "Extreme",
+      "t10": "Legendaire",
+      "t11": "Mythique",
+      "t12": "Transcendant",
+      "t13": "Eternel"
+    }
   },
   "messages": {
     "start": [
