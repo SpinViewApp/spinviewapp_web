@@ -177,8 +177,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr37";
-      else url += "&v=andr37";
+      if (url.indexOf("?") < 0) url += "?v=andr38";
+      else url += "&v=andr38";
       var worker;
       try {
         worker = new Worker(url);
@@ -312,23 +312,31 @@
       return false;
     }
 
-    /* Drop a PCM backlog that built up while the context was suspended / cold.
-     * Android first unlock often leaves 200–800 ms of silence ahead of SFX;
-     * background→foreground typically nukes the graph and "fixes" it — do the
-     * trim here so the first session matches. */
+    /* Soften / drop PCM backlog that built while suspended.
+     * "unlock"/"gesture": prefer fade+silence — a hard flush clicks on first tap.
+     * "visibility": allow a full flush when the queue is deep. */
     function trimAudioLatency(reason) {
       var why = reason || "trim";
+      var soft =
+        why === "unlock" || why === "gesture" || why.indexOf("unlock") === 0;
+      var now =
+        typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now();
+      if (state._lastTrimMs > 0 && now - state._lastTrimMs < 280) return;
+      state._lastTrimMs = now;
       try {
-        if (typeof state._scriptTrimLatency === "function")
+        if (soft && typeof state._scriptSoftTrimLatency === "function")
+          state._scriptSoftTrimLatency();
+        else if (typeof state._scriptTrimLatency === "function")
           state._scriptTrimLatency();
       } catch (e0) {}
       try {
-        if (state.worklet && state.worklet.port)
-          state.worklet.port.postMessage({ type: "flush" });
-      } catch (e1) {}
-      try {
         if (state.worker)
-          state.worker.postMessage({ type: "trim_latency" });
+          state.worker.postMessage({
+            type: "trim_latency",
+            soft: soft ? 1 : 0
+          });
       } catch (e2) {}
       try {
         var ctx = state.audioCtx;
@@ -338,6 +346,7 @@
           console.log(
             "[sound_bus] trim latency (" +
               why +
+              (soft ? ", soft" : "") +
               ") path=" +
               (state.audioPath || "?") +
               " base=" +
@@ -352,6 +361,7 @@
       } catch (e3) {}
     }
     state.trimAudioLatency = trimAudioLatency;
+    state._lastTrimMs = 0;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
      * AudioContext (addModule is per-context â€” cleared too). */
@@ -725,8 +735,19 @@
        * hundreds of ms until background recreate reset the graph. */
       var BUFFER_BOOST_MAX = 4096;
       var BUFFER_BOOST_STEP = 1024;
+      var srOut = ctx.sampleRate || 48000;
+      var silencePadFrames = Math.max(256, (srOut * 0.014) | 0); /* ~14 ms */
 
-      state._scriptTrimLatency = function () {
+      function rearmUnlockFade() {
+        unlockGain = 0;
+        unlockActive = state.unlockFadeSec > 0;
+        unlockStep =
+          unlockActive && state.unlockFadeSec > 0
+            ? 1.0 / (state.unlockFadeSec * srOut)
+            : 0;
+      }
+
+      function softClearFifo(withSilencePad, rearmUnlock) {
         blocks.length = 0;
         current = null;
         offset = 0;
@@ -734,9 +755,37 @@
         needSent = false;
         bufferBoostFrames = 0;
         gapFrames = 0;
-        primed = false;
+        if (Math.max(Math.abs(lastOutL), Math.abs(lastOutR)) > 1e-4) {
+          xfadeLeft = fadeFrames;
+          xfadeFromL = lastOutL;
+          xfadeFromR = lastOutR;
+        }
+        if (rearmUnlock) rearmUnlockFade();
+        primed = true; /* avoid underrun crackle while pad / refill lands */
+        if (withSilencePad) {
+          blocks.push({
+            samples: new Float32Array(silencePadFrames * 2),
+            frames: silencePadFrames
+          });
+          queuedFrames = silencePadFrames;
+        }
         state.stats.bufferBoostFrames = 0;
-        state.stats.queuedFrames = 0;
+        state.stats.queuedFrames = queuedFrames | 0;
+      }
+
+      state._scriptTrimLatency = function () {
+        softClearFifo(true, true);
+      };
+      /* First unlock: only clear a deep backlog; otherwise just re-arm the
+       * unlock fade so startup does not click through a hard flush. */
+      state._scriptSoftTrimLatency = function () {
+        var deep = (state.targetFrames | 0) * 1.35;
+        if (deep < 1536) deep = 1536;
+        bufferBoostFrames = 0;
+        gapFrames = 0;
+        rearmUnlockFade();
+        if (queuedFrames > deep) softClearFifo(true, true);
+        else state.stats.bufferBoostFrames = 0;
       };
 
       audioPort.onmessage = function (ev) {
@@ -754,16 +803,7 @@
             primed = true;
           }
         } else if (a.type === "flush") {
-          blocks.length = 0;
-          current = null;
-          offset = 0;
-          queuedFrames = 0;
-          needSent = false;
-          if (Math.max(Math.abs(lastOutL), Math.abs(lastOutR)) > 1e-4) {
-            xfadeLeft = fadeFrames;
-            xfadeFromL = lastOutL;
-            xfadeFromR = lastOutR;
-          }
+          softClearFifo(false, false);
         }
       };
       audioPort.start && audioPort.start();

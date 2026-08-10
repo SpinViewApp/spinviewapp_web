@@ -1422,12 +1422,29 @@
         return;
       }
       if (type === "trim_latency") {
-        /* Drop FIFO silence backlog after unlock / visibility resume. */
+        /* Drop FIFO silence backlog after unlock / visibility resume.
+         * Soft: only when deep, then pad with ~14 ms silence + mild refill so
+         * the unlock fade-in does not start on a hard sample jump. */
+        var soft = !!msg.soft;
+        var q = estimatedQueued();
+        var deep = (targetFrames > 0 ? targetFrames : 2048) * 1.35;
+        if (deep < 1536) deep = 1536;
+        if (soft && q <= deep) {
+          /* Queue already short — skip flush (avoids first-tap click). */
+          return;
+        }
         noteQueued(0);
-        if (typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.resetOutput)
-          SoundWorkerSsound.resetOutput();
         if (audioPort) {
           audioPort.postMessage({ type: "flush" });
+          var pad = Math.max(256, ((sampleRate > 0 ? sampleRate : 48000) * 0.014) | 0);
+          try {
+            audioPort.postMessage({
+              type: "pcm",
+              frames: pad,
+              samples: new Float32Array(pad * 2)
+            });
+            noteQueued(pad);
+          } catch (ePad) {}
           if (synthReady) fillToTarget(needFrames > 0 ? needFrames : 1024);
         }
         return;
