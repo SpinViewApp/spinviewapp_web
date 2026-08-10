@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 17,
+"config_defaults_rev": 21,
 "mainpan": {
   "1": {
     "1": {
@@ -98,13 +98,14 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.25105,
+    "ratio": 0.767241,
     "type": "V"
   },
   "ratio": 0.362086,
   "type": "H"
 },
 "numeris": {
+  "android_drag_lift_dpi_ratio": 0.152,
   "android_drag_lift_ease": 18,
   "android_drag_lift_tiles": 0.867,
   "auto_check_solver": true,
@@ -479,8 +480,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 600,
-  "w": 800,
+  "h": 10,
+  "w": 120,
   "x": 0,
   "y": 0
 }
