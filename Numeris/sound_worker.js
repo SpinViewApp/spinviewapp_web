@@ -1421,6 +1421,17 @@
         postMessage({ type: "stopped_all" });
         return;
       }
+      if (type === "trim_latency") {
+        /* Drop FIFO silence backlog after unlock / visibility resume. */
+        noteQueued(0);
+        if (typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.resetOutput)
+          SoundWorkerSsound.resetOutput();
+        if (audioPort) {
+          audioPort.postMessage({ type: "flush" });
+          if (synthReady) fillToTarget(needFrames > 0 ? needFrames : 1024);
+        }
+        return;
+      }
       if (type === "set_master") {
         if (typeof SoundWorkerSsound !== "undefined")
           SoundWorkerSsound.setMaster(msg.volume);

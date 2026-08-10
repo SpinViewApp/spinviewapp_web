@@ -177,8 +177,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr36";
-      else url += "&v=andr36";
+      if (url.indexOf("?") < 0) url += "?v=andr37";
+      else url += "&v=andr37";
       var worker;
       try {
         worker = new Worker(url);
@@ -311,6 +311,47 @@
       else if (ctx) state.audioStage = String(ctx.state || "none");
       return false;
     }
+
+    /* Drop a PCM backlog that built up while the context was suspended / cold.
+     * Android first unlock often leaves 200–800 ms of silence ahead of SFX;
+     * background→foreground typically nukes the graph and "fixes" it — do the
+     * trim here so the first session matches. */
+    function trimAudioLatency(reason) {
+      var why = reason || "trim";
+      try {
+        if (typeof state._scriptTrimLatency === "function")
+          state._scriptTrimLatency();
+      } catch (e0) {}
+      try {
+        if (state.worklet && state.worklet.port)
+          state.worklet.port.postMessage({ type: "flush" });
+      } catch (e1) {}
+      try {
+        if (state.worker)
+          state.worker.postMessage({ type: "trim_latency" });
+      } catch (e2) {}
+      try {
+        var ctx = state.audioCtx;
+        if (ctx) {
+          var bl = ctx.baseLatency > 0 ? ctx.baseLatency : 0;
+          var ol = ctx.outputLatency > 0 ? ctx.outputLatency : 0;
+          console.log(
+            "[sound_bus] trim latency (" +
+              why +
+              ") path=" +
+              (state.audioPath || "?") +
+              " base=" +
+              Math.round(bl * 1000) +
+              "ms out=" +
+              Math.round(ol * 1000) +
+              "ms"
+          );
+        } else {
+          console.log("[sound_bus] trim latency (" + why + ")");
+        }
+      } catch (e3) {}
+    }
+    state.trimAudioLatency = trimAudioLatency;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
      * AudioContext (addModule is per-context â€” cleared too). */
@@ -665,7 +706,7 @@
       var lastOutR = 0;
       var gapFrames = 0;
       var bufferBoostFrames = 0;
-      /* Soft underrun: hold last sample briefly, then slow fade â€” fast fade-to-0
+      /* Soft underrun: hold last sample briefly, then slow fade — fast fade-to-0
        * is what the ear hears as random crackle when FPS hitch drains the FIFO. */
       var holdFrames = 256;
       var fadeFrames = 768;
@@ -680,6 +721,23 @@
           : 0;
       var channel = new MessageChannel();
       var audioPort = channel.port2;
+      /* Cap cold-start boost — unbounded growth made first Android unlock lag
+       * hundreds of ms until background recreate reset the graph. */
+      var BUFFER_BOOST_MAX = 4096;
+      var BUFFER_BOOST_STEP = 1024;
+
+      state._scriptTrimLatency = function () {
+        blocks.length = 0;
+        current = null;
+        offset = 0;
+        queuedFrames = 0;
+        needSent = false;
+        bufferBoostFrames = 0;
+        gapFrames = 0;
+        primed = false;
+        state.stats.bufferBoostFrames = 0;
+        state.stats.queuedFrames = 0;
+      };
 
       audioPort.onmessage = function (ev) {
         var a = ev.data || {};
@@ -728,8 +786,8 @@
 
       attachWorkerAudioPort(channel.port1);
 
-      /* Mobile: large quantum (fewer GL-thread callbacks). Desktop: smaller for latency. */
-      var bufSize = state.mobile ? 4096 : 1024;
+      /* Mobile: mid quantum (4096 ≈85 ms@48k felt laggy on first unlock). */
+      var bufSize = state.mobile ? 2048 : 1024;
       if (!ctx.createScriptProcessor) throw new Error("no-script-processor");
       var sp = ctx.createScriptProcessor(bufSize, 0, 2);
       sp.onaudioprocess = function (e) {
@@ -748,8 +806,9 @@
             if (primed) {
               if (gapFrames === 0) {
                 underruns++;
-                bufferBoostFrames += 2048;
-                if (bufferBoostFrames > 16384) bufferBoostFrames = 16384;
+                bufferBoostFrames += BUFFER_BOOST_STEP;
+                if (bufferBoostFrames > BUFFER_BOOST_MAX)
+                  bufferBoostFrames = BUFFER_BOOST_MAX;
               }
               gapFrames++;
               if (gapFrames <= holdFrames) {
@@ -1032,12 +1091,15 @@
         function () {
           primeAudioGesture(ctx);
           markAudioReadyIfRunning();
-          if (state.audioReady) flushPendingPlays();
-          else
+          if (state.audioReady) {
+            /* Cut silence pre-buffered while suspended / warm-up. */
+            trimAudioLatency("unlock");
+            flushPendingPlays();
+          } else
             console.warn(
               "[sound_bus] ctx still " +
                 (ctx && ctx.state) +
-                " after resume â€” next tap will recreate"
+                " after resume — next tap will recreate"
             );
           return state;
         },
@@ -1054,6 +1116,44 @@
       primeHtmlMedia();
       if (state.audioCtx) primeAudioGesture(state.audioCtx);
     };
+
+    /* Background / screen-off suspends the context; on return Chrome often
+     * keeps a fat backlog until the user sleeps the tab (which recreates).
+     * Trim (or nuke if still suspended) so latency matches a warm session. */
+    if (!state._visibilityBound && typeof document !== "undefined") {
+      state._visibilityBound = 1;
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState !== "visible") return;
+        var ctx = state.audioCtx;
+        if (!ctx) return;
+        if (ctx.state === "running") {
+          trimAudioLatency("visibility");
+          return;
+        }
+        Promise.resolve()
+          .then(function () {
+            return ctx.state !== "running" ? ctx.resume() : null;
+          })
+          .then(function () {
+            if (ctx.state === "running") {
+              markAudioReadyIfRunning();
+              trimAudioLatency("visibility-resume");
+            } else {
+              console.warn(
+                "[sound_bus] visibility: still " +
+                  ctx.state +
+                  " — nuke for next gesture"
+              );
+              nukeAudioGraph();
+              state.audioStage = "waiting-gesture";
+            }
+          })
+          .catch(function () {
+            nukeAudioGraph();
+            state.audioStage = "waiting-gesture";
+          });
+      });
+    }
 
     state.stop = function () {
       if (state.worklet) {
