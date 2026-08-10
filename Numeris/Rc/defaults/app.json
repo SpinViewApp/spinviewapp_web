@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 21,
+"config_defaults_rev": 22,
 "mainpan": {
   "1": {
     "1": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 6
+                  "active": 7
                 }
               }
             }
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.767241,
+    "ratio": 0.389251,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -107,7 +107,7 @@
 "numeris": {
   "android_drag_lift_dpi_ratio": 0.152,
   "android_drag_lift_ease": 18,
-  "android_drag_lift_tiles": 0.867,
+  "android_drag_lift_px": 42,
   "auto_check_solver": true,
   "bank_hitbox_ratio": 2.006,
   "bg_color": {
@@ -480,8 +480,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 10,
-  "w": 120,
+  "h": 596,
+  "w": 647,
   "x": 0,
   "y": 0
 }
