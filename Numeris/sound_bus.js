@@ -177,8 +177,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr38";
-      else url += "&v=andr38";
+      if (url.indexOf("?") < 0) url += "?v=andr39";
+      else url += "&v=andr39";
       var worker;
       try {
         worker = new Worker(url);
@@ -364,7 +364,7 @@
     state._lastTrimMs = 0;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
-     * AudioContext (addModule is per-context â€” cleared too). */
+     * AudioContext (addModule is per-context — cleared too). */
     function nukeAudioGraph() {
       try {
         if (state.worklet) state.worklet.disconnect();
@@ -375,19 +375,114 @@
           state.scriptNode.disconnect();
         }
       } catch (e1) {}
+      try {
+        if (state.outputGain) state.outputGain.disconnect();
+      } catch (eOg) {}
       state.worklet = null;
       state.scriptNode = null;
+      state.outputGain = null;
       state.audioPort = null;
       state.audioReady = false;
       state._workletModuleReady = false;
       state._workletModulePromise = null;
       state._gesturePrimed = false;
+      state._outputFadedIn = 0;
       try {
         if (state.audioCtx && state.audioCtx.state !== "closed") state.audioCtx.close();
       } catch (e2) {}
       state.audioCtx = null;
       state.audioPath = "";
     }
+
+    /* Master gain before destination — mute soft on reload/teardown and hold
+     * silence until the PCM FIFO is primed (avoids first-tap underrun clicks). */
+    function ensureOutputGain(ctx) {
+      if (state.outputGain && state.outputGain.context === ctx) return state.outputGain;
+      var g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(ctx.destination);
+      state.outputGain = g;
+      state._outputFadedIn = 0;
+      state._warmupReadyCount = 0;
+      return g;
+    }
+
+    function connectAudioOut(node, ctx) {
+      if (!node || !ctx) return;
+      try {
+        node.disconnect();
+      } catch (e0) {}
+      node.connect(ensureOutputGain(ctx));
+    }
+
+    function fadeOutputIn(reason) {
+      var ctx = state.audioCtx;
+      var gNode = state.outputGain;
+      var g, t, dur;
+      if (!ctx || !gNode || state._outputFadedIn) return;
+      if (ctx.state !== "running") return;
+      state._outputFadedIn = 1;
+      g = gNode.gain;
+      t = ctx.currentTime;
+      dur = Math.max(0.05, state.unlockFadeSec > 0 ? state.unlockFadeSec : 0.07);
+      try {
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(0, t);
+        g.linearRampToValueAtTime(1, t + dur);
+      } catch (eFade) {
+        try {
+          g.value = 1;
+        } catch (e2) {}
+      }
+      try {
+        console.log("[sound_bus] output fade-in (" + (reason || "primed") + ")");
+      } catch (eLog) {}
+    }
+
+    function maybeReleaseWarmup(queued) {
+      var need = state.needFrames > 0 ? state.needFrames | 0 : 1024;
+      if (state._outputFadedIn) return;
+      if (!state.audioReady) return;
+      if ((queued | 0) < need) {
+        state._warmupReadyCount = 0;
+        return;
+      }
+      state._warmupReadyCount = (state._warmupReadyCount | 0) + 1;
+      /* Two consecutive healthy fills — avoids opening into a one-shot underrun. */
+      if (state._warmupReadyCount < 2) return;
+      fadeOutputIn("fifo-ready");
+    }
+
+    /* Reload / tab kill: hard-close pops. Mute gain FIRST (sync), never close()
+     * in the unload turn — the browser tears the graph after we're silent. */
+    function softMuteTeardown(reason) {
+      var ctx = state.audioCtx;
+      var gNode = state.outputGain;
+      if (state._tearingDown) return;
+      state._tearingDown = 1;
+      try {
+        if (state.worker) state.worker.postMessage({ type: "stop_all" });
+      } catch (e0) {}
+      try {
+        if (state.worklet && state.worklet.port)
+          state.worklet.port.postMessage({ type: "stop_all" });
+      } catch (e1) {}
+      try {
+        if (gNode && ctx) {
+          var g = gNode.gain;
+          var t = ctx.currentTime;
+          g.cancelScheduledValues(t);
+          g.setValueAtTime(0, t);
+        } else if (gNode) {
+          gNode.gain.value = 0;
+        }
+      } catch (e2) {}
+      state._outputFadedIn = 0;
+      try {
+        console.log("[sound_bus] soft mute teardown (" + (reason || "?") + ")");
+      } catch (e3) {}
+    }
+    state.softMuteTeardown = softMuteTeardown;
 
     function ensureAudioContext() {
       if (state.audioCtx) return state.audioCtx;
@@ -487,15 +582,17 @@
           state.stats.queuedFrames = msg.queuedFrames | 0;
           state.stats.voices = msg.voices | 0;
           state.stats.audioMode = msg.mode || (state.inlineSynth ? "inline" : "pcm");
+          maybeReleaseWarmup(msg.queuedFrames | 0);
           if (typeof opts.onAudioStats === "function") opts.onAudioStats(state, msg);
         }
       };
       if (state.inlineSynth) {
         node.port.postMessage({ type: "set-mode", mode: "inline" });
-        node.connect(ctx.destination);
+        connectAudioOut(node, ctx);
         state.worklet = node;
         state.audioPath = "worklet-inline";
         markAudioReadyIfRunning();
+        fadeOutputIn("inline");
         return;
       }
       var channel = new MessageChannel();
@@ -509,13 +606,13 @@
         },
         [channel.port2]
       );
-      node.connect(ctx.destination);
+      connectAudioOut(node, ctx);
       state.worklet = node;
       state.audioPath = "worklet-pcm";
       markAudioReadyIfRunning();
     }
 
-    /* Prefetch worklet SOURCE only. Do NOT addModule on a suspended context â€”
+    /* Prefetch worklet SOURCE only. Do NOT addModule on a suspended context —
      * Chrome Android can hang addModule for seconds until/after resume, and
      * unlock was awaiting that same hung promise (~4s silence after tap). */
     function prefetchWorkletSource() {
@@ -909,9 +1006,10 @@
         state.stats.underruns = underruns;
         state.stats.queuedFrames = queuedFrames | 0;
         state.stats.bufferBoostFrames = bufferBoostFrames | 0;
+        maybeReleaseWarmup(queuedFrames | 0);
         requestFill(true);
       };
-      sp.connect(ctx.destination);
+      sp.connect(ensureOutputGain(ctx));
       state.scriptNode = sp;
       state.audioPath = "script-pcm";
       markAudioReadyIfRunning();
@@ -961,16 +1059,18 @@
           state.stats.queuedFrames = msg.queuedFrames | 0;
           state.stats.voices = msg.voices | 0;
           state.stats.audioMode = msg.mode || (state.inlineSynth ? "inline" : "pcm");
+          maybeReleaseWarmup(msg.queuedFrames | 0);
           if (typeof opts.onAudioStats === "function") opts.onAudioStats(state, msg);
         }
       };
 
       if (state.inlineSynth) {
         node.port.postMessage({ type: "set-mode", mode: "inline" });
-        node.connect(ctx.destination);
+        connectAudioOut(node, ctx);
         state.worklet = node;
         state.audioPath = "worklet-inline";
         markAudioReadyIfRunning();
+        fadeOutputIn("inline");
         return;
       }
 
@@ -986,7 +1086,7 @@
         [channel.port2]
       );
 
-      node.connect(ctx.destination);
+      connectAudioOut(node, ctx);
       state.worklet = node;
       state.audioPath = "worklet-pcm";
       markAudioReadyIfRunning();
@@ -1000,6 +1100,7 @@
         state.audioStage = "error";
         return Promise.reject(new Error(state.error));
       }
+      state._tearingDown = 0;
       if (!state._unlockStarted) state._unlockStarted = true;
       state._unlockAttempts++;
 
@@ -1163,6 +1264,22 @@
     if (!state._visibilityBound && typeof document !== "undefined") {
       state._visibilityBound = 1;
       document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") {
+          /* Don't fully tear down on background — just mute to avoid pagehide pop
+           * races. Gain restores on next unlock/fifo-ready. */
+          try {
+            if (state.outputGain) {
+              var ctxH = state.audioCtx;
+              var g = state.outputGain.gain;
+              if (ctxH) {
+                g.cancelScheduledValues(ctxH.currentTime);
+                g.setValueAtTime(0, ctxH.currentTime);
+              } else g.value = 0;
+            }
+            state._outputFadedIn = 0;
+          } catch (eHide) {}
+          return;
+        }
         if (document.visibilityState !== "visible") return;
         var ctx = state.audioCtx;
         if (!ctx) return;
@@ -1195,7 +1312,17 @@
       });
     }
 
+    if (!state._unloadBound && typeof window !== "undefined") {
+      state._unloadBound = 1;
+      var onLeave = function () {
+        softMuteTeardown("pagehide");
+      };
+      window.addEventListener("pagehide", onLeave, true);
+      window.addEventListener("beforeunload", onLeave);
+    }
+
     state.stop = function () {
+      softMuteTeardown("stop");
       if (state.worklet) {
         try {
           state.worklet.disconnect();
@@ -1209,6 +1336,10 @@
         state.scriptNode.onaudioprocess = null;
         state.scriptNode = null;
       }
+      try {
+        if (state.outputGain) state.outputGain.disconnect();
+      } catch (eOg) {}
+      state.outputGain = null;
       state.audioPort = null;
       if (state.audioCtx) {
         try {
