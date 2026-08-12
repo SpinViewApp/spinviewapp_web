@@ -1,7 +1,0 @@
-{
-  "elements": [
-    { "type": "numeris_user_brain" },
-    { "type": "separator" },
-    { "type": "numeris_message_tests" }
-  ]
-}
