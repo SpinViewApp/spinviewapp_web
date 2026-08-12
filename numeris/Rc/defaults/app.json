@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 43,
+"config_defaults_rev": 44,
 "mainpan": {
   "1": {
     "1": {
@@ -409,7 +409,7 @@
     "a": 1,
     "b": 1,
     "g": 1,
-    "r": 2
+    "r": 0
   },
   "sht_fractal_v9": {
     "a": 0.631198,
@@ -461,7 +461,7 @@
   "sht_place_twist_success": 1.45,
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
-  "sht_render_scale": 1,
+  "sht_render_scale": 2,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
@@ -494,8 +494,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 618,
-  "w": 827,
+  "h": 10,
+  "w": 120,
   "x": 0,
   "y": 0
 }
