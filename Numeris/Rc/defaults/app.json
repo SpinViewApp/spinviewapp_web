@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 31,
+"config_defaults_rev": 34,
 "mainpan": {
   "1": {
     "1": {
@@ -35,7 +35,7 @@
   },
   "2": {
     "1": {
-      "active_tab": 1,
+      "active_tab": 2,
       "ratio": 0,
       "s0": {
         "app": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 16
+                  "active": 14
                 }
               }
             }
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.67096,
+    "ratio": 0.317752,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -322,6 +322,11 @@
   "reward_glow_strength": 0.72,
   "reward_scale": 1.18,
   "reward_tilt_deg": 7,
+  "sfx_enabled": true,
+  "sfx_vol_0": 1,
+  "sfx_vol_1": 1,
+  "sfx_vol_2": 1,
+  "sfx_vol_3": 0.65,
   "show_eq_debug": false,
   "show_hitbox": false,
   "show_pan_limit": false,
@@ -450,6 +455,8 @@
   "sht_place_twist_return": 7.5,
   "sht_place_twist_success": 1.45,
   "sht_place_twist_warning": 1.62,
+  "sht_quality_hud": true,
+  "sht_render_scale": 1,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,

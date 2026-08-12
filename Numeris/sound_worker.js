@@ -1421,6 +1421,16 @@
         postMessage({ type: "stopped_all" });
         return;
       }
+      if (type === "shutdown_soft") {
+        /* Window close: stop synth + pump but never hard-flush the worklet
+         * FIFO — the bus master fade handles audibility. */
+        pendingPlays.length = 0;
+        running = false;
+        clearAudioPump();
+        if (typeof SoundWorkerSsound !== "undefined") SoundWorkerSsound.stopAll();
+        postMessage({ type: "shutdown_soft" });
+        return;
+      }
       if (type === "trim_latency") {
         /* Drop FIFO silence backlog after unlock / visibility resume.
          * Soft: only when deep, then pad with ~14 ms silence + mild refill so
@@ -1445,7 +1455,7 @@
             });
             noteQueued(pad);
           } catch (ePad) {}
-          if (synthReady) fillToTarget(needFrames > 0 ? needFrames : 1024);
+          if (synthReady) fillToTarget(needFrames > 0 ? needFrames : 768);
         }
         return;
       }

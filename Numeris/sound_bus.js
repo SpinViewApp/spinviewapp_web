@@ -136,8 +136,8 @@
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 1024,
       /* Look-ahead FIFO. Mobile keeps a deeper cushion (GL/ScriptProcessor hitches).
        * Desktop stays short so SFX are not buried behind ~170–250 ms of silence. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 6144 : 2048),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 2048 : 1024),
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 4608 : 1536),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 768),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
@@ -177,8 +177,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr40";
-      else url += "&v=andr40";
+      if (url.indexOf("?") < 0) url += "?v=andr44";
+      else url += "&v=andr44";
       var worker;
       try {
         worker = new Worker(url);
@@ -315,11 +315,11 @@
     /* Soften / drop PCM backlog that built while suspended.
      * "unlock"/"gesture": prefer fade+silence — a hard flush clicks on first tap.
      * "visibility": allow a full flush when the queue is deep. */
-    function trimAudioLatency(reason) {
+    function trimAudioLatency(reason, forceHard) {
       var why = reason || "trim";
-      /* Soft only for mid-session visibility when queue is short. Unlock / open
-       * must always flatten or Android worklet warm-up boost sticks as latency. */
-      var soft = why.indexOf("visibility") === 0;
+      /* Soft only when explicitly requested. Unlock / background / resume must
+       * hard-flush or Android worklet warm-up boost sticks as latency. */
+      var soft = !forceHard && why === "visibility-soft";
       var now =
         typeof performance !== "undefined" && performance.now
           ? performance.now()
@@ -367,6 +367,103 @@
     }
     state.trimAudioLatency = trimAudioLatency;
     state._lastTrimMs = 0;
+    state._outputAllowed = 1;
+    state._backgroundMuted = 0;
+    state._unlockFadePending = 0;
+
+    function isPageAudible() {
+      /* Visibility only — document.hasFocus() is false during the tiny
+       * bootstrap window / some WebViews and was killing polyphony early. */
+      if (typeof document === "undefined") return true;
+      if (document.visibilityState === "hidden") return false;
+      return true;
+    }
+
+    function muteOutputNow() {
+      try {
+        if (state.outputGain && state.audioCtx) {
+          var g = state.outputGain.gain;
+          var t = state.audioCtx.currentTime;
+          g.cancelScheduledValues(t);
+          g.setValueAtTime(0, t);
+        } else if (state.outputGain) state.outputGain.gain.value = 0;
+      } catch (eG) {}
+      state._outputFadedIn = 0;
+    }
+
+    function pauseForBackground(reason) {
+      if (state._backgroundMuted) return;
+      state._backgroundMuted = 1;
+      state._outputAllowed = 0;
+      state._unlockFadePending = 0;
+      state._warmupReadyCount = 0;
+      muteOutputNow();
+      /* Hard stop only on real hide — blur alone must not wipe a chord. */
+      try {
+        if (typeof state.stopAll === "function") state.stopAll();
+      } catch (eSa) {}
+      trimAudioLatency(reason || "background", true);
+      try {
+        if (state._pendingPlays) state._pendingPlays.length = 0;
+      } catch (eP) {}
+      try {
+        var ctxP = state.audioCtx;
+        if (ctxP && ctxP.state === "running") ctxP.suspend();
+      } catch (eSus) {}
+      try {
+        console.log("[sound_bus] paused for background (" + (reason || "?") + ")");
+      } catch (eLog) {}
+    }
+
+    state.isOutputAudible = function () {
+      var ctx = state.audioCtx;
+      return !!(
+        state.audioReady &&
+        state._outputFadedIn &&
+        state._outputAllowed &&
+        !state._backgroundMuted &&
+        ctx &&
+        ctx.state === "running"
+      );
+    };
+
+    function resumeFromForeground(reason) {
+      if (!state._backgroundMuted) return;
+      if (!isPageAudible()) return;
+      state._backgroundMuted = 0;
+      state._outputAllowed = 1;
+      state._outputFadedIn = 0;
+      state._warmupReadyCount = 0;
+      var ctx = state.audioCtx;
+      if (!ctx) return;
+      Promise.resolve()
+        .then(function () {
+          return ctx.state !== "running" ? ctx.resume() : null;
+        })
+        .then(function () {
+          if (ctx.state !== "running") {
+            console.warn(
+              "[sound_bus] foreground: still " + ctx.state + " — nuke for next gesture"
+            );
+            nukeAudioGraph();
+            state.audioStage = "waiting-gesture";
+            return;
+          }
+          markAudioReadyIfRunning();
+          trimAudioLatency(reason || "foreground", true);
+        })
+        .catch(function () {
+          nukeAudioGraph();
+          state.audioStage = "waiting-gesture";
+        });
+    }
+
+    function syncPageAudible(trigger) {
+      if (isPageAudible()) resumeFromForeground(trigger || "sync");
+      else pauseForBackground(trigger || "sync");
+    }
+
+    state.isPageAudible = isPageAudible;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
      * AudioContext (addModule is per-context — cleared too). */
@@ -465,35 +562,158 @@
     }
 
     function maybeReleaseWarmup(queued) {
-      var need = state.needFrames > 0 ? state.needFrames | 0 : 1024;
+      var need = state.needFrames > 0 ? state.needFrames | 0 : 768;
       if (state._outputFadedIn) return;
       if (!state.audioReady) return;
+      if (state._backgroundMuted || !state._outputAllowed) return;
       if ((queued | 0) < need) {
         state._warmupReadyCount = 0;
         return;
       }
       state._warmupReadyCount = (state._warmupReadyCount | 0) + 1;
-      if (state._warmupReadyCount === 2) {
+      var required = state._unlockFadePending ? 1 : 2;
+      if (state._warmupReadyCount === 1 && required > 1) {
         flattenLatencyBeforeOpen("pre-fade");
         return; /* wait one more healthy fill after flatten */
       }
-      if (state._warmupReadyCount < 3) return;
+      if (state._warmupReadyCount < required) return;
+      state._unlockFadePending = 0;
       fadeOutputIn("fifo-ready");
     }
 
     /* Reload / tab kill: hard-close pops. Mute + disconnect sinks FIRST. */
-    function softMuteTeardown(reason) {
+    function fadeOutputOut(reason, durSec, done) {
       var ctx = state.audioCtx;
       var gNode = state.outputGain;
+      var dur = durSec > 0 ? durSec : 0.20;
+      if (!ctx || !gNode || ctx.state !== "running") {
+        if (done) done();
+        return dur;
+      }
+      state._outputFadedIn = 0;
+      var g = gNode.gain;
+      var t = ctx.currentTime;
+      try {
+        var cur = g.value;
+        if (cur < 0.0001) cur = 0.0001;
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(cur, t);
+        /* Exponential decay — smoother than linear for shutdown. */
+        g.exponentialRampToValueAtTime(0.0001, t + dur);
+      } catch (eFade) {
+        try {
+          g.linearRampToValueAtTime(0, t + dur);
+        } catch (eLin) {
+          try {
+            g.value = 0;
+          } catch (e2) {}
+        }
+      }
+      try {
+        console.log("[sound_bus] output fade-out (" + (reason || "shutdown") + ")");
+      } catch (eLog) {}
+      if (done) setTimeout(done, (dur * 1000 + 40) | 0);
+      return dur;
+    }
+
+    function stopWorkerPumpSoft() {
+      try {
+        if (state.worker) state.worker.postMessage({ type: "shutdown_soft" });
+      } catch (e0) {}
+    }
+
+    function beginGracefulShutdown(reason) {
+      if (state._tearingDown || state._shutdownBegun) return 0;
+      state._shutdownBegun = 1;
+      state._outputAllowed = 0;
+      state._unlockFadePending = 0;
+      try {
+        if (state._pendingPlays) state._pendingPlays.length = 0;
+      } catch (eP) {}
+      /* Do NOT stop_all / flush here — that clicks while gain is still up. */
+      return fadeOutputOut(reason || "shutdown", 0.20, null);
+    }
+
+    function finishGracefulShutdown(reason) {
+      if (state._tearingDown) return;
+      stopWorkerPumpSoft();
+      var ctx = state.audioCtx;
+      var detach = function () {
+        softMuteTeardown(reason || "shutdown", { gentle: true });
+      };
+      if (ctx && ctx.state === "running") {
+        Promise.resolve(ctx.suspend())
+          .then(detach)
+          .catch(detach);
+      } else detach();
+    }
+
+    function gracefulTeardown(reason) {
+      var dur = beginGracefulShutdown(reason);
+      setTimeout(function () {
+        finishGracefulShutdown(reason || "shutdown");
+      }, ((dur > 0 ? dur : 0.20) * 1000 + 50) | 0);
+    }
+
+    function gracefulTeardownSync(reason) {
+      var dur = beginGracefulShutdown(reason);
+      var waitMs = ((dur > 0 ? dur : 0.20) * 1000 + 60) | 0;
+      var deadline =
+        (typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now()) + waitMs;
+      while (
+        (typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now()) < deadline
+      ) {}
+      var ctx = state.audioCtx;
+      if (ctx && ctx.state === "running") {
+        try {
+          /* Best-effort sync suspend before detach (shutdown path only). */
+          var sus = ctx.suspend();
+          if (sus && typeof sus.then === "function") {
+            var done = false;
+            sus.then(function () {
+              done = true;
+            });
+            var t1 =
+              (typeof performance !== "undefined" && performance.now
+                ? performance.now()
+                : Date.now()) + 40;
+            while (
+              !done &&
+              (typeof performance !== "undefined" && performance.now
+                ? performance.now()
+                : Date.now()) < t1
+            ) {}
+          }
+        } catch (eSus) {}
+      }
+      stopWorkerPumpSoft();
+      softMuteTeardown(reason || "shutdown", { gentle: true });
+    }
+
+    state.beginGracefulShutdown = beginGracefulShutdown;
+    state.finishGracefulShutdown = finishGracefulShutdown;
+    state.gracefulTeardown = gracefulTeardown;
+    state.gracefulTeardownSync = gracefulTeardownSync;
+
+    function softMuteTeardown(reason, opts) {
+      var ctx = state.audioCtx;
+      var gNode = state.outputGain;
+      opts = opts || {};
       if (state._tearingDown) return;
       state._tearingDown = 1;
-      try {
-        if (state.worker) state.worker.postMessage({ type: "stop_all" });
-      } catch (e0) {}
-      try {
-        if (state.worklet && state.worklet.port)
-          state.worklet.port.postMessage({ type: "stop_all" });
-      } catch (e1) {}
+      if (!opts.gentle) {
+        try {
+          if (state.worker) state.worker.postMessage({ type: "stop_all" });
+        } catch (e0) {}
+        try {
+          if (state.worklet && state.worklet.port)
+            state.worklet.port.postMessage({ type: "stop_all" });
+        } catch (e1) {}
+      }
       try {
         if (state._silentAudio) {
           state._silentAudio.pause();
@@ -505,8 +725,11 @@
         if (gNode && ctx) {
           var g = gNode.gain;
           var t = ctx.currentTime;
-          g.cancelScheduledValues(t);
-          g.setValueAtTime(0, t);
+          if (opts.gentle) g.setValueAtTime(0, t);
+          else {
+            g.cancelScheduledValues(t);
+            g.setValueAtTime(0, t);
+          }
         } else if (gNode) {
           gNode.gain.value = 0;
         }
@@ -798,6 +1021,8 @@
     }
 
     state.play = function (desc) {
+      /* Drop SFX while tab/window is inactive — avoids ghost glitches on return. */
+      if (state._backgroundMuted) return 0;
       /* Start instruments even before AudioContext unlock â€” worker advances
        * voice clocks silently; unlock fade-in avoids a hard onset. */
       if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
@@ -1289,7 +1514,11 @@
           markAudioReadyIfRunning();
           if (state.audioReady) {
             /* Cut silence pre-buffered while suspended / warm-up. */
-            trimAudioLatency("unlock");
+            state._outputFadedIn = 0;
+            state._warmupReadyCount = 0;
+            state._unlockFadePending = 1;
+            trimAudioLatency("unlock", true);
+            flattenLatencyBeforeOpen("unlock");
             flushPendingPlays();
           } else
             console.warn(
@@ -1319,58 +1548,37 @@
     if (!state._visibilityBound && typeof document !== "undefined") {
       state._visibilityBound = 1;
       document.addEventListener("visibilitychange", function () {
-        if (document.visibilityState === "hidden") {
-          /* Don't fully tear down on background — just mute to avoid pagehide pop
-           * races. Gain restores on next unlock/fifo-ready. */
-          try {
-            if (state.outputGain) {
-              var ctxH = state.audioCtx;
-              var g = state.outputGain.gain;
-              if (ctxH) {
-                g.cancelScheduledValues(ctxH.currentTime);
-                g.setValueAtTime(0, ctxH.currentTime);
-              } else g.value = 0;
-            }
-            state._outputFadedIn = 0;
-          } catch (eHide) {}
+        syncPageAudible("visibility");
+      });
+    }
+
+    if (!state._focusBound && typeof window !== "undefined") {
+      state._focusBound = 1;
+      /* Soft mute on blur only — do not stop voices / suspend (startup focus
+       * flicker was leaving a single leftover note of the beat). */
+      window.addEventListener("blur", function () {
+        if (document.visibilityState === "hidden") return;
+        state._outputAllowed = 0;
+        muteOutputNow();
+      });
+      window.addEventListener("focus", function () {
+        if (document.visibilityState === "hidden") return;
+        if (state._backgroundMuted) {
+          syncPageAudible("focus");
           return;
         }
-        if (document.visibilityState !== "visible") return;
-        var ctx = state.audioCtx;
-        if (!ctx) return;
-        if (ctx.state === "running") {
-          trimAudioLatency("visibility");
-          return;
-        }
-        Promise.resolve()
-          .then(function () {
-            return ctx.state !== "running" ? ctx.resume() : null;
-          })
-          .then(function () {
-            if (ctx.state === "running") {
-              markAudioReadyIfRunning();
-              trimAudioLatency("visibility-resume");
-            } else {
-              console.warn(
-                "[sound_bus] visibility: still " +
-                  ctx.state +
-                  " — nuke for next gesture"
-              );
-              nukeAudioGraph();
-              state.audioStage = "waiting-gesture";
-            }
-          })
-          .catch(function () {
-            nukeAudioGraph();
-            state.audioStage = "waiting-gesture";
-          });
+        state._outputAllowed = 1;
+        state._warmupReadyCount = 0;
+        /* Fade back in on next healthy FIFO fill. */
+        state._outputFadedIn = 0;
+        state._unlockFadePending = 1;
       });
     }
 
     if (!state._unloadBound && typeof window !== "undefined") {
       state._unloadBound = 1;
       var onLeave = function () {
-        softMuteTeardown("pagehide");
+        gracefulTeardown("pagehide");
       };
       /* Capture early — Android Chrome reload can kill audio mid-handler. */
       window.addEventListener("pagehide", onLeave, true);
@@ -1379,7 +1587,7 @@
     }
 
     state.stop = function () {
-      softMuteTeardown("stop");
+      gracefulTeardownSync("stop");
       if (state.worklet) {
         try {
           state.worklet.disconnect();
