@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 41,
+"config_defaults_rev": 43,
 "mainpan": {
   "1": {
     "1": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 14
+                  "active": 17
                 }
               }
             }
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.233718,
+    "ratio": 0.389642,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 618,
+  "campaign_depth": 617,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -276,7 +276,7 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 621,
+  "level_index": 620,
   "level_seed": -764636868,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
@@ -334,6 +334,8 @@
   "show_hitbox": false,
   "show_pan_limit": false,
   "sht_animate": true,
+  "sht_bg_idle_ease": 3.4,
+  "sht_bg_idle_speed": 0.035,
   "sht_custom_time": 0,
   "sht_depth_fog": 1.939,
   "sht_depth_fog_color": {
@@ -492,8 +494,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 1032,
-  "w": 1920,
+  "h": 618,
+  "w": 827,
   "x": 0,
   "y": 0
 }
