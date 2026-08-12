@@ -574,6 +574,10 @@
       if (state._backgroundMuted || state._backgroundPausing) return true;
       /* Blur / soft mute: audio is fading out — slow the fractal clock too. */
       if (state.audioReady && state._outputFadedIn && !state._outputAllowed) return true;
+      /* Desktop web: tab visible but window lost focus. */
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        if (typeof document.hasFocus === "function" && !document.hasFocus()) return true;
+      }
       return false;
     }
 
