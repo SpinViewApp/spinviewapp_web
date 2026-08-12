@@ -10,7 +10,9 @@
     "pane/options.pane",
     "layout/layout.json",
     "Rc/font/legacy_clean.sdffont.json",
-    "Rc/defaults/app.json"
+    "Rc/defaults/app.json",
+    "Rc/localization/en.json",
+    "Rc/localization/fr.json"
   ];
 
   function ensureDir(path) {

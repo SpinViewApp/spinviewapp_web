@@ -177,8 +177,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr44";
-      else url += "&v=andr44";
+      if (url.indexOf("?") < 0) url += "?v=andr48";
+      else url += "&v=andr48";
       var worker;
       try {
         worker = new Worker(url);
@@ -369,7 +369,27 @@
     state._lastTrimMs = 0;
     state._outputAllowed = 1;
     state._backgroundMuted = 0;
+    state._backgroundPausing = 0;
+    state._backgroundFadeTimer = 0;
     state._unlockFadePending = 0;
+
+    /* Desktop can wait for timers. Phone lock/screen-off freezes JS almost
+     * immediately — any setTimeout fade is cut mid-way → pop. Mobile uses a
+     * short AudioContext ramp + busy-wait so the audio thread finishes first. */
+    var BACKGROUND_FADE_SEC = state.mobile ? 0.055 : 0.10;
+    var BLUR_FADE_SEC = state.mobile ? 0.04 : 0.06;
+    var PHONE_LOCK_FADE_SEC = 0.055;
+
+    function nowMs() {
+      return typeof performance !== "undefined" && performance.now
+        ? performance.now()
+        : Date.now();
+    }
+
+    function busyWaitMs(ms) {
+      var end = nowMs() + (ms > 0 ? ms : 0);
+      while (nowMs() < end) {}
+    }
 
     function isPageAudible() {
       /* Visibility only — document.hasFocus() is false during the tiny
@@ -377,6 +397,14 @@
       if (typeof document === "undefined") return true;
       if (document.visibilityState === "hidden") return false;
       return true;
+    }
+
+    function cancelBackgroundPause() {
+      if (state._backgroundFadeTimer) {
+        clearTimeout(state._backgroundFadeTimer);
+        state._backgroundFadeTimer = 0;
+      }
+      state._backgroundPausing = 0;
     }
 
     function muteOutputNow() {
@@ -391,18 +419,13 @@
       state._outputFadedIn = 0;
     }
 
-    function pauseForBackground(reason) {
-      if (state._backgroundMuted) return;
+    function finishBackgroundMute(reason) {
+      state._backgroundFadeTimer = 0;
+      state._backgroundPausing = 0;
+      if (state._shutdownBegun || state._tearingDown) return;
+      if (isPageAudible() && reason !== "interrupted") return;
       state._backgroundMuted = 1;
-      state._outputAllowed = 0;
-      state._unlockFadePending = 0;
-      state._warmupReadyCount = 0;
-      muteOutputNow();
-      /* Hard stop only on real hide — blur alone must not wipe a chord. */
-      try {
-        if (typeof state.stopAll === "function") state.stopAll();
-      } catch (eSa) {}
-      trimAudioLatency(reason || "background", true);
+      stopWorkerPumpSoft();
       try {
         if (state._pendingPlays) state._pendingPlays.length = 0;
       } catch (eP) {}
@@ -415,6 +438,44 @@
       } catch (eLog) {}
     }
 
+    function pauseForBackground(reason) {
+      if (state._backgroundMuted || state._backgroundPausing) return;
+      if (state._shutdownBegun || state._tearingDown) return;
+      cancelBackgroundPause();
+      state._backgroundPausing = 1;
+      state._outputAllowed = 0;
+      state._unlockFadePending = 0;
+      state._warmupReadyCount = 0;
+      var fadeSec =
+        state.mobile || reason === "interrupted" || reason === "freeze"
+          ? PHONE_LOCK_FADE_SEC
+          : BACKGROUND_FADE_SEC;
+      /* Fade first — instant mute + FIFO flush clicks on tab/page change. */
+      var dur = fadeOutputOut(reason || "background", fadeSec, null);
+      var waitMs = ((dur > 0 ? dur : fadeSec) * 1000 + 20) | 0;
+      /* Phone lock: timers die; busy-wait so the audio thread plays the ramp
+       * before suspend. Short (~55–75 ms) — better than a pop. */
+      if (state.mobile || reason === "interrupted" || reason === "freeze") {
+        busyWaitMs(waitMs);
+        muteOutputNow();
+        finishBackgroundMute(reason || "background");
+        return;
+      }
+      state._backgroundFadeTimer = setTimeout(function () {
+        finishBackgroundMute(reason || "background");
+      }, waitMs);
+    }
+
+    function fadeOutputIfAudible(reason, durSec) {
+      var ctx = state.audioCtx;
+      if (!ctx || ctx.state !== "running" || !state.outputGain) return 0;
+      if (state._backgroundMuted || state._shutdownBegun || state._tearingDown) return 0;
+      try {
+        if (state.outputGain.gain.value < 0.001) return 0;
+      } catch (eV) {}
+      return fadeOutputOut(reason || "blur", durSec > 0 ? durSec : BLUR_FADE_SEC, null);
+    }
+
     state.isOutputAudible = function () {
       var ctx = state.audioCtx;
       return !!(
@@ -422,18 +483,22 @@
         state._outputFadedIn &&
         state._outputAllowed &&
         !state._backgroundMuted &&
+        !state._backgroundPausing &&
         ctx &&
         ctx.state === "running"
       );
     };
 
     function resumeFromForeground(reason) {
-      if (!state._backgroundMuted) return;
-      if (!isPageAudible()) return;
+      cancelBackgroundPause();
+      var wasMuted = state._backgroundMuted;
       state._backgroundMuted = 0;
+      state._backgroundPausing = 0;
+      if (!isPageAudible()) return;
       state._outputAllowed = 1;
       state._outputFadedIn = 0;
       state._warmupReadyCount = 0;
+      state._unlockFadePending = 1;
       var ctx = state.audioCtx;
       if (!ctx) return;
       Promise.resolve()
@@ -450,7 +515,7 @@
             return;
           }
           markAudioReadyIfRunning();
-          trimAudioLatency(reason || "foreground", true);
+          if (wasMuted) trimAudioLatency(reason || "foreground", true);
         })
         .catch(function () {
           nukeAudioGraph();
@@ -464,6 +529,16 @@
     }
 
     state.isPageAudible = isPageAudible;
+
+    function isBackgroundInactive() {
+      if (!isPageAudible()) return true;
+      if (state._backgroundMuted || state._backgroundPausing) return true;
+      /* Blur / soft mute: audio is fading out — slow the fractal clock too. */
+      if (state.audioReady && state._outputFadedIn && !state._outputAllowed) return true;
+      return false;
+    }
+
+    state.isBackgroundInactive = isBackgroundInactive;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
      * AudioContext (addModule is per-context — cleared too). */
@@ -565,7 +640,7 @@
       var need = state.needFrames > 0 ? state.needFrames | 0 : 768;
       if (state._outputFadedIn) return;
       if (!state.audioReady) return;
-      if (state._backgroundMuted || !state._outputAllowed) return;
+      if (state._backgroundMuted || state._backgroundPausing || !state._outputAllowed) return;
       if ((queued | 0) < need) {
         state._warmupReadyCount = 0;
         return;
@@ -630,8 +705,10 @@
       try {
         if (state._pendingPlays) state._pendingPlays.length = 0;
       } catch (eP) {}
-      /* Do NOT stop_all / flush here — that clicks while gain is still up. */
-      return fadeOutputOut(reason || "shutdown", 0.20, null);
+      /* Do NOT stop_all / flush here — that clicks while gain is still up.
+       * Mobile pagehide/lock: keep fade short so busy-wait can finish. */
+      var fadeSec = state.mobile ? PHONE_LOCK_FADE_SEC : 0.20;
+      return fadeOutputOut(reason || "shutdown", fadeSec, null);
     }
 
     function finishGracefulShutdown(reason) {
@@ -649,6 +726,11 @@
     }
 
     function gracefulTeardown(reason) {
+      /* Phone navigation/lock: async finish never runs — go sync. */
+      if (state.mobile) {
+        gracefulTeardownSync(reason);
+        return;
+      }
       var dur = beginGracefulShutdown(reason);
       setTimeout(function () {
         finishGracefulShutdown(reason || "shutdown");
@@ -657,36 +739,21 @@
 
     function gracefulTeardownSync(reason) {
       var dur = beginGracefulShutdown(reason);
-      var waitMs = ((dur > 0 ? dur : 0.20) * 1000 + 60) | 0;
-      var deadline =
-        (typeof performance !== "undefined" && performance.now
-          ? performance.now()
-          : Date.now()) + waitMs;
-      while (
-        (typeof performance !== "undefined" && performance.now
-          ? performance.now()
-          : Date.now()) < deadline
-      ) {}
+      var waitMs = ((dur > 0 ? dur : PHONE_LOCK_FADE_SEC) * 1000 + 25) | 0;
+      if (waitMs > 90) waitMs = 90; /* keep phone-lock path short */
+      busyWaitMs(waitMs);
+      muteOutputNow();
       var ctx = state.audioCtx;
       if (ctx && ctx.state === "running") {
         try {
-          /* Best-effort sync suspend before detach (shutdown path only). */
           var sus = ctx.suspend();
           if (sus && typeof sus.then === "function") {
             var done = false;
             sus.then(function () {
               done = true;
             });
-            var t1 =
-              (typeof performance !== "undefined" && performance.now
-                ? performance.now()
-                : Date.now()) + 40;
-            while (
-              !done &&
-              (typeof performance !== "undefined" && performance.now
-                ? performance.now()
-                : Date.now()) < t1
-            ) {}
+            busyWaitMs(30);
+            void done;
           }
         } catch (eSus) {}
       }
@@ -774,6 +841,8 @@
       state.audioCtx = ctx;
       state.sampleRate = ctx.sampleRate | 0;
       refreshConvertPath();
+      if (typeof state._bindAudioCtxLifecycle === "function")
+        state._bindAudioCtxLifecycle(ctx);
       try {
         if (typeof Module !== "undefined" && Module.sound_worker_proto) {
           var stHud = Module.sound_worker_proto;
@@ -1022,7 +1091,7 @@
 
     state.play = function (desc) {
       /* Drop SFX while tab/window is inactive — avoids ghost glitches on return. */
-      if (state._backgroundMuted) return 0;
+      if (state._backgroundMuted || state._backgroundPausing) return 0;
       /* Start instruments even before AudioContext unlock â€” worker advances
        * voice clocks silently; unlock fade-in avoids a hard onset. */
       if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
@@ -1548,8 +1617,9 @@
     if (!state._visibilityBound && typeof document !== "undefined") {
       state._visibilityBound = 1;
       document.addEventListener("visibilitychange", function () {
+        /* Capture: phone lock fires this then freezes JS — handle ASAP. */
         syncPageAudible("visibility");
-      });
+      }, true);
     }
 
     if (!state._focusBound && typeof window !== "undefined") {
@@ -1559,31 +1629,62 @@
       window.addEventListener("blur", function () {
         if (document.visibilityState === "hidden") return;
         state._outputAllowed = 0;
-        muteOutputNow();
+        /* Soft duck only — visibility/interrupted handle phone lock sync fade. */
+        fadeOutputIfAudible("blur", BLUR_FADE_SEC);
       });
       window.addEventListener("focus", function () {
         if (document.visibilityState === "hidden") return;
+        cancelBackgroundPause();
         if (state._backgroundMuted) {
           syncPageAudible("focus");
           return;
         }
         state._outputAllowed = 1;
         state._warmupReadyCount = 0;
-        /* Fade back in on next healthy FIFO fill. */
         state._outputFadedIn = 0;
         state._unlockFadePending = 1;
       });
     }
 
+    if (!state._freezeBound && typeof document !== "undefined") {
+      state._freezeBound = 1;
+      /* bfcache / back-forward / phone freeze */
+      window.addEventListener("freeze", function () {
+        pauseForBackground("freeze");
+      }, true);
+    }
+
+    /* iOS / some Android: AudioContext → interrupted on screen lock. */
+    function bindAudioCtxLifecycle(ctx) {
+      if (!ctx || ctx._numerisLifecycleBound) return;
+      ctx._numerisLifecycleBound = 1;
+      try {
+        ctx.addEventListener("statechange", function () {
+          var st = ctx.state;
+          if (st === "interrupted" || st === "suspended") {
+            if (!state._backgroundMuted && !state._shutdownBegun)
+              pauseForBackground(st === "interrupted" ? "interrupted" : "ctx-suspended");
+          }
+        });
+      } catch (eLc) {}
+    }
+    state._bindAudioCtxLifecycle = bindAudioCtxLifecycle;
+    if (state.audioCtx) bindAudioCtxLifecycle(state.audioCtx);
+
     if (!state._unloadBound && typeof window !== "undefined") {
       state._unloadBound = 1;
       var onLeave = function () {
-        gracefulTeardown("pagehide");
+        cancelBackgroundPause();
+        /* Mobile: sync fade — setTimeout finish never runs on lock/kill. */
+        if (state.mobile) gracefulTeardownSync("pagehide");
+        else gracefulTeardown("pagehide");
       };
       /* Capture early — Android Chrome reload can kill audio mid-handler. */
       window.addEventListener("pagehide", onLeave, true);
       window.addEventListener("beforeunload", onLeave, true);
       document.addEventListener("pagehide", onLeave, true);
+      /* Android Chrome sometimes only fires this on screen off. */
+      window.addEventListener("unload", onLeave, true);
     }
 
     state.stop = function () {

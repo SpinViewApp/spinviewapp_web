@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 34,
+"config_defaults_rev": 37,
 "mainpan": {
   "1": {
     "1": {
@@ -35,7 +35,7 @@
   },
   "2": {
     "1": {
-      "active_tab": 2,
+      "active_tab": 1,
       "ratio": 0,
       "s0": {
         "app": {
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.317752,
+    "ratio": 0.233718,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -116,7 +116,8 @@
     "g": 0.07,
     "r": 0.05
   },
-  "campaign_depth": 617,
+  "bg_tweets_enabled": false,
+  "campaign_depth": 618,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -234,6 +235,7 @@
   "echo_delay_ms": 80,
   "echo_feedback": 0.4,
   "echo_mix": 0.3,
+  "full_framerate": false,
   "hud_sdf_aa": 1.133,
   "hud_sdf_border1": 0.9,
   "hud_sdf_border1_color": {
@@ -274,8 +276,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 620,
-  "level_seed": -1688481754,
+  "level_index": 621,
+  "level_seed": -764636868,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -309,6 +311,7 @@
   "music_world_crossfade": 8,
   "pan_limit": true,
   "pan_limit_radius": 0.163,
+  "perf_hud_visible": true,
   "phone_orientation_lock": false,
   "phone_tilt_intensity": 1.15,
   "phone_tilt_response_speed": 14,
@@ -324,7 +327,7 @@
   "reward_tilt_deg": 7,
   "sfx_enabled": true,
   "sfx_vol_0": 1,
-  "sfx_vol_1": 1,
+  "sfx_vol_1": 0.422,
   "sfx_vol_2": 1,
   "sfx_vol_3": 0.65,
   "show_eq_debug": false,
@@ -353,52 +356,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.340372,
-    "b": 214.505,
-    "g": 0.569031,
-    "r": -0.581454
+    "a": -0.365679,
+    "b": 215.365,
+    "g": 0.568935,
+    "r": -0.582129
   },
   "sht_fractal_v1": {
-    "a": 0.348933,
-    "b": 0.143126,
-    "g": 0.494549,
-    "r": -0.0218786
+    "a": 0.348423,
+    "b": 0.152697,
+    "g": 0.490472,
+    "r": -0.0214501
   },
   "sht_fractal_v2": {
-    "a": 0.188308,
-    "b": 0.0603631,
-    "g": 212.391,
+    "a": 0.183325,
+    "b": 0.0610803,
+    "g": 213.003,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 18.1633,
-    "b": 0.00429071,
-    "g": 0.0340614,
-    "r": 8.09946
+    "a": 17.6881,
+    "b": 0.00445156,
+    "g": 0.0341498,
+    "r": 7.90651
   },
   "sht_fractal_v4": {
-    "a": 0.178414,
-    "b": 0.688852,
-    "g": 0.7035,
-    "r": 33.8424
+    "a": 0.180548,
+    "b": 0.695888,
+    "g": 0.708049,
+    "r": 33.364
   },
   "sht_fractal_v5": {
-    "a": 0.226207,
-    "b": 0.118477,
-    "g": 0.118872,
-    "r": 0.241624
+    "a": 0.217172,
+    "b": 0.116125,
+    "g": 0.117848,
+    "r": 0.241682
   },
   "sht_fractal_v6": {
-    "a": 1.10257,
-    "b": 0.729621,
-    "g": 0.716051,
-    "r": 0.764525
+    "a": 1.08318,
+    "b": 0.734552,
+    "g": 0.697162,
+    "r": 0.761273
   },
   "sht_fractal_v7": {
-    "a": 0.807708,
-    "b": 0.986035,
-    "g": 1.26469,
-    "r": 1.19311
+    "a": 0.80401,
+    "b": 0.987248,
+    "g": 1.27238,
+    "r": 1.21038
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -407,10 +410,10 @@
     "r": 2
   },
   "sht_fractal_v9": {
-    "a": 0.628405,
-    "b": 0.40342,
-    "g": 0.753686,
-    "r": 0.724947
+    "a": 0.631198,
+    "b": 0.405077,
+    "g": 0.746657,
+    "r": 0.715264
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -489,8 +492,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 10,
-  "w": 120,
+  "h": 1032,
+  "w": 1920,
   "x": 0,
   "y": 0
 }
