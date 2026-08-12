@@ -1,0 +1,30 @@
+{
+  "title": "SpinMind: Numeris",
+  "elements": [
+    { "type": "text", "text": "SpinMind: Numeris" },
+    {
+      "type": "button_tabs",
+      "ui_id": "numeris_options_tabs",
+      "items": [
+        { "label": "Game", "pane": "game" },
+        { "label": "Brain", "pane": "brain" },
+        { "label": "Letters", "pane": "letters" },
+        { "label": "Frame", "pane": "cell_frame" },
+        { "label": "Depth", "pane": "board_depth" },
+        { "label": "Board", "pane": "board" },
+        { "label": "Android", "pane": "android" },
+        { "label": "Debug", "pane": "debug" },
+        { "label": "Motion", "pane": "phone_motion" },
+        { "label": "Socket", "pane": "socket" },
+        { "label": "Living", "pane": "living" },
+        { "label": "Colors", "pane": "state_colors" },
+        { "label": "Hitstop", "pane": "hitstop" },
+        { "label": "Background", "pane": "background" },
+        { "label": "Shader", "pane": "shader" },
+        { "label": "Audio", "pane": "audio" },
+        { "label": "Melody", "pane": "melody" },
+        { "label": "Share", "pane": "challenge" }
+      ]
+    }
+  ]
+}
