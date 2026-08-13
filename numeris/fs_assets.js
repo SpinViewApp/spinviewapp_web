@@ -24,10 +24,23 @@
     }
   }
 
+  function assetUrl(path) {
+    var v = "dev", t = Date.now(), sep;
+    try {
+      if (typeof window !== "undefined") {
+        if (typeof window.getCurrentVersion === "function")
+          v = window.getCurrentVersion() || v;
+        if (window.__spinBootTok) t = window.__spinBootTok;
+      }
+    } catch (e) {}
+    sep = path.indexOf("?") >= 0 ? "&" : "?";
+    return path + sep + "_v=" + encodeURIComponent(v) + "&_t=" + t;
+  }
+
   function loadOne(path) {
     var dep = "numeris_asset:" + path;
     addRunDependency(dep);
-    fetch(path).then(function (res) {
+    fetch(assetUrl(path), { credentials: "same-origin", cache: "no-store" }).then(function (res) {
       if (!res.ok) throw new Error(path + " HTTP " + res.status);
       return res.arrayBuffer();
     }).then(function (buf) {
