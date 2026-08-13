@@ -8,19 +8,19 @@
     "difficulty": "D",
     "mind_level": "MIND",
     "tiers": {
-      "t1": "Simple",
-      "t2": "Facile",
-      "t3": "Modere",
-      "t4": "Avance",
-      "t5": "Complexe",
-      "t6": "Exigeant",
-      "t7": "Difficile",
-      "t8": "Intense",
-      "t9": "Extreme",
-      "t10": "Legendaire",
-      "t11": "Mythique",
-      "t12": "Transcendant",
-      "t13": "Eternel"
+     "t1":  "Éveil",
+     "t2":  "Focus",
+     "t3":  "Lucide",
+     "t4":  "Adepte",
+     "t5":  "Voile",
+     "t6":  "Arcane",
+     "t7":  "Élévation",
+     "t8":  "Ascendant",
+     "t9":  "Éclipse",
+     "t10": "Légendaire",
+     "t11": "Mythique",
+     "t12": "Transcendant",
+     "t13": "Éternel"
     }
   },
   "messages": {

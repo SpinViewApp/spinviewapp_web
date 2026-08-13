@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 45,
+"config_defaults_rev": 52,
 "mainpan": {
   "1": {
     "1": {
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.389642,
+    "ratio": 0.141282,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 617,
+  "campaign_depth": 618,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -276,7 +276,7 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 620,
+  "level_index": 621,
   "level_seed": -764636868,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
@@ -333,7 +333,7 @@
   "show_eq_debug": false,
   "show_hitbox": false,
   "show_pan_limit": false,
-  "sht_animate": true,
+  "sht_animate": false,
   "sht_bg_idle_ease": 3.4,
   "sht_bg_idle_speed": 0.035,
   "sht_custom_time": 0,
@@ -494,8 +494,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 10,
-  "w": 120,
+  "h": 1032,
+  "w": 1920,
   "x": 0,
   "y": 0
 }

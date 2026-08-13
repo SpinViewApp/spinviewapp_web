@@ -177,8 +177,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr50";
-      else url += "&v=andr50";
+      if (url.indexOf("?") < 0) url += "?v=andr51";
+      else url += "&v=andr51";
       var worker;
       try {
         worker = new Worker(url);
@@ -572,16 +572,33 @@
     function isBackgroundInactive() {
       if (!isPageAudible()) return true;
       if (state._backgroundMuted || state._backgroundPausing) return true;
-      /* Blur / soft mute: audio is fading out — slow the fractal clock too. */
+      /* Mobile: clipboard / system sheets fire window.blur without a matching
+       * focus, and hasFocus() stays false after Copy Link — that was leaving
+       * the fractal freeze_bg stuck after Share closed. Only hard-hide counts. */
+      if (isMobileUa()) return false;
+      /* Desktop: soft blur / unfocused window also freezes the shader clock. */
       if (state.audioReady && state._outputFadedIn && !state._outputAllowed) return true;
-      /* Desktop web: tab visible but window lost focus. */
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         if (typeof document.hasFocus === "function" && !document.hasFocus()) return true;
       }
       return false;
     }
 
+    /* Clipboard / Android system UI can blur without focus returning; a
+     * subsequent touch inside the page should unduck audio immediately. */
+    function clearSoftBlurIfVisible() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
+      if (state._backgroundMuted || state._backgroundPausing) return;
+      if (state._outputAllowed) return;
+      state._outputAllowed = 1;
+      state._warmupReadyCount = 0;
+      state._outputFadedIn = 0;
+      state._unlockFadePending = 1;
+    }
+
     state.isBackgroundInactive = isBackgroundInactive;
+    state.clearSoftBlurIfVisible = clearSoftBlurIfVisible;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
      * AudioContext (addModule is per-context — cleared too). */
@@ -1713,6 +1730,15 @@
         state._outputFadedIn = 0;
         state._unlockFadePending = 1;
       });
+    }
+
+    /* Android: Share→Copy Link blurs the window; closing the modal is a
+     * touch that never fires window.focus — unduck here so audio/shader recover. */
+    if (!state._pointerBlurClearBound && typeof document !== "undefined") {
+      state._pointerBlurClearBound = 1;
+      var unduck = function () { clearSoftBlurIfVisible(); };
+      document.addEventListener("pointerdown", unduck, true);
+      document.addEventListener("touchstart", unduck, true);
     }
 
     if (!state._freezeBound && typeof document !== "undefined") {
