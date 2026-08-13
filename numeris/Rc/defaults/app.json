@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 55,
+"config_defaults_rev": 57,
 "mainpan": {
   "1": {
     "1": {
@@ -236,8 +236,8 @@
   "echo_feedback": 0.4,
   "echo_mix": 0.3,
   "full_framerate": false,
-  "hud_master_volume": 1,
-  "hud_muted": true,
+  "hud_master_volume": 0.711111,
+  "hud_muted": false,
   "hud_sdf_aa": 1.133,
   "hud_sdf_border1": 0.9,
   "hud_sdf_border1_color": {
@@ -313,7 +313,7 @@
   "music_world_crossfade": 8,
   "pan_limit": true,
   "pan_limit_radius": 0.163,
-  "perf_hud_visible": true,
+  "perf_hud_visible": false,
   "phone_orientation_lock": false,
   "phone_tilt_intensity": 1.15,
   "phone_tilt_response_speed": 14,
@@ -334,6 +334,7 @@
   "sfx_vol_3": 0.65,
   "show_eq_debug": false,
   "show_hitbox": false,
+  "show_hud": false,
   "show_pan_limit": false,
   "sht_animate": true,
   "sht_bg_idle_ease": 3.4,
@@ -463,6 +464,7 @@
   "sht_place_twist_success": 1.45,
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
+  "sht_quality_preset": 4,
   "sht_render_scale": 2,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",

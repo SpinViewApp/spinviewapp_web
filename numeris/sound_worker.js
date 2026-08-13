@@ -1,5 +1,5 @@
 /* sound_worker.js — synth + PCM pump (SoundWorkerSsound inlined) — single file for blobconef audio.
- * Cache: andr36
+ * Cache: lowlat1
  */
 /* Proto 3 â€” SoundWorkerSsound: WASM tweet synth with JS fallback.
  * Tries createSoundWorkerModule (App.js) first; else CPU JS port of tweet.sound.
@@ -307,6 +307,18 @@
       ? fadd(1, fmul(0.2, fsub(a, 1)))
       : fsub(-1, fmul(0.2, fsub(a, 1)));
   }
+  /* Final stage safety limiter. Overlapping SFX summed well past +/-1 and the
+   * device hard-clipped them, which is heard as random crackle on busy moments.
+   * Transparent (unity, C1-continuous) below -3 dBFS, asymptotic to 0.98. */
+  function limitSample(x) {
+    var a = x < 0 ? -x : x;
+    var over, y;
+    if (a <= 0.7) return x;
+    over = a - 0.7;
+    y = 0.7 + 0.28 * (over / (over + 0.28));
+    return x < 0 ? -y : y;
+  }
+
   function resetEcho() {
     echoBuffer.fill(0);
     echoPos = 0;
@@ -339,8 +351,8 @@
       outR = fadd(fmul(dry, inR), fmul(wet, wetR));
       echoBuffer[echoPos * 2] = softClip(fadd(inL, fmul(wetL, fb)));
       echoBuffer[echoPos * 2 + 1] = softClip(fadd(inR, fmul(wetR, fb)));
-      out[i * 2] = outL;
-      out[i * 2 + 1] = outR;
+      out[i * 2] = limitSample(outL);
+      out[i * 2 + 1] = limitSample(outR);
       /* Peak includes delayed wet (bfx) so quiet tails keep the line awake. */
       p = Math.abs(wetL);
       if (Math.abs(wetR) > p) p = Math.abs(wetR);
@@ -373,6 +385,25 @@
     voices.push(v);
     return v.id;
   }
+  /* One reusable source block. A fresh Float32Array per refill was ~170 KB/s of
+   * worker garbage; the resulting GC pauses starved the FIFO (random crackle). */
+  var srcScratch = null;
+  var srcScratchFrames = 0;
+  var srcView = null;
+  var srcViewFrames = 0;
+  function acquireSrcScratch(frames) {
+    if (!srcScratch || srcScratchFrames < frames) {
+      srcScratch = new Float32Array(frames * 2);
+      srcScratchFrames = frames;
+      srcView = null;
+    }
+    if (!srcView || srcViewFrames !== frames) {
+      srcView = srcScratch.subarray(0, frames * 2);
+      srcViewFrames = frames;
+    }
+    return srcView;
+  }
+
   function jsStopAll() { voices.length = 0; resetEcho(); }
   function jsSetMaster(vol) { master = F32(vol >= 0 ? +vol : 1); }
   function jsLiveVoices() { return voices.length; }
@@ -385,9 +416,12 @@
       echoQuietSamples += frames;
       if (echoQuietSamples > CONFIG_SR) echoQuietSamples = CONFIG_SR;
       jsLastPeak = 0;
-      return new Float32Array(frames * 2);
+      var quiet = acquireSrcScratch(frames);
+      quiet.fill(0);
+      return quiet;
     }
-    var out = new Float32Array(frames * 2);
+    var out = acquireSrcScratch(frames);
+    out.fill(0);
     var i, vi, v, t, env, sig, g;
     var still = [];
     for (vi = 0; vi < voices.length; vi++) {
@@ -458,7 +492,7 @@
       ptr = wasm._spinPcmScratch;
       if (!ptr) return jsGenerateBlock(frames);
       wasm._sound_worker_generate_block(ptr, frames);
-      var out = new Float32Array(frames * 2);
+      var out = acquireSrcScratch(frames);
       out.set(wasm.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + frames * 2));
       return out;
     } catch (eGen) {
@@ -536,14 +570,10 @@
       resetOutput();
     }
     if (!(outputRate > 0)) outputRate = SR;
-    if (outputRate === SR && resampleFrames === 0) {
-      /* Copy into scratch so caller can transfer a pooled buffer without
-       * relying on a fresh alloc from generateSourceBlock. */
-      var src = generateSourceBlock(frames);
-      var dstId = acquireOutScratch(frames);
-      dstId.set(src);
-      return dstId.subarray(0, frames * 2);
-    }
+    /* Identity rate: hand the pooled source block straight back — the pump
+     * copies it into the transferable, so no intermediate buffer is needed. */
+    if (outputRate === SR && resampleFrames === 0)
+      return generateSourceBlock(frames);
 
     var out = acquireOutScratch(frames);
     var step = SR / outputRate;
@@ -874,9 +904,9 @@
   var tickDelayMs = 16; /* ~1 block cadence; was 2 and hammered mobile */
   var tickTimer = 0;
   var audioPort = null;
-  var blockFrames = 1024;
-  var targetFrames = 2048;
-  var needFrames = 1024;
+  var blockFrames = 256;
+  var targetFrames = 1024;
+  var needFrames = 512;
   var sampleRate = 44100;
   var toneHz = 440;
   var toneGain = 0.12;
@@ -1023,7 +1053,9 @@
   }
 
   function emitStats(force) {
-    if (!force && (pcmBlocksSent & 15) !== 0) return;
+    /* ~1 post per 350 ms whatever the block size — small blocks must not turn
+     * the HUD feed into main-thread message spam. */
+    if (!force && (pcmBlocksSent & 63) !== 0) return;
     postMessage({
       type: "stats",
       n: stats.n,
@@ -1158,8 +1190,8 @@
     var want = target > 0 ? target : targetFrames;
     var guard = 0;
     var fillT0 = performance.now();
-    /* Allow short interactive cushions (desktop ~2048); don't force 2048 floor. */
-    if (want < 1024) want = 1024;
+    /* Honour short interactive cushions; only guard against a zero target. */
+    if (want < blockFrames * 2) want = blockFrames * 2;
     while (running && audioPort && estimatedQueued() < want && guard < 64) {
       sendPcmBlock();
       guard++;
@@ -1223,8 +1255,8 @@
       noteQueued(msg.queuedFrames | 0);
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
-      if (targetFrames < 1024) targetFrames = 1024;
-      if (needFrames < 512) needFrames = 512;
+      if (targetFrames < 512) targetFrames = 512;
+      if (needFrames < 256) needFrames = 256;
       fillToTarget(targetFrames);
       scheduleAudioPump();
     }
@@ -1246,21 +1278,23 @@
 
   function playSound(msg) {
     /* Latency = queuedFrames/sampleRate until a new voice's PCM reaches the sink.
-     * Idle + deep FIFO: flush stale silence (worklet/script have soft xfade).
-     * Always force-push at least one block so the attack isn't stuck waiting for
-     * the sink to drain below needFrames before the next fill. */
+     * When idle that look-ahead is pure silence, so shrink it — but *trim* to a
+     * cushion instead of flushing to zero. A hard flush raced the next render
+     * quantum, and every lost race cost an underrun (click + a permanent
+     * look-ahead boost), which is exactly the random crackle we heard. */
     var hadAudio =
       SoundWorkerSsound.liveVoices() > 0 ||
       (SoundWorkerSsound.lastPeak && SoundWorkerSsound.lastPeak() > 1e-5) ||
       (SoundWorkerSsound.echoLive && SoundWorkerSsound.echoLive());
     var q = estimatedQueued();
-    var deepIdle = !hadAudio && q > (needFrames > 0 ? needFrames : 1024);
-    if (deepIdle && audioPort) {
-      audioPort.postMessage({ type: "flush" });
-      noteQueued(0);
+    var keep = (needFrames > 0 ? needFrames : 1024) >> 1;
+    if (keep < blockFrames * 2) keep = blockFrames * 2;
+    if (!hadAudio) {
+      if (audioPort && q > keep + blockFrames) {
+        audioPort.postMessage({ type: "trim", keepFrames: keep });
+        noteQueued(keep);
+      }
       if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
-    } else if (!hadAudio && SoundWorkerSsound.resetOutput) {
-      SoundWorkerSsound.resetOutput();
     }
     var id = SoundWorkerSsound.play(msg);
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
@@ -1268,7 +1302,10 @@
       scheduleSilentPump();
       return;
     }
+    /* Get the attack into the FIFO now, then restore the cushion the trim
+     * just gave up so the very next quantum cannot starve. */
     forcePushBlocks(hadAudio ? 1 : 2);
+    fillToTarget(needFrames);
     scheduleAudioPump();
   }
 
@@ -1299,9 +1336,9 @@
         artificialStallMs = msg.stall_ms > 0 ? +msg.stall_ms : 0;
         stallMode = msg.stall_mode === "busy" ? "busy" : "async";
         tickDelayMs = msg.tick_ms > 0 ? msg.tick_ms | 0 : 16;
-        blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 1024;
-        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 2048;
-        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 1024;
+        blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 256;
+        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 1024;
+        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 512;
         if (msg.synthRate > 0 &&
             typeof SoundWorkerSsound !== "undefined" &&
             SoundWorkerSsound.setConfigRate)
@@ -1313,8 +1350,8 @@
         preferCpu = msg.preferCpu !== false; /* default CPU â€” avoids GPU contention with scene */
         synthReady = false;
         pendingPlays.length = 0;
-        if (targetFrames < 1024) targetFrames = 1024;
-        if (needFrames < 512) needFrames = 512;
+        if (targetFrames < 512) targetFrames = 512;
+        if (needFrames < 256) needFrames = 256;
         if (!preferCpu) {
           if (!msg.canvas) {
             fail("missing-canvas");
@@ -1456,7 +1493,7 @@
         noteQueued(0);
         if (audioPort) {
           audioPort.postMessage({ type: "flush" });
-          var pad = Math.max(256, ((sampleRate > 0 ? sampleRate : 48000) * 0.014) | 0);
+          var pad = Math.max(blockFrames, ((sampleRate > 0 ? sampleRate : 48000) * 0.006) | 0);
           try {
             audioPort.postMessage({
               type: "pcm",
