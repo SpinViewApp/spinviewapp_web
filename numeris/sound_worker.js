@@ -1,5 +1,5 @@
 /* sound_worker.js — synth + PCM pump (SoundWorkerSsound inlined) — single file for blobconef audio.
- * Cache: lowlat1
+ * Cache: shaderparity1
  */
 /* Proto 3 â€” SoundWorkerSsound: WASM tweet synth with JS fallback.
  * Tries createSoundWorkerModule (App.js) first; else CPU JS port of tweet.sound.
@@ -9,7 +9,7 @@
 
   /* Engine clock = SSOUND_SAMPLE_RATE from C (-D). Device may differ:
    * synthesize on the config grid, then resample out if needed. */
-  var CONFIG_SR = 44100;
+  var CONFIG_SR = 48000; /* SSOUND_SAMPLE_RATE; init overrides from C */
   var SR = CONFIG_SR;
   var outputRate = CONFIG_SR;
   var voices = [];
@@ -24,17 +24,45 @@
   var echoBuffer = new Float32Array(CONFIG_SR * 2);
   var echoPos = 0;
   var echoQuietSamples = CONFIG_SR; /* bfx-style idle: skip flush while delay still rings */
-  var ECHO_DELAY = (CONFIG_SR * 0.08) | 0; /* Numeris default: 80 ms */
+  /* Numeris defaults, kept in sync with g_numeris_echo_* / Rc/defaults/app.json. */
+  var ECHO_DELAY_MS = 80.0;
+  var ECHO_DELAY = (CONFIG_SR * ECHO_DELAY_MS * 0.001) | 0;
   var ECHO_MIX = 0.3;
   var ECHO_FB = 0.4;
   var ECHO_QUIET_EPS = 1.0e-4;
 
+  function applyEchoSettings(delayMs, feedback, mix) {
+    var d;
+    if (delayMs > 0) {
+      ECHO_DELAY_MS = delayMs < 1 ? 1 : delayMs > 1000 ? 1000 : delayMs;
+      d = (CONFIG_SR * ECHO_DELAY_MS * 0.001) | 0;
+      if (d < 1) d = 1;
+      if (d > CONFIG_SR - 2) d = CONFIG_SR - 2;
+      if (d !== ECHO_DELAY) {
+        ECHO_DELAY = d;
+        /* Delay length changed: the old tail no longer lines up. */
+        echoBuffer.fill(0);
+        echoPos = 0;
+      }
+    }
+    if (feedback >= 0) ECHO_FB = feedback > 0.98 ? 0.98 : feedback;
+    if (mix >= 0) ECHO_MIX = mix > 1 ? 1 : mix;
+    echoQuietSamples = 0;
+    /* The GPU module runs its own bfx echo on the mix — keep both in step so
+     * a mid-session fallback to JS does not change the tail. */
+    if (wasm && typeof wasm._sound_worker_set_echo === "function") {
+      try {
+        wasm._sound_worker_set_echo(ECHO_DELAY_MS, ECHO_FB, ECHO_MIX);
+      } catch (eEcho) {}
+    }
+  }
+
   function applyConfigRate(sr) {
-    sr = sr > 0 ? sr | 0 : 44100;
+    sr = sr > 0 ? sr | 0 : 48000;
     if (sr === CONFIG_SR) return;
     CONFIG_SR = sr;
     SR = CONFIG_SR;
-    ECHO_DELAY = (CONFIG_SR * 0.08) | 0;
+    ECHO_DELAY = (CONFIG_SR * ECHO_DELAY_MS * 0.001) | 0;
     echoBuffer = new Float32Array(CONFIG_SR * 2);
     echoPos = 0;
     echoQuietSamples = CONFIG_SR;
@@ -132,79 +160,175 @@
     return fmul(Tweet(fmul(fadd(t, freqX), 0.4)), volume);
   }
   var PI2 = 6.28318530718;
-  /* Approximate GPU .sound timbres for Numeris SFX (web has no GPU audio pump). */
-  function sampleSound1(t, freqX, freqY, freqZ, freqW) {
-    var hz = fmul(110.0, freqX > 0.25 ? freqX : 0.25);
-    var harm = fadd(1.0, fmul(freqW < 0 ? 0 : freqW > 4 ? 4 : freqW, 0.25));
-    var gain = fadd(6.0, fmul(Math.abs(freqY), 2.0));
-    var env = fmul(fexp(fmul(-8.0, t)), smoothstep32(0.0, 0.002, t));
-    var s0 = fmul(fsin(fmul(fmul(PI2, hz), t)), env);
-    var s1 = fmul(fsin(fmul(fmul(PI2, fmul(hz, fmul(harm, 2.0))), t)), fmul(env, 0.35));
-    return fmul(fadd(s0, s1), gain);
+
+  /* ---- 1:1 transcriptions of soundsys/sound/*.sound ----
+   * These used to be loose approximations, which is why Web and desktop did
+   * not sound alike: the mirrors dropped the per-voice clamp the shaders apply
+   * on their render target, used one shared soft knee instead of the three
+   * distinct softclips, panned with a linear law instead of the equal-power
+   * normalize(), and omitted whole partials. Every instrument now follows its
+   * shader line for line, writes stereo (the shaders pan internally) and ends
+   * on the same clamp. Keep them in sync with the .sound files.
+   */
+  var voiceL = 0.0;
+  var voiceR = 0.0;
+  var panL = 0.70710678;
+  var panR = 0.70710678;
+
+  function clampf(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
+  function clamp1(x) { return x < -1 ? -1 : x > 1 ? 1 : x; }
+  /* pan_simple / numeris_pan: normalize(vec2(1-p, 1+p)) — 0.707 at centre. */
+  function panNormalize(pos) {
+    var e0 = 1.0 - pos;
+    var e1 = 1.0 + pos;
+    var len = Math.sqrt(e0 * e0 + e1 * e1);
+    if (len < 1e-8) { panL = 0.70710678; panR = 0.70710678; return; }
+    panL = e0 / len;
+    panR = e1 / len;
   }
-  function sampleJoyHop(hz, t, decay, bright) {
-    if (t < 0) return 0;
-    var env = fmul(fexp(fmul(-decay, t)), smoothstep32(0.0, 0.0035, t));
-    var body = fsin(fmul(fmul(PI2, hz), t));
-    var ping = fmul(fsin(fmul(fmul(PI2, fmul(hz, fadd(2.0, fmul(bright, 0.35)))), t)), 0.32);
-    return fmul(fadd(body, ping), fmul(env, 2.2));
+  /* The shaders use three different soft knees: x/(1+|x|) in joy and the
+   * numeris_* set, x/(1+1.4|x|) in malice, x/(1+1.35|x|) in electric. */
+  function scDiv(x, k) { return x / (1.0 + Math.abs(x) * k); }
+  /* GLSL Noise1 returns 0..1; the worker's Noise() is the tweet variant that
+   * subtracts 0.5, so malice and electric need this one. */
+  function Noise1(n) {
+    var f = fract32(n);
+    n = Math.floor(F32(n));
+    f = f * f * (3.0 - 2.0 * f);
+    return mix32(Hash1(n), Hash1(n + 1), f);
   }
-  function sampleJoy(t, freqX, freqY, freqZ, freqW) {
-    var pitch = freqX > 0.35 ? freqX : 0.35;
-    var sparkle = freqY < 0 ? 0 : freqY > 4 ? 4 : freqY;
-    var bounce = freqW < 0 ? 0 : freqW > 4 ? 4 : freqW;
-    var hz = fmul(246.0, pitch);
-    var mono = 0.0;
-    mono = fadd(mono, sampleJoyHop(hz, t, 10.0, sparkle));
-    mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.125), fsub(t, 0.042), 11.0, sparkle), 0.88));
-    mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.25), fsub(t, 0.084), 11.5, sparkle), 0.78));
-    mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.5), fsub(t, 0.13), 10.5, sparkle), 0.92));
+  function NoiseSigned(n) { return Noise1(n) * 2.0 - 1.0; }
+
+  function sinPluck(f, t) {
+    return Math.sin(PI2 * f * t) * Math.exp(-8.0 * t) * smoothstep32(0.0, 0.002, t);
+  }
+  function voiceSound1(t, freqX, freqY, freqZ, freqW) {
+    var hz = 110.0 * Math.max(freqX, 0.25);
+    var harm = 1.0 + clampf(freqW, 0.0, 4.0) * 0.25;
+    var gain = 6.0 + Math.abs(freqY) * 2.0;
+    var pan = clampf(freqZ * 0.15, -1.0, 1.0);
+    var a = sinPluck(hz, t) * gain;
+    var b = sinPluck(hz * harm * 2.0, t) * (gain * 0.35);
+    var l, r;
+    panNormalize(pan);
+    l = a * panL;
+    r = a * panR;
+    /* The second partial sits at half the pan offset — a touch of width. */
+    panNormalize(pan * 0.5);
+    voiceL = clamp1(l + b * panL);
+    voiceR = clamp1(r + b * panR);
+  }
+  function joyHop(hz, t, decay, bright) {
+    var env = Math.exp(-decay * t) * smoothstep32(0.0, 0.0035, t);
+    var body = Math.sin(PI2 * hz * t);
+    var ping = Math.sin(PI2 * hz * (2.0 + bright * 0.35) * t) * 0.32;
+    var air = Math.sin(PI2 * hz * (3.0 + bright) * t) * 0.12
+      * Math.exp(-decay * 1.4 * t);
+    return scDiv((body + ping + air) * env * 2.4, 1.0);
+  }
+  function voiceJoy(t, freqX, freqY, freqZ, freqW) {
+    var pitch = Math.max(freqX, 0.35);
+    var sparkle = clampf(freqY, 0.0, 4.0);
+    var pan = clampf(freqZ * 0.22, -1.0, 1.0);
+    var bounce = clampf(freqW, 0.0, 4.0);
+    var hz = 246.0 * pitch;
+    var mono = joyHop(hz, t, 10.0, sparkle);
+    mono += joyHop(hz * 1.125, Math.max(t - 0.042, 0.0), 11.0, sparkle) * 0.88;
+    mono += joyHop(hz * 1.25, Math.max(t - 0.084, 0.0), 11.5, sparkle) * 0.78;
+    mono += joyHop(hz * 1.5, Math.max(t - 0.130, 0.0), 10.5, sparkle) * 0.92;
     if (bounce > 0.6) {
-      mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 1.5), fsub(t, 0.195), 12.0, sparkle), fmul(0.55, bounce)));
-      mono = fadd(mono, fmul(sampleJoyHop(fmul(hz, 2.0), fsub(t, 0.25), 9.5, sparkle), fmul(0.7, bounce > 2 ? 2 : bounce)));
+      mono += joyHop(hz * 1.5, Math.max(t - 0.195, 0.0), 12.0, sparkle) * 0.55 * bounce;
+      mono += joyHop(hz * 2.0, Math.max(t - 0.250, 0.0), 9.5, sparkle) * 0.70
+        * clampf(bounce, 0.0, 2.0);
     }
-    return softClip(fmul(mono, fadd(3.8, fmul(sparkle, 0.35))));
+    /* Confetti shimmer. */
+    mono += Math.sin(PI2 * hz * (4.0 + sparkle * 0.8) * t)
+      * Math.exp(-16.0 * t) * smoothstep32(0.0, 0.002, t)
+      * (0.12 + sparkle * 0.06);
+    mono = scDiv(mono * (3.8 + sparkle * 0.35), 1.0);
+    panNormalize(pan);
+    voiceL = clamp1(mono * panL);
+    voiceR = clamp1(mono * panR);
   }
-  function sampleMalice(t, freqX, freqY, freqZ, freqW) {
-    var growl = freqX < 0.3 ? 0.3 : freqX > 4 ? 4 : freqX;
-    var rasp = freqY < 0 ? 0 : freqY > 5 ? 5 : freqY;
-    var bite = freqW < 0 ? 0 : freqW > 4 ? 4 : freqW;
-    var hit = fmul(smoothstep32(0.0, 0.008, t), fsub(1.0, smoothstep32(0.12, 0.28, t)));
-    var f0 = fadd(55.0, fmul(growl, 28.0));
-    var body = fsin(fmul(fmul(PI2, f0), t));
-    body = fadd(body, fmul(fsin(fmul(fmul(PI2, fmul(f0, 1.41)), t)), 0.7));
-    body = fadd(body, fmul(fsin(fmul(fmul(PI2, fmul(f0, 1.89)), t)), 0.45));
-    var grit = fmul(
-      fsub(fmul(Hash1(fmul(t, fadd(900.0, fmul(rasp, 400.0)))), 2.0), 1.0),
-      fmul(fexp(fmul(-t, fadd(10.0, fmul(bite, 4.0)))), fadd(0.35, fmul(rasp, 0.15)))
-    );
-    return softClip(fmul(fadd(fmul(body, hit), grit), fadd(3.0, fmul(bite, 0.4))));
+  function voiceMalice(t, freqX, freqY, freqZ, freqW) {
+    var growl = clampf(freqX, 0.3, 4.0);
+    var rasp = clampf(freqY, 0.0, 5.0);
+    var pan = clampf(freqZ * 0.25, -1.0, 1.0);
+    var bite = clampf(freqW, 0.0, 4.0);
+    var hit = smoothstep32(0.0, 0.008, t) * (1.0 - smoothstep32(0.12, 0.28, t));
+    var f0 = 55.0 + growl * 28.0;
+    var f1 = f0 * 1.41; /* tritone-ish dissonance */
+    var f2 = f0 * 1.89;
+    /* Each partial is driven into its own soft knee — that grit is the sound. */
+    var body = scDiv(Math.sin(PI2 * f0 * t) * 2.4, 1.4);
+    body += scDiv(Math.sin(PI2 * f1 * t + 0.7) * 1.8, 1.4) * 0.7;
+    body += scDiv(Math.sin(PI2 * f2 * t + 1.3) * 1.2, 1.4) * 0.45;
+    var grit = (Noise1(t * (900.0 + rasp * 400.0)) * 2.0 - 1.0)
+      * Math.exp(-t * (10.0 + bite * 4.0)) * (0.35 + rasp * 0.15);
+    var mono = (body * hit + grit) * (3.0 + bite * 0.4);
+    voiceL = clamp1(mono * (1.0 - pan * 0.7));
+    voiceR = clamp1(mono * (1.0 + pan * 0.7));
   }
-  function sampleElectric(t, freqX, freqY, freqZ, freqW) {
-    var tone = freqX < 0.25 ? 0.25 : freqX > 3 ? 3 : freqX;
-    var settle = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
-    var dur = 0.12;
-    var hitLen = fmul(dur, fadd(1.0, fmul(fsub(0.35, 1.0), settle)));
-    if (hitLen < 0.04) hitLen = 0.04;
-    if (t > hitLen) return 0;
-    var hitEnv = fmul(smoothstep32(0.0, 0.012, t), fsub(1.0, smoothstep32(fmul(hitLen, 0.65), hitLen, t)));
-    var bright = fdiv(fsub(tone, 0.25), 2.75);
-    var fHi = fadd(400.0, fmul(fmul(tone, tone), 2800.0));
-    var bolt = fsin(fmul(fmul(PI2, fHi), t));
-    var crack = fmul(
-      fsub(fmul(Hash1(fmul(t, 11000.0)), 2.0), 1.0),
-      fmul(fsin(fmul(fmul(PI2, fadd(900.0, fmul(bright, 2300.0))), t)), 0.35)
-    );
-    return softClip(fmul(fadd(bolt, crack), fmul(hitEnv, 2.8)));
+  /* electric reads slot0 too: its length follows the host duration and it
+   * folds the host volume in as gain_env (so volume is applied twice, once
+   * here and once in the envelope wrapper — that is what the shader does). */
+  function voiceElectric(t, v) {
+    var tone = clampf(v.freqX, 0.25, 3.0);
+    var rate = clampf(v.freqY, 0.5, 24.0);
+    var arc = clampf(v.freqZ, 0.0, 3.0);
+    var settle = clampf(v.freqW, 0.0, 1.0);
+    var gainEnv = Math.max(v.volume, 0.05);
+    var dur = clampf(v.duration, 0.05, 8.0);
+    /* in_instance_id is a GPU slot index with no Web equivalent; the voice id
+     * gives the same spread of seeds. */
+    var seed = fract32(v.id * 0.19 + tone * 0.07);
+    var hitLen = Math.max(dur * mix32(1.0, 0.35, settle), 0.04);
+    var hitEnv = smoothstep32(0.0, Math.min(0.012, hitLen * 0.15), t)
+      * (1.0 - smoothstep32(hitLen * 0.65, hitLen, t));
+    if (t > hitLen || hitEnv <= 0.0001) { voiceL = 0; voiceR = 0; return; }
+
+    var flutter = 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(PI2 * rate * t + seed * 6.28));
+    flutter *= 0.88 + 0.12 * Noise1(t * (rate * 0.7) + seed * 4.0);
+    flutter = mix32(1.0, flutter, 0.55);
+
+    var bright = clampf((tone - 0.25) / 2.75, 0.0, 1.0);
+    var fLo = 55.0 + tone * 40.0;
+    var fHi = 400.0 + tone * tone * 2800.0;
+    var grow = scDiv(Math.sin(PI2 * fLo * t) * 2.6, 1.35);
+    grow += scDiv(Math.sin(PI2 * fLo * 2.05 * t) * 1.9, 1.35) * 0.4;
+    var bolt = scDiv(Math.sin(PI2 * fHi * t) * 2.0, 1.35);
+    bolt += scDiv(Math.sin(PI2 * fHi * 1.37 * t + 0.7) * 1.6, 1.35) * 0.3;
+    var body = mix32(grow, bolt, bright * bright) * flutter;
+
+    var zapRate = 6.0 + arc * 40.0;
+    var fire = smoothstep32(0.78 - arc * 0.05, 0.92, Noise1(t * zapRate + seed * 11.0));
+    var zapEnv = Math.exp(-fract32(t * zapRate) * (28.0 + arc * 22.0)) * fire * flutter;
+    var zapF = mix32(800.0, 3800.0, bright) + arc * 500.0;
+    var zap = Math.sin(PI2 * zapF * t)
+      * scDiv(NoiseSigned(t * 9000.0) * 2.0, 1.35) * zapEnv;
+
+    var bloom = Math.exp(-fract32(t * rate * 0.5 + seed) * 12.0)
+      * (0.15 + arc * 0.25) * flutter;
+    var crack = scDiv(NoiseSigned(t * 11000.0) * 1.8, 1.35)
+      * Math.sin(PI2 * mix32(900.0, 3200.0, bright) * t) * bloom;
+
+    var wBody = 1.0 - clampf(arc / 3.0, 0.0, 1.0) * 0.55;
+    var wZap = 0.2 + clampf(arc / 3.0, 0.0, 1.0) * 0.95;
+    var mono = (body * wBody + zap * wZap + crack) * hitEnv * gainEnv * 3.2;
+
+    var pan = clampf((seed - 0.5) * 0.85, -0.65, 0.65);
+    voiceL = clamp1(mono * (1.0 - pan * 0.75));
+    voiceR = clamp1(mono * (1.0 + pan * 0.75));
   }
 
   /* CPU mirrors for the four Numeris GPU instruments.  They deliberately use
    * the same slot1 contract as the .sound shaders so native and Web keep the
    * same musical roles even when WebGL audio runs through this worker. */
-  function sampleNumerisPulse(t, freqX, freqY, freqZ, freqW) {
+  function voiceNumerisPulse(t, freqX, freqY, freqZ, freqW) {
     var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
     var warmth = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
     var click = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var pan = clampf(freqZ, -1.0, 1.0) * 0.55;
     var hz = 55.0 * ratio;
     var attack = smoothstep32(0.0, 0.004, t);
     var env = attack * Math.exp(-t * (8.0 + (3.0 - 8.0) * warmth));
@@ -215,13 +339,17 @@
     body += Math.sin(phase * 2.01) * (0.20 - warmth * 0.10);
     body += Math.sin(PI2 * hz * (5.0 + click * 3.0) * t)
       * Math.exp(-32.0 * t) * click * 0.32;
-    return body * env * 1.45 / (1.0 + Math.abs(body * env * 1.45));
+    var mono = scDiv(body * env * 1.45, 1.0);
+    panNormalize(pan);
+    voiceL = clamp1(mono * panL);
+    voiceR = clamp1(mono * panR);
   }
 
-  function sampleNumerisOrbit(t, freqX, freqY, freqZ, freqW) {
+  function voiceNumerisOrbit(t, freqX, freqY, freqZ, freqW, id) {
     var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
     var bright = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
     var character = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var pan = clampf(freqZ, -1.0, 1.0) * 0.65;
     var hz = 110.0 * ratio;
     var attackEnd = 0.003 + (0.018 - 0.003) * character;
     var attack = smoothstep32(0.0, attackEnd, t);
@@ -235,14 +363,18 @@
     var halo = Math.sin(PI2 * hz * 2.001 * t + 0.4)
       * (0.10 + bright * 0.20);
     var sub = Math.sin(PI2 * hz * 0.5 * t) * character * 0.18;
-    var mono = (carrier + halo + sub) * env * 1.55;
-    return mono / (1.0 + Math.abs(mono));
+    var mono = scDiv((carrier + halo + sub) * env * 1.55, 1.0);
+    var drift = Math.sin(PI2 * 0.23 * t + id * 0.17) * 0.08 * character;
+    panNormalize(pan + drift);
+    voiceL = clamp1(mono * panL);
+    voiceR = clamp1(mono * panR);
   }
 
-  function sampleNumerisPrism(t, freqX, freqY, freqZ, freqW) {
+  function voiceNumerisPrism(t, freqX, freqY, freqZ, freqW) {
     var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
     var bright = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
     var glass = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var pan = clampf(freqZ, -1.0, 1.0) * 0.72;
     var hz = 220.0 * ratio;
     var attack = smoothstep32(0.0, 0.0025, t);
     var e0 = attack * Math.exp(-t * (4.8 + (2.6 - 4.8) * glass));
@@ -255,11 +387,14 @@
     mono += Math.sin(PI2 * hz * r2 * t + 0.23) * e1 * (0.24 + bright * 0.24);
     mono += Math.sin(PI2 * hz * r3 * t + 0.61) * e1 * (0.10 + bright * 0.18);
     mono += Math.sin(PI2 * hz * r5 * t + 1.07) * e2 * bright * 0.12;
-    mono *= 1.65;
-    return mono / (1.0 + Math.abs(mono));
+    mono = scDiv(mono * 1.65, 1.0);
+    var shimmer = Math.sin(PI2 * 0.31 * t) * 0.06 * glass;
+    panNormalize(pan + shimmer);
+    voiceL = clamp1(mono * panL);
+    voiceR = clamp1(mono * panR);
   }
 
-  function sampleNumerisChimeNote(hz, age, bright) {
+  function numerisChimeNote(hz, age, bright) {
     if (age < 0) return 0;
     var env = smoothstep32(0.0, 0.0025, age)
       * Math.exp(-age * (5.6 + bright * 1.8));
@@ -269,35 +404,44 @@
     return value * env;
   }
 
-  function sampleNumerisChime(t, freqX, freqY, freqZ, freqW) {
+  function voiceNumerisChime(t, freqX, freqY, freqZ, freqW) {
     var ratio = freqX < 0.25 ? 0.25 : freqX > 8 ? 8 : freqX;
     var bright = freqY < 0 ? 0 : freqY > 1 ? 1 : freqY;
     var shape = freqW < 0 ? 0 : freqW > 1 ? 1 : freqW;
+    var pan = clampf(freqZ, -1.0, 1.0) * 0.55;
     var hz = 220.0 * ratio;
     var r1 = 1.125 + (1.20 - 1.125) * shape;
     var r2 = 1.25 + (1.3333333 - 1.25) * shape;
     var r3 = 1.50 + (1.60 - 1.50) * shape;
-    var mono = sampleNumerisChimeNote(hz, t, bright);
-    mono += sampleNumerisChimeNote(hz * r1, t - 0.060, bright) * 0.82;
-    mono += sampleNumerisChimeNote(hz * r2, t - 0.122, bright) * 0.76;
-    mono += sampleNumerisChimeNote(hz * r3, t - 0.190, bright) * 0.92;
-    mono *= 1.45;
-    return mono / (1.0 + Math.abs(mono));
+    var mono = numerisChimeNote(hz, t, bright);
+    mono += numerisChimeNote(hz * r1, t - 0.060, bright) * 0.82;
+    mono += numerisChimeNote(hz * r2, t - 0.122, bright) * 0.76;
+    mono += numerisChimeNote(hz * r3, t - 0.190, bright) * 0.92;
+    mono = scDiv(mono * 1.45, 1.0);
+    var motion = Math.sin(PI2 * 0.7 * t) * 0.14;
+    panNormalize(pan + motion);
+    voiceL = clamp1(mono * panL);
+    voiceR = clamp1(mono * panR);
   }
 
-  function sampleVoice(v, t) {
+  /* Writes the voice's stereo pair into voiceL / voiceR. The shaders pan and
+   * clamp internally, so the caller must not add a pan of its own. */
+  function sampleVoiceStereo(v, t) {
     var ty = v.type || "tweet";
-    if (ty === "tone")
-      return fmul(fsin(fmul(fmul(PI2, v.freqX > 20 ? v.freqX : 440), t)), 0.15);
-    if (ty === "sound1") return sampleSound1(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "joy") return sampleJoy(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "malice") return sampleMalice(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "electric") return sampleElectric(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "numeris_pulse") return sampleNumerisPulse(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "numeris_orbit") return sampleNumerisOrbit(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "numeris_prism") return sampleNumerisPrism(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    if (ty === "numeris_chime") return sampleNumerisChime(t, v.freqX, v.freqY, v.freqZ, v.freqW);
-    return sampleTweet(t, v.freqX, v.freqY);
+    var mono;
+    if (ty === "sound1") { voiceSound1(t, v.freqX, v.freqY, v.freqZ, v.freqW); return; }
+    if (ty === "joy") { voiceJoy(t, v.freqX, v.freqY, v.freqZ, v.freqW); return; }
+    if (ty === "malice") { voiceMalice(t, v.freqX, v.freqY, v.freqZ, v.freqW); return; }
+    if (ty === "electric") { voiceElectric(t, v); return; }
+    if (ty === "numeris_pulse") { voiceNumerisPulse(t, v.freqX, v.freqY, v.freqZ, v.freqW); return; }
+    if (ty === "numeris_orbit") { voiceNumerisOrbit(t, v.freqX, v.freqY, v.freqZ, v.freqW, v.id); return; }
+    if (ty === "numeris_prism") { voiceNumerisPrism(t, v.freqX, v.freqY, v.freqZ, v.freqW); return; }
+    if (ty === "numeris_chime") { voiceNumerisChime(t, v.freqX, v.freqY, v.freqZ, v.freqW); return; }
+    /* tone and tweet are mono in the shader and carry no pan. */
+    if (ty === "tone") mono = fmul(fsin(fmul(fmul(PI2, v.freqX > 20 ? v.freqX : 440), t)), 0.15);
+    else mono = sampleTweet(t, v.freqX, v.freqY);
+    voiceL = mono;
+    voiceR = mono;
   }
   function softClip(x) {
     x = F32(x);
@@ -307,16 +451,96 @@
       ? fadd(1, fmul(0.2, fsub(a, 1)))
       : fsub(-1, fmul(0.2, fsub(a, 1)));
   }
-  /* Final stage safety limiter. Overlapping SFX summed well past +/-1 and the
-   * device hard-clipped them, which is heard as random crackle on busy moments.
-   * Transparent (unity, C1-continuous) below -3 dBFS, asymptotic to 0.98. */
-  function limitSample(x) {
-    var a = x < 0 ? -x : x;
-    var over, y;
-    if (a <= 0.7) return x;
-    over = a - 0.7;
-    y = 0.7 + 0.28 * (over / (over + 0.28));
-    return x < 0 ? -y : y;
+  /* ---- master bus: 1:1 port of soundsys/bfx.h + ssound.h ----
+   * Desktop runs voices -> echo -> bfx_bus_normalize -> master fader. The Web
+   * worker had neither stage, which is why it sounded thinner than desktop and
+   * hard-clipped when several SFX overlapped. Same constants, same order. */
+  var NORM_ENABLED = 1;
+  var NORM_TARGET = 0.85;
+  /* Duck only. Boosting made the gain chase 1/peak with the 500 ms release,
+   * so it climbed all through a note (measured 1.06 -> 2.34 on one chime) and
+   * inflated the decay instead of letting it die. Mirrors bfx.h. */
+  var NORM_MAX_BOOST = 1.0;
+  var NORM_FLOOR = 0.02;
+  var NORM_ATTACK_MS = 50.0;
+  var NORM_RELEASE_MS = 500.0;
+  var NORM_ENV_MS = 400.0;
+  var busGain = 1.0;
+  var busPeakEnv = 0.0;
+  /* ssound_master_volume_smooth: starts at 0 so the very first block ramps. */
+  var MASTER_EASE_SPEED = 8.0;
+  var masterSmooth = 0.0;
+
+  /* Pass out=null to advance the envelope/gain state over a silent block —
+   * desktop still runs both stages while idle, so the recovery must match. */
+  function busNormalize(out, frames) {
+    var peak = 0.0;
+    var sr = CONFIG_SR > 1 ? CONFIG_SR : 48000;
+    var attackS = NORM_ATTACK_MS * 0.001;
+    var releaseS = NORM_RELEASE_MS * 0.001;
+    var envS = NORM_ENV_MS * 0.001;
+    var i, ax, ay, desired, g, envFall, gainFast, gainSlow;
+    if (frames <= 0) return;
+    if (out) {
+      for (i = 0; i < frames; i++) {
+        ax = out[i * 2];
+        ay = out[i * 2 + 1];
+        if (ax < 0) ax = -ax;
+        if (ay < 0) ay = -ay;
+        if (ax > peak) peak = ax;
+        if (ay > peak) peak = ay;
+      }
+    }
+    if (peak >= busPeakEnv) busPeakEnv = peak;
+    else {
+      envFall = 1.0 - Math.exp(-frames / (envS * sr));
+      busPeakEnv += (peak - busPeakEnv) * envFall;
+    }
+    if (!NORM_ENABLED) {
+      busGain = 1.0;
+      return;
+    }
+    if (busPeakEnv < NORM_FLOOR) desired = 1.0; /* noise floor — don't amplify */
+    else {
+      desired = NORM_TARGET / busPeakEnv;
+      if (desired > NORM_MAX_BOOST) desired = NORM_MAX_BOOST;
+      if (desired * busPeakEnv > 1.0) desired = 1.0 / busPeakEnv;
+    }
+    gainFast = 1.0 - Math.exp(-frames / (attackS * sr));
+    gainSlow = 1.0 - Math.exp(-frames / (releaseS * sr));
+    if (desired < busGain) busGain += (desired - busGain) * gainFast;
+    else busGain += (desired - busGain) * gainSlow;
+    g = busGain;
+    if (!out || (g > 0.999 && g < 1.001)) return;
+    for (i = 0; i < frames * 2; i++) out[i] = F32(out[i] * g);
+  }
+
+  function applyMasterVolume(out, frames) {
+    var sr = CONFIG_SR > 1 ? CONFIG_SR : 48000;
+    var dt = frames / sr;
+    var t = 1.0 - Math.exp(-MASTER_EASE_SPEED * dt);
+    var g, i;
+    if (frames <= 0) return;
+    masterSmooth += (master - masterSmooth) * t;
+    if (Math.abs(masterSmooth - master) < 1.0e-5) masterSmooth = master;
+    g = masterSmooth;
+    if (!out || (g > 0.9999 && g < 1.0001)) return;
+    for (i = 0; i < frames * 2; i++) out[i] = F32(out[i] * g);
+  }
+
+  /* True-peak ceiling. Bit-identical to desktop below -0.45 dBFS; above that it
+   * curves to 1.0 instead of letting the device hard-clip (audible crackle). */
+  function busCeiling(out, frames) {
+    var n = frames * 2;
+    var i, x, a, over, y;
+    for (i = 0; i < n; i++) {
+      x = out[i];
+      a = x < 0 ? -x : x;
+      if (a <= 0.95) continue;
+      over = a - 0.95;
+      y = 0.95 + 0.05 * (over / (over + 0.05));
+      out[i] = x < 0 ? -y : y;
+    }
   }
 
   function resetEcho() {
@@ -351,8 +575,8 @@
       outR = fadd(fmul(dry, inR), fmul(wet, wetR));
       echoBuffer[echoPos * 2] = softClip(fadd(inL, fmul(wetL, fb)));
       echoBuffer[echoPos * 2 + 1] = softClip(fadd(inR, fmul(wetR, fb)));
-      out[i * 2] = limitSample(outL);
-      out[i * 2 + 1] = limitSample(outR);
+      out[i * 2] = outL;
+      out[i * 2 + 1] = outR;
       /* Peak includes delayed wet (bfx) so quiet tails keep the line awake. */
       p = Math.abs(wetL);
       if (Math.abs(wetR) > p) p = Math.abs(wetR);
@@ -418,11 +642,15 @@
       jsLastPeak = 0;
       var quiet = acquireSrcScratch(frames);
       quiet.fill(0);
+      /* Silence still advances the bus envelope and the master ease, exactly
+       * like desktop — otherwise the gain would be frozen at the next attack. */
+      busNormalize(null, frames);
+      applyMasterVolume(null, frames);
       return quiet;
     }
     var out = acquireSrcScratch(frames);
     out.fill(0);
-    var i, vi, v, t, env, sig, g;
+    var i, vi, v, t, env, gain;
     var still = [];
     for (vi = 0; vi < voices.length; vi++) {
       v = voices[vi];
@@ -436,30 +664,65 @@
         t = F32((absFrame - v.startFrame) / SR);
         env = envelope(t, v.duration, v.fadein, v.envelop);
         if (env <= 0) continue;
-        sig = sampleVoice(v, t);
-        g = fmul(fmul(fmul(sig, v.volume), env), master);
-        /* Centre most SFX; slight pan via freqZ for non-tweet. */
-        if (v.type === "tweet" || v.type === "tone") {
-          out[i * 2] = fadd(out[i * 2], g);
-          out[i * 2 + 1] = fadd(out[i * 2 + 1], g);
-        } else {
-          var pan = v.freqZ * 0.12;
-          if (pan > 0.7) pan = 0.7;
-          if (pan < -0.7) pan = -0.7;
-          out[i * 2] = fadd(out[i * 2], fmul(g, fsub(1.0, fmul(pan, 0.75))));
-          out[i * 2 + 1] = fadd(out[i * 2 + 1], fmul(g, fadd(1.0, fmul(pan, 0.75))));
-        }
+        /* Same order as sbase.ginc: signal * volume * envelop * fadeInFactor.
+         * No master here — it is a post-normalizer fader, as on desktop. */
+        sampleVoiceStereo(v, t);
+        gain = fmul(v.volume, env);
+        out[i * 2] = fadd(out[i * 2], fmul(voiceL, gain));
+        out[i * 2 + 1] = fadd(out[i * 2 + 1], fmul(voiceR, gain));
       }
     }
     voices = still;
     audioFrame += frames;
     processEcho(out, frames);
+    busNormalize(out, frames);
+    applyMasterVolume(out, frames);
+    busCeiling(out, frames);
     return out;
+  }
+
+  /* name → ssound pipeline index, read once from the module so no string
+   * crosses the WASM boundary on the play path. */
+  var gpuVariants = null;
+
+  function buildGpuVariantMap() {
+    gpuVariants = null;
+    if (!wasm || typeof wasm._sound_worker_variant_count !== "function") return;
+    try {
+      var n = wasm._sound_worker_variant_count() | 0;
+      if (n < 1) return;
+      var map = {};
+      var i, ptr;
+      for (i = 0; i < n; i++) {
+        ptr = wasm._sound_worker_variant_name(i);
+        if (ptr) map[wasm.UTF8ToString(ptr)] = i;
+      }
+      gpuVariants = map;
+      console.log("[SoundWorkerSsound] GPU variants:", Object.keys(map).join(", "));
+    } catch (eVar) {
+      console.warn("[SoundWorkerSsound] variant map failed", eVar);
+    }
+  }
+
+  function gpuVariantIndex(name) {
+    if (!gpuVariants) return -1;
+    var v = gpuVariants[name || "tweet"];
+    return v == null ? -1 : v | 0;
+  }
+
+  function fallbackToJs(reason) {
+    if (backend === "js") return;
+    console.warn("[SoundWorkerSsound] " + reason + " — switching to JS synth");
+    loadError = reason;
+    backend = "js";
+    wasm = null;
+    gpuVariants = null;
   }
 
   function wasmPlay(desc) {
     desc = desc || {};
-    var type = desc.soundType === "tone" ? 1 : 0;
+    var variant = gpuVariantIndex(desc.soundType);
+    if (variant < 0) return jsPlay(desc);
     var vol = desc.volume >= 0 ? +desc.volume : 0.6;
     var dur = desc.duration > 0 ? +desc.duration : 0.35;
     var fadein = Math.max(0, desc.fadein >= 0 ? +desc.fadein : 0.0000006);
@@ -468,7 +731,12 @@
     var fy = desc.freqY != null ? +desc.freqY : 4.0;
     var fz = desc.freqZ != null ? +desc.freqZ : 0.0;
     var fw = desc.freqW != null ? +desc.freqW : 1.0;
-    return wasm._sound_worker_play(type, vol, dur, fadein, envelop, fx, fy, fz, fw) | 0;
+    var toff = desc.timeOffset != null ? +desc.timeOffset : 0.0;
+    return (
+      wasm._sound_worker_play(
+        variant, vol, dur, fadein, envelop, fx, fy, fz, fw, toff
+      ) | 0
+    );
   }
   function wasmGenerateBlock(frames) {
     frames = frames | 0;
@@ -496,9 +764,8 @@
       out.set(wasm.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + frames * 2));
       return out;
     } catch (eGen) {
-      console.warn("[SoundWorkerSsound] generate failed, JS fallback", eGen);
-      /* Permanent soft-fallback for this session if GPU path is broken. */
-      if (backend.indexOf("wasm-gpu") === 0) backend = "wasm";
+      console.warn("[SoundWorkerSsound] generate failed", eGen);
+      fallbackToJs("wasm generate threw");
       return jsGenerateBlock(frames);
     }
   }
@@ -618,11 +885,11 @@
     try {
       if (typeof importScripts === "function") {
         var loaded = false;
+        /* Never probe App.js here: next to Numeris that name is the scene
+         * module, and importing it into the audio worker would boot the game. */
         var names = [
-          "SoundWorker.js?v=andr27",
-          "./SoundWorker.js?v=andr27",
-          "App.js?v=andr27",
-          "./App.js?v=andr27"
+          "SoundWorker.js?v=gpu1",
+          "./SoundWorker.js?v=gpu1"
         ];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
@@ -699,7 +966,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "andr27");
+            u.searchParams.set("v", "gpu1");
             return u.href;
           } catch (e) {
             return p;
@@ -714,15 +981,15 @@
       })
         .then(function (mod) {
           wasm = mod;
-          /* Do not silently use an older worker whose tweet hash/envelope and
-           * gain differ from tweet.sound. The corrected JS worker remains a
-           * valid off-thread fallback until SoundWorker.wasm is rebuilt. */
+          /* v20 is the Numeris GPU worker: full .soundlist, play-by-variant,
+           * no CPU synth inside the module. Older builds only knew tweet, so
+           * refuse them and keep the JS transcription instead. */
           try {
             if (
               typeof wasm._sound_worker_version !== "function" ||
-              (wasm._sound_worker_version() | 0) < 10
+              (wasm._sound_worker_version() | 0) < 20
             ) {
-              loadError = "SoundWorker.wasm is older than exact-tweet+bfx v10; using JS worker";
+              loadError = "SoundWorker.wasm predates the Numeris GPU worker (v20); using JS worker";
               wasm = null;
               backend = "js";
               return false;
@@ -737,42 +1004,41 @@
             if (typeof wasm._sound_worker_init === "function") wasm._sound_worker_init();
           } catch (eInit) {
             loadError = "init: " + (eInit && eInit.message ? eInit.message : eInit);
-            console.warn("[SoundWorkerSsound] init error (keep wasm)", eInit);
+            console.warn("[SoundWorkerSsound] init error", eInit);
           }
-          backend = "wasm";
-          if (preferCpu) {
-            try {
-              if (typeof wasm._sound_worker_prefer_cpu === "function")
-                wasm._sound_worker_prefer_cpu(1);
-            } catch (ePref) {}
-            backend = "wasm-cpu";
-            return true;
-          }
+          /* The module is GPU-only. Without a working WebGL2 context there is
+           * nothing to synthesise with, so hand the session back to JS. */
           try {
-            if (typeof wasm._sound_worker_init_gpu === "function") {
-              var gpuOk = wasm._sound_worker_init_gpu() | 0;
-              if (gpuOk) {
-                backend = "wasm-gpu";
-                if (
-                  typeof wasm._sound_worker_gpu_pcm_ok === "function" &&
-                  !(wasm._sound_worker_gpu_pcm_ok() | 0)
-                ) {
-                  backend = "wasm-gpu-cpu";
-                }
-              } else {
-                var code =
-                  typeof wasm._sound_worker_gpu_fail_code === "function"
-                    ? wasm._sound_worker_gpu_fail_code() | 0
-                    : 0;
-                if (!loadError)
-                  loadError = "gpu init returned 0 code=" + code + " (CPU wasm ok)";
-              }
+            var gpuOk =
+              typeof wasm._sound_worker_init_gpu === "function"
+                ? wasm._sound_worker_init_gpu() | 0
+                : 0;
+            if (!gpuOk) {
+              var code =
+                typeof wasm._sound_worker_gpu_fail_code === "function"
+                  ? wasm._sound_worker_gpu_fail_code() | 0
+                  : 0;
+              loadError = "gpu init failed code=" + code + "; using JS worker";
+              wasm = null;
+              backend = "js";
+              return false;
             }
           } catch (eGpu) {
-            if (!loadError)
-              loadError = "gpu: " + (eGpu && eGpu.message ? eGpu.message : eGpu);
-            console.warn("[SoundWorkerSsound] gpu init error (CPU wasm ok)", eGpu);
+            loadError = "gpu: " + (eGpu && eGpu.message ? eGpu.message : eGpu);
+            console.warn("[SoundWorkerSsound] gpu init error; using JS worker", eGpu);
+            wasm = null;
+            backend = "js";
+            return false;
           }
+          buildGpuVariantMap();
+          if (!gpuVariants) {
+            loadError = "gpu variant table empty; using JS worker";
+            wasm = null;
+            backend = "js";
+            return false;
+          }
+          applyEchoSettings(ECHO_DELAY_MS, ECHO_FB, ECHO_MIX);
+          backend = "wasm-gpu";
           return true;
         })
         .catch(function (err) {
@@ -812,10 +1078,6 @@
       return loadError;
     },
     play: function (desc) {
-      desc = desc || {};
-      var ty = desc.soundType || "tweet";
-      /* WASM path only knows tweet/tone — Numeris SFX stay on JS synth. */
-      if (ty !== "tweet" && ty !== "tone") return jsPlay(desc);
       return (backend.indexOf("wasm") === 0) && wasm ? wasmPlay(desc) : jsPlay(desc);
     },
     stopAll: function () {
@@ -832,19 +1094,15 @@
     },
     generateBlock: function (frames, sampleRate) {
       var out = generateOutputBlock(frames, sampleRate);
+      /* The module reports a dead readback the block after it happens; drop to
+       * the JS synth rather than keep pumping silence. */
       if ((backend.indexOf("wasm") === 0) && wasm) {
         try {
           if (
-            typeof wasm._sound_worker_backend === "function" &&
-            (wasm._sound_worker_backend() | 0) === 2
-          )
-            backend = "wasm-gpu-cpu";
-          else if (
             typeof wasm._sound_worker_gpu_pcm_ok === "function" &&
-            backend === "wasm-gpu" &&
             !(wasm._sound_worker_gpu_pcm_ok() | 0)
           )
-            backend = "wasm-gpu-cpu";
+            fallbackToJs("GPU readback went silent");
         } catch (eBe) {}
       }
       return out;
@@ -877,6 +1135,7 @@
         } catch (e) {}
       }
     },
+    setEcho: applyEchoSettings,
     resetOutput: resetOutput,
     setConfigRate: applyConfigRate,
     getConfigRate: function () { return CONFIG_SR; },
@@ -905,9 +1164,9 @@
   var tickTimer = 0;
   var audioPort = null;
   var blockFrames = 256;
-  var targetFrames = 1024;
-  var needFrames = 512;
-  var sampleRate = 44100;
+  var targetFrames = 1536;
+  var needFrames = 768;
+  var sampleRate = 48000;
   var toneHz = 440;
   var toneGain = 0.12;
   var phase = 0;
@@ -1072,7 +1331,7 @@
       queued_est: estimatedQueued(),
       synth_rate:
         typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getSynthesisRate
-          ? SoundWorkerSsound.getSynthesisRate() : 44100,
+          ? SoundWorkerSsound.getSynthesisRate() : 48000,
       output_rate:
         typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getOutputRate
           ? SoundWorkerSsound.getOutputRate() : sampleRate,
@@ -1143,15 +1402,6 @@
 
   function sendPcmBlock() {
     if (!audioPort) return false;
-    /* Proto timing GL is only for non-CPU experiments. Production preferCpu
-     * has gl===null â€” skip the backend string check every block. */
-    if (!preferCpu) {
-      var be =
-        typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getBackend
-          ? SoundWorkerSsound.getBackend()
-          : "";
-      if (be.indexOf("wasm-gpu") !== 0) gpuTick();
-    }
     var frames = blockFrames;
     var bytes = frames * 2 * 4;
     var synthT0 = performance.now();
@@ -1337,28 +1587,23 @@
         stallMode = msg.stall_mode === "busy" ? "busy" : "async";
         tickDelayMs = msg.tick_ms > 0 ? msg.tick_ms | 0 : 16;
         blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 256;
-        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 1024;
-        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 512;
+        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 1536;
+        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 768;
         if (msg.synthRate > 0 &&
             typeof SoundWorkerSsound !== "undefined" &&
             SoundWorkerSsound.setConfigRate)
           SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : (
           typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getConfigRate
-            ? SoundWorkerSsound.getConfigRate() : 44100);
+            ? SoundWorkerSsound.getConfigRate() : 48000);
         toneHz = msg.toneHz > 0 ? +msg.toneHz : 440;
         preferCpu = msg.preferCpu !== false; /* default CPU â€” avoids GPU contention with scene */
         synthReady = false;
         pendingPlays.length = 0;
         if (targetFrames < 512) targetFrames = 512;
         if (needFrames < 256) needFrames = 256;
-        if (!preferCpu) {
-          if (!msg.canvas) {
-            fail("missing-canvas");
-            return;
-          }
-          if (!initGL(msg.canvas)) return;
-        }
+        /* No GL here: SoundWorkerSsound owns its own OffscreenCanvas context
+         * for the .sound pipelines. The old proto timing shader is gone. */
         running = true;
         if (msg.audioPort) attachAudioPort(msg.audioPort);
         function postReady(backend) {
@@ -1509,6 +1754,11 @@
       if (type === "set_master") {
         if (typeof SoundWorkerSsound !== "undefined")
           SoundWorkerSsound.setMaster(msg.volume);
+        return;
+      }
+      if (type === "set_echo") {
+        if (typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.setEcho)
+          SoundWorkerSsound.setEcho(msg.delayMs, msg.feedback, msg.mix);
         return;
       }
       if (type === "set_stall") {

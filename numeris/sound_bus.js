@@ -10,7 +10,7 @@
   /* Old App.wasm EM_JS may reference SSOUND_SAMPLE_RATE as a bare JS id
    * (C macros are not expanded inside EM_JS string bodies). */
   if (typeof global.SSOUND_SAMPLE_RATE !== "number")
-    global.SSOUND_SAMPLE_RATE = 44100;
+    global.SSOUND_SAMPLE_RATE = 48000;
 
   function workerSupported(needsCanvas) {
     return (
@@ -134,13 +134,16 @@
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : (mobile ? 512 : 256),
-      /* Look-ahead FIFO == SFX latency. Mobile keeps a deeper cushion
-       * (GL/ScriptProcessor hitches); desktop runs ~23 ms and relies on the
-       * per-quantum refill request instead of a fat buffer. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 3072 : 1024),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 512),
+      /* Look-ahead FIFO = how long a worker hitch can last before the sink
+       * starves. 1024 frames (21 ms) only tolerated a 20 ms stall, and a WebGL
+       * frame hitch or a GC pause routinely exceeds that — that was the source
+       * of the random clicks. 1536 tolerates ~50 ms. It costs nothing in felt
+       * latency: playSound trims the FIFO to 512 frames on every tap after
+       * silence, so an attack still lands ~11 ms deep at either setting. */
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 3072 : 1536),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 768),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
-      synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
+      synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 48000,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
       sampleRate: opts.sampleRate > 0 ? opts.sampleRate | 0 : 0,
       convertPath: "pending",
@@ -156,7 +159,7 @@
     function refreshConvertPath() {
       var cfg = state.synthRate | 0;
       var dev = state.sampleRate | 0;
-      if (!(cfg > 0)) cfg = 44100;
+      if (!(cfg > 0)) cfg = 48000;
       if (!(dev > 0)) {
         state.convertPath = "pending";
         return state.convertPath;
@@ -173,13 +176,15 @@
 
     /* ---- optional GPU worker (PCM proto only) ---- */
     if (!inlineSynth) {
-      if (!workerSupported(!state.preferCpu)) {
+      /* OffscreenCanvas is only needed by the GPU module inside the worker,
+       * which degrades to the JS synth on its own — do not fail the bus here. */
+      if (!workerSupported(false)) {
         state.error = "worker-unsupported";
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=lowlat1";
-      else url += "&v=lowlat1";
+      if (url.indexOf("?") < 0) url += "?v=gpu1";
+      else url += "&v=gpu1";
       var worker;
       try {
         worker = new Worker(url);
@@ -188,8 +193,9 @@
         return state;
       }
 
-      /* CPU synth does not need another WebGL context beside the raytracer. */
-      var canvas = state.preferCpu ? null : new OffscreenCanvas(state.width, state.height);
+      /* The worker no longer runs a timing shader of its own; the ssound
+       * module creates the only audio GL context, inside the worker. */
+      var canvas = null;
       worker.onmessage = function (ev) {
         var msg = ev.data || {};
         if (msg.type === "ready") {
@@ -904,7 +910,7 @@
       /* Prefer engine clock (44.1k) so worker can skip resample â†’ fewer clicks. */
       var acOpts = {
         latencyHint: "interactive",
-        sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 44100
+        sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 48000
       };
       var ctx;
       try {
@@ -1179,6 +1185,16 @@
         state.worklet.port.postMessage({ type: "stop_all" });
       if (state.worker) state.worker.postMessage({ type: "stop_all" });
     };
+    /* Mirror the persisted bfx echo settings into the worker synth. */
+    state.setEcho = function (delayMs, feedback, mix) {
+      if (state.worker)
+        state.worker.postMessage({
+          type: "set_echo",
+          delayMs: +delayMs,
+          feedback: +feedback,
+          mix: +mix
+        });
+    };
     state.setMaster = function (vol) {
       if (state.inlineSynth && state.worklet && state.worklet.port)
         state.worklet.port.postMessage({ type: "set_master", volume: vol });
@@ -1202,8 +1218,8 @@
           blockFrames: state.blockFrames,
           targetFrames: state.targetFrames,
           needFrames: state.needFrames,
-          sampleRate: state.sampleRate || state.synthRate || 44100,
-          synthRate: state.synthRate || state.sampleRate || 44100,
+          sampleRate: state.sampleRate || state.synthRate || 48000,
+          synthRate: state.synthRate || state.sampleRate || 48000,
           toneHz: state.toneHz
         },
         [port]
@@ -1596,6 +1612,14 @@
           " | attempt=" +
           state._unlockAttempts
       );
+      if ((state.sampleRate | 0) !== (state.synthRate | 0))
+        console.warn(
+          "[sound_bus] device refused the engine rate (" +
+            state.synthRate +
+            " Hz) and runs at " +
+            state.sampleRate +
+            " Hz — synth follows the device, no resample"
+        );
       state.audioStage = "resume";
       try {
         resumePromise = ctx.state !== "running" ? ctx.resume() : Promise.resolve();
