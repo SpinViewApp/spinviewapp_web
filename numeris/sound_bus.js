@@ -183,8 +183,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu1";
-      else url += "&v=gpu1";
+      if (url.indexOf("?") < 0) url += "?v=gpu4";
+      else url += "&v=gpu4";
       var worker;
       try {
         worker = new Worker(url);

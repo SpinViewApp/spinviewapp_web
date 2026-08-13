@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 61,
+"config_defaults_rev": 65,
 "mainpan": {
   "1": {
     "1": {
@@ -498,8 +498,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 10,
-  "w": 120,
+  "h": 433,
+  "w": 592,
   "x": 0,
   "y": 0
 }
