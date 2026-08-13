@@ -133,15 +133,15 @@
       vendor: "",
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
-      blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : (mobile ? 512 : 256),
+      blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 2048,
       /* Look-ahead FIFO = how long a worker hitch can last before the sink
        * starves. 1024 frames (21 ms) only tolerated a 20 ms stall, and a WebGL
        * frame hitch or a GC pause routinely exceeds that — that was the source
        * of the random clicks. 1536 tolerates ~50 ms. It costs nothing in felt
        * latency: playSound trims the FIFO to 512 frames on every tap after
        * silence, so an attack still lands ~11 ms deep at either setting. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 3072 : 1536),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 768),
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 6144 : 4096),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 4096 : 2048),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 48000,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
@@ -183,8 +183,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu4";
-      else url += "&v=gpu4";
+      if (url.indexOf("?") < 0) url += "?v=gpu5";
+      else url += "&v=gpu5";
       var worker;
       try {
         worker = new Worker(url);

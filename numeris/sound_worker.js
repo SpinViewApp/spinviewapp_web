@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu2
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu5
  */
 (function (root) {
   "use strict";
@@ -177,7 +177,7 @@
   function ensureSourceFrames(want) {
     var chunk, chunkFrames;
     while (resampleFrames < want) {
-      chunk = generateSourceBlock(1024);
+      chunk = generateSourceBlock(2048);
       chunkFrames = chunk.length >> 1;
       if (resampleHead + resampleFrames + chunkFrames > RESAMPLE_CAP) {
         resampleSamples.copyWithin(
@@ -248,7 +248,7 @@
     try {
       if (typeof importScripts === "function") {
         var loaded = false;
-        var names = ["SoundWorker.js?v=gpu4", "./SoundWorker.js?v=gpu4"];
+        var names = ["SoundWorker.js?v=gpu5", "./SoundWorker.js?v=gpu5"];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
           try {
@@ -275,7 +275,7 @@
       var preGl = null;
       if (!preferCpu) {
         try {
-          gpuCanvas = new OffscreenCanvas(1024, 1);
+          gpuCanvas = new OffscreenCanvas(2048, 1);
           preGl = gpuCanvas.getContext("webgl2", {
             alpha: false,
             antialias: false,
@@ -314,7 +314,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu4");
+            u.searchParams.set("v", "gpu5");
             return u.href;
           } catch (e) {
             return p;
@@ -475,9 +475,9 @@
   var tickDelayMs = 16;
   var tickTimer = 0;
   var audioPort = null;
-  var blockFrames = 256;
-  var targetFrames = 1536;
-  var needFrames = 768;
+  var blockFrames = 2048;
+  var targetFrames = 4096;
+  var needFrames = 2048;
   var sampleRate = 48000;
   var queuedEstimate = 0;
   var queuedWallMs = 0;
@@ -608,8 +608,8 @@
     var want = target > 0 ? target : targetFrames;
     var guard = 0;
     var fillT0 = performance.now();
-    if (want < blockFrames * 2) want = blockFrames * 2;
-    while (running && audioPort && estimatedQueued() < want && guard < 64) {
+    if (want < blockFrames) want = blockFrames;
+    while (running && audioPort && estimatedQueued() < want && guard < 4) {
       sendPcmBlock();
       guard++;
     }
@@ -666,8 +666,8 @@
       noteQueued(msg.queuedFrames | 0);
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
-      if (targetFrames < 512) targetFrames = 512;
-      if (needFrames < 256) needFrames = 256;
+      if (targetFrames < 2048) targetFrames = 2048;
+      if (needFrames < 1024) needFrames = 1024;
       fillToTarget(targetFrames);
       scheduleAudioPump();
     }
@@ -685,27 +685,13 @@
   }
 
   function playSound(msg) {
-    var hadAudio =
-      SoundWorkerSsound.liveVoices() > 0 ||
-      (SoundWorkerSsound.lastPeak && SoundWorkerSsound.lastPeak() > 1e-5) ||
-      (SoundWorkerSsound.echoLive && SoundWorkerSsound.echoLive());
-    var q = estimatedQueued();
-    var keep = (needFrames > 0 ? needFrames : 1024) >> 1;
-    if (keep < blockFrames * 2) keep = blockFrames * 2;
-    if (!hadAudio) {
-      if (audioPort && q > keep + blockFrames) {
-        audioPort.postMessage({ type: "trim", keepFrames: keep });
-        noteQueued(keep);
-      }
-      if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
-    }
     var id = SoundWorkerSsound.play(msg);
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
     if (!audioPort) {
       scheduleSilentPump();
       return;
     }
-    forcePushBlocks(hadAudio ? 1 : 2);
+    forcePushBlocks(1);
     fillToTarget(needFrames);
     scheduleAudioPump();
   }
@@ -723,9 +709,9 @@
     try {
       if (type === "init") {
         tickDelayMs = msg.tick_ms > 0 ? msg.tick_ms | 0 : 16;
-        blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 256;
-        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 1536;
-        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 768;
+        blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 2048;
+        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;
+        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;
         if (msg.synthRate > 0 && SoundWorkerSsound.setConfigRate)
           SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : (
@@ -733,8 +719,8 @@
         preferCpu = !!msg.preferCpu;
         synthReady = false;
         pendingPlays.length = 0;
-        if (targetFrames < 512) targetFrames = 512;
-        if (needFrames < 256) needFrames = 256;
+        if (targetFrames < 2048) targetFrames = 2048;
+        if (needFrames < 1024) needFrames = 1024;
         running = true;
         if (msg.audioPort) attachAudioPort(msg.audioPort);
         function postReady(backend) {
@@ -767,12 +753,12 @@
         if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
         if (msg.sampleRate > 0) {
           sampleRate = +msg.sampleRate;
-          if (SoundWorkerSsound.setConfigRate)
-            SoundWorkerSsound.setConfigRate(sampleRate);
+          /* Device rate is the Worklet clock. Do not rewrite the engine
+           * (GPU shader) rate — that forces a cubic resample and pitch drift. */
           if (SoundWorkerSsound.setSampleRate)
             SoundWorkerSsound.setSampleRate(sampleRate);
         }
-        if (msg.synthRate > 0 && SoundWorkerSsound.setConfigRate && !(msg.sampleRate > 0))
+        if (msg.synthRate > 0 && SoundWorkerSsound.setConfigRate)
           SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         if (!msg.port) {
           fail("missing-audio-port");
