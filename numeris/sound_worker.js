@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu5
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu6
  */
 (function (root) {
   "use strict";
@@ -75,6 +75,8 @@
     resampleHead = 0;
     resampleFrames = 0;
     resamplePos = 0.0;
+    gpuHoldOff = 0;
+    gpuHoldLen = 0;
   }
 
   function silentBlock(frames) {
@@ -168,10 +170,47 @@
     }
   }
 
+  var GPU_RENDER = 2048;
+  var gpuHold = new Float32Array(GPU_RENDER * 2);
+  var gpuHoldOff = 0;
+  var gpuHoldLen = 0;
+
+  function clampPcm(buf, n) {
+    var i, v;
+    for (i = 0; i < n; i++) {
+      v = buf[i];
+      if (!(v > -2) || !(v < 2)) buf[i] = 0;
+      else if (v > 1) buf[i] = 1;
+      else if (v < -1) buf[i] = -1;
+    }
+  }
+
   function generateSourceBlock(frames) {
-    if ((backend.indexOf("wasm") === 0) && wasm)
-      return wasmGenerateBlock(frames);
-    return silentBlock(frames);
+    frames = frames | 0;
+    if (frames < 1) frames = 256;
+    if (!((backend.indexOf("wasm") === 0) && wasm))
+      return silentBlock(frames);
+    var out = acquireSrcScratch(frames);
+    var filled = 0;
+    var take, chunk;
+    while (filled < frames) {
+      if (gpuHoldOff >= gpuHoldLen) {
+        chunk = wasmGenerateBlock(GPU_RENDER);
+        gpuHold.set(chunk.subarray(0, GPU_RENDER * 2));
+        clampPcm(gpuHold, GPU_RENDER * 2);
+        gpuHoldOff = 0;
+        gpuHoldLen = GPU_RENDER;
+      }
+      take = frames - filled;
+      if (take > gpuHoldLen - gpuHoldOff) take = gpuHoldLen - gpuHoldOff;
+      out.set(
+        gpuHold.subarray(gpuHoldOff * 2, (gpuHoldOff + take) * 2),
+        filled * 2
+      );
+      gpuHoldOff += take;
+      filled += take;
+    }
+    return out.subarray(0, frames * 2);
   }
 
   function ensureSourceFrames(want) {
@@ -248,7 +287,7 @@
     try {
       if (typeof importScripts === "function") {
         var loaded = false;
-        var names = ["SoundWorker.js?v=gpu5", "./SoundWorker.js?v=gpu5"];
+        var names = ["SoundWorker.js?v=gpu6", "./SoundWorker.js?v=gpu6"];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
           try {
@@ -314,7 +353,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu5");
+            u.searchParams.set("v", "gpu6");
             return u.href;
           } catch (e) {
             return p;
@@ -475,9 +514,10 @@
   var tickDelayMs = 16;
   var tickTimer = 0;
   var audioPort = null;
-  var blockFrames = 2048;
-  var targetFrames = 4096;
-  var needFrames = 2048;
+  var blockFrames = 256;
+  var targetFrames = 2048;
+  var needFrames = 1024;
+  var fillBusy = 0;
   var sampleRate = 48000;
   var queuedEstimate = 0;
   var queuedWallMs = 0;
@@ -604,15 +644,18 @@
   }
 
   function fillToTarget(target) {
-    if (!audioPort || !running || !synthReady) return;
+    if (!audioPort || !running || !synthReady || fillBusy) return;
     var want = target > 0 ? target : targetFrames;
     var guard = 0;
     var fillT0 = performance.now();
+    fillBusy = 1;
     if (want < blockFrames) want = blockFrames;
-    while (running && audioPort && estimatedQueued() < want && guard < 4) {
+    if (want > 4096) want = 4096;
+    while (running && audioPort && estimatedQueued() < want && guard < 16) {
       sendPcmBlock();
       guard++;
     }
+    fillBusy = 0;
     fillLastMs = performance.now() - fillT0;
     if (fillLastMs > fillMaxMs) fillMaxMs = fillLastMs;
   }
@@ -651,7 +694,7 @@
     clearAudioPump();
     if (!running || !audioPort) return;
     var q = estimatedQueued();
-    var delay = q >= targetFrames ? 16 : q >= needFrames ? 8 : 4;
+    var delay = q >= targetFrames ? 12 : q >= needFrames ? 4 : 2;
     audioPumpTimer = setTimeout(function () {
       audioPumpTimer = 0;
       if (!running || !audioPort || !synthReady) return;
@@ -666,8 +709,10 @@
       noteQueued(msg.queuedFrames | 0);
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
-      if (targetFrames < 2048) targetFrames = 2048;
-      if (needFrames < 1024) needFrames = 1024;
+      if (targetFrames < 1024) targetFrames = 1024;
+      if (targetFrames > 4096) targetFrames = 4096;
+      if (needFrames < 256) needFrames = 256;
+      if (needFrames > targetFrames) needFrames = targetFrames;
       fillToTarget(targetFrames);
       scheduleAudioPump();
     }
@@ -709,9 +754,9 @@
     try {
       if (type === "init") {
         tickDelayMs = msg.tick_ms > 0 ? msg.tick_ms | 0 : 16;
-        blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 2048;
-        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;
-        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;
+        blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 256;
+        targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 2048;
+        needFrames = msg.needFrames > 0 ? msg.needFrames | 0 : 1024;
         if (msg.synthRate > 0 && SoundWorkerSsound.setConfigRate)
           SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : (
@@ -719,8 +764,10 @@
         preferCpu = !!msg.preferCpu;
         synthReady = false;
         pendingPlays.length = 0;
-        if (targetFrames < 2048) targetFrames = 2048;
-        if (needFrames < 1024) needFrames = 1024;
+        if (blockFrames < 128) blockFrames = 128;
+        if (blockFrames > 512) blockFrames = 512;
+        if (targetFrames < 1024) targetFrames = 1024;
+        if (needFrames < 256) needFrames = 256;
         running = true;
         if (msg.audioPort) attachAudioPort(msg.audioPort);
         function postReady(backend) {
@@ -749,6 +796,8 @@
       }
       if (type === "set-audio-port") {
         if (msg.blockFrames > 0) blockFrames = msg.blockFrames | 0;
+        if (blockFrames < 128) blockFrames = 128;
+        if (blockFrames > 512) blockFrames = 512;
         if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
         if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
         if (msg.sampleRate > 0) {
