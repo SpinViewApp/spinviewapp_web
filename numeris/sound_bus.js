@@ -1950,13 +1950,17 @@
       if (!state._unlockStarted) state._unlockStarted = true;
       state._unlockAttempts++;
 
-      primeHtmlMedia();
-
       /* Only recreate a *dead* graph. pointerdown+click used to nuke the
        * ScriptProcessor on the still-suspended first context. */
       if (state.audioCtx && state.audioCtx.state === "closed") {
-        console.warn("[sound_bus] recreating AudioContext (was closed)");
+         console.warn("[sound_bus] recreating AudioContext (was closed)");
+         nukeAudioGraph();
+      }
+      if (state._resumeTimedOut && state.audioCtx &&
+          state.audioCtx.state === "suspended") {
+        console.warn("[sound_bus] recreating AudioContext after resume timeout");
         nukeAudioGraph();
+        state._resumeTimedOut = 0;
       }
 
       ctx = ensureAudioContext();
@@ -1985,6 +1989,16 @@
         state.audioReady = false;
         return Promise.reject(resumeErr);
       }
+      /* Give AudioContext the gesture first. HTMLMedia is only a secondary
+       * Android activation aid; calling play() first can consume activation in
+       * some WebViews and leave resume() pending forever. */
+      primeHtmlMedia();
+      resumePromise = Promise.race([
+        Promise.resolve(resumePromise).then(function () { return "resumed"; }),
+        new Promise(function (resolve) {
+          setTimeout(function () { resolve("timeout"); }, 1200);
+        })
+      ]);
 
       function attachSinkIfNeeded() {
         if (state.worklet || state.scriptNode) return Promise.resolve();
@@ -2019,7 +2033,12 @@
       }
 
       state._startPromise = Promise.resolve(resumePromise).then(
-        function () {
+        function (resumeStatus) {
+          if (resumeStatus === "timeout" && ctx.state !== "running") {
+            state._resumeTimedOut = 1;
+            throw new Error("audio-resume-timeout ctx=" + ctx.state);
+          }
+          state._resumeTimedOut = 0;
           primeAudioGesture(ctx);
           if (ctx.state !== "running")
             console.warn("[sound_bus] resume resolved but ctx=" + ctx.state);
@@ -2072,8 +2091,12 @@
     };
 
     state.primeGesture = function () {
-      primeHtmlMedia();
-      if (state.audioCtx) primeAudioGesture(state.audioCtx);
+      /* On the first gesture startAudio creates the context synchronously.
+       * Do not let HTMLMedia.play() consume activation before that happens. */
+      if (state.audioCtx) {
+        primeAudioGesture(state.audioCtx);
+        primeHtmlMedia();
+      }
     };
 
     /* Background / screen-off suspends the context; on return Chrome often
