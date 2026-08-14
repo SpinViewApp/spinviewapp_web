@@ -85,6 +85,11 @@
      * Old App.wasm may still pass inlineSynth:true â€” ignore it. Use forceInlineSynth
      * only for deliberate A/B tests. */
     var inlineSynth = !!opts.forceInlineSynth;
+    /* Worklet PCM crackles on this GPU-worker path (128-frame quantum vs
+     * blocking WebGL readback). ScriptProcessor consumes the same worker PCM
+     * in 1024-frame callbacks and is the sink that actually stays stable.
+     * Set preferWorklet:true only for A/B. */
+    var preferWorklet = !!opts.preferWorklet;
     var state = {
       ok: false,
       ready: false,
@@ -148,6 +153,7 @@
       unlockFadeSec: opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.04,
       toneHz: opts.toneHz > 0 ? +opts.toneHz : 440,
       preferCpu: !!opts.preferCpu,
+      preferWorklet: preferWorklet,
       inlineSynth: inlineSynth,
       mobile: mobile
     };
@@ -179,8 +185,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu6";
-      else url += "&v=gpu6";
+      if (url.indexOf("?") < 0) url += "?v=gpu7";
+      else url += "&v=gpu7";
       var worker;
       try {
         worker = new Worker(url);
@@ -1627,77 +1633,20 @@
         return Promise.reject(resumeErr);
       }
 
-      /* Secure (HTTPS/localhost): Worklet first. ScriptProcessor on the GL thread
-       * causes rare crackles with ur=0 (browser glitch before our FIFO check).
-       * Insecure HTTP: ScriptProcessor immediately, optional Worklet upgrade. */
+      /* Same worker GPU PCM on every origin. ScriptProcessor is the sink:
+       * HTTPS used to wait on addModule with audioPath empty ("locked"), then
+       * attach a 128-frame Worklet that underruns. HTTP attached ScriptProcessor
+       * immediately (stable) and sometimes relabeled after a Worklet "upgrade". */
       if (!state.worklet && !state.scriptNode) {
         try {
-          if (workletSupported(ctx) && isSecureEnough()) {
-            if (state._workletModuleReady) {
-              state.audioStage = "worklet";
-              attachWorkletNodeSync(ctx);
-            } else {
-              state.audioStage = "worklet-loading";
-              ensureWorkletModule(ctx)
-                .then(function () {
-                  if (state.worklet) return;
-                  if (!state.audioCtx || state.audioCtx !== ctx) return;
-                  try {
-                    if (state.scriptNode) {
-                      try {
-                        state.scriptNode.disconnect();
-                      } catch (eDisc0) {}
-                      state.scriptNode = null;
-                    }
-                    state.audioStage = "worklet";
-                    attachWorkletNodeSync(ctx);
-                    markAudioReadyIfRunning();
-                    if (state.audioReady && typeof opts.onAudioReady === "function")
-                      opts.onAudioReady(state);
-                    console.log("[sound_bus] Worklet ready (HTTPS path)");
-                  } catch (eWl) {
-                    console.warn("[sound_bus] Worklet attach failed â†’ script-pcm", eWl);
-                    state.error = "worklet-attach:" + (eWl && eWl.message ? eWl.message : eWl);
-                    if (!state.scriptNode) startScriptProcessorFallback(ctx);
-                    markAudioReadyIfRunning();
-                  }
-                })
-                .catch(function (eMod) {
-                  console.warn("[sound_bus] Worklet addModule failed â†’ script-pcm", eMod);
-                  state.error = "worklet-module:" + (eMod && eMod.message ? eMod.message : eMod);
-                  if (!state.worklet && !state.scriptNode) {
-                    try {
-                      startScriptProcessorFallback(ctx);
-                      markAudioReadyIfRunning();
-                    } catch (eFb) {}
-                  }
-                });
-            }
-          } else if (state._workletModuleReady && workletSupported(ctx)) {
+          if (preferWorklet && workletSupported(ctx) && isSecureEnough() &&
+              state._workletModuleReady) {
             state.audioStage = "worklet";
             attachWorkletNodeSync(ctx);
           } else {
-            state.audioStage = "fallback";
+            state.audioStage = "script-pcm";
             startScriptProcessorFallback(ctx);
-            if (workletSupported(ctx)) {
-              ensureWorkletModule(ctx)
-                .then(function () {
-                  if (state.worklet || !state.scriptNode) return;
-                  if (!state.audioCtx || state.audioCtx.state !== "running") return;
-                  try {
-                    try {
-                      state.scriptNode.disconnect();
-                    } catch (eDisc) {}
-                    state.scriptNode = null;
-                    attachWorkletNodeSync(state.audioCtx);
-                    console.log("[sound_bus] upgraded ScriptProcessor â†’ Worklet");
-                  } catch (eUp) {
-                    console.warn("[sound_bus] worklet upgrade failed", eUp);
-                    state.error = "worklet-upgrade:" + (eUp && eUp.message ? eUp.message : eUp);
-                  }
-                })
-                .catch(function () {});
-            }
+            console.log("[sound_bus] PCM sink=script-pcm (Worklet PCM disabled — GPU readback grain)");
           }
           markAudioReadyIfRunning();
           if (state.audioReady && typeof opts.onAudioReady === "function")
