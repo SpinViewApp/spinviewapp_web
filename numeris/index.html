@@ -45,16 +45,16 @@ body {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  color: #fff;
-  background: #0a0a0a;
+  color: rgba(255, 255, 255, 0.35);
+  background: #000;
   z-index: 50;
 }
 .app-spinner {
   width: 40px;
   height: 40px;
   margin-bottom: 12px;
-  border: 4px solid rgba(255, 255, 255, 0.15);
-  border-top-color: #fff;
+  border: 4px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.42);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -281,6 +281,16 @@ body {
     setTimeout(resizeCanvas, 500);
   });
 
+  var loaderHidden = false;
+  function hideLoader() {
+    if (loaderHidden) return;
+    loaderHidden = true;
+    if (loader) loader.style.display = "none";
+  }
+  window.numerisHideLoader = hideLoader;
+  /* If C never signals first ink (old wasm, abort-before-draw), don't stick. */
+  setTimeout(function () { hideLoader(); }, 8000);
+
   updateVersionLabel();
 
   (function probeWebGL2() {
@@ -348,7 +358,9 @@ body {
       resizeCanvas();
       if (window.spinviewActivateKeyboard) window.spinviewActivateKeyboard();
       if (typeof window.Shell_OnLoad === "function") window.Shell_OnLoad();
-      if (loader) loader.style.display = "none";
+      /* Stay over the canvas until a dark WebGL frame is committed
+       * (numerisHideLoader). Then the blit lifts and the title writes. */
+      if (loaderText) loaderText.textContent = "Preparing... " + getCurrentVersion();
       console.info("[runtime] Ready.");
     }
   };
