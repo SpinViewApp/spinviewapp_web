@@ -188,9 +188,9 @@
   function createBus(opts) {
     opts = opts || {};
     var mobile = isMobileUa();
-    /* Desktop-correct path (conversation start): worker synth @44.1k â†’ Worklet PCM.
-     * Old App.wasm may still pass inlineSynth:true â€” ignore it. Use forceInlineSynth
-     * only for deliberate A/B tests. */
+    /* Normal path: GPU worker PCM. forceInlineSynth is the production fallback
+     * when worker WebGL2 is unavailable: it runs on the realtime AudioWorklet
+     * thread so Android render stalls cannot starve audio. */
     var inlineSynth = !!opts.forceInlineSynth;
     /* Worklet PCM crackles on this GPU-worker path (128-frame quantum vs
      * blocking WebGL readback). ScriptProcessor consumes the same worker PCM
@@ -1772,7 +1772,7 @@
     state.startAudio = function () {
       var resumePromise;
       var ctx;
-      if (state._retired || !state.worker) {
+      if (state._retired || (!state.worker && !state.inlineSynth)) {
         /* Sokol / main-thread GPU owns the device. Do not open a second
          * AudioContext — Chrome glitches when two graphs run at once. */
         return Promise.resolve(state);
@@ -1837,16 +1837,20 @@
       }
 
       function attachSinkIfNeeded() {
-        if (state.worklet || state.scriptNode) return;
-        if (preferWorklet && workletSupported(ctx) && isSecureEnough() &&
-            state._workletModuleReady) {
-          state.audioStage = "worklet";
-          attachWorkletNodeSync(ctx);
-        } else {
-          state.audioStage = "script-pcm";
-          startScriptProcessorFallback(ctx);
-          console.log("[sound_bus] PCM sink=script-pcm ctx=" + ctx.state);
+        if (state.worklet || state.scriptNode) return Promise.resolve();
+        if (preferWorklet && workletSupported(ctx) && isSecureEnough()) {
+          state.audioStage = "worklet-module";
+          /* Loading a worklet while AudioContext is suspended can hang on
+           * Android. Do it after resume, inside the user-gesture chain. */
+          return ensureWorkletModule(ctx).then(function () {
+            state.audioStage = "worklet";
+            attachWorkletNodeSync(ctx);
+          });
         }
+        state.audioStage = "script-pcm";
+        startScriptProcessorFallback(ctx);
+        console.log("[sound_bus] PCM sink=script-pcm ctx=" + ctx.state);
+        return Promise.resolve();
       }
 
       state._startPromise = Promise.resolve(resumePromise).then(
@@ -1854,12 +1858,10 @@
           primeAudioGesture(ctx);
           if (ctx.state !== "running")
             console.warn("[sound_bus] resume resolved but ctx=" + ctx.state);
-          try {
-            attachSinkIfNeeded();
-          } catch (eSink) {
-            console.warn("[sound_bus] sink attach failed", eSink);
-            state.error = String(eSink && eSink.message ? eSink.message : eSink);
-          }
+          return attachSinkIfNeeded();
+        }
+      ).then(
+        function () {
           markAudioReadyIfRunning();
           console.log(
             "[sound_bus] after resume ready=" +
@@ -1883,9 +1885,9 @@
           return state;
         },
         function (err) {
-          state.audioStage = "resume-denied";
+          state.audioStage = "audio-start-failed";
           state.audioReady = false;
-          state.error = "resume:" + String(err && err.message ? err.message : err);
+          state.error = String(err && err.message ? err.message : err);
           throw err;
         }
       );

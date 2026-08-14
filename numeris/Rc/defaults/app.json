@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 83,
+"config_defaults_rev": 84,
 "mainpan": {
   "1": {
     "1": {
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 622,
+  "campaign_depth": 623,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -278,8 +278,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 625,
-  "level_seed": 84375403,
+  "level_index": 626,
+  "level_seed": 1708794550,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -293,25 +293,25 @@
   "messages_on_start": true,
   "mind_level": 1,
   "music_bpm_scale": 1,
-  "music_complexity_response": 4.824,
+  "music_complexity_response": 1.914,
   "music_difficulty_influence": 0.25,
   "music_enabled": true,
   "music_jingle_gain": 1.068,
-  "music_level_influence": 0.317,
+  "music_level_influence": 0.101,
   "music_lookahead": 0.085,
   "music_master_gain": 1,
   "music_note_length": 2.231,
-  "music_ornaments": 0.378,
+  "music_ornaments": 0.187,
   "music_progress_influence": 0.27,
   "music_puzzle_gain": 1.056,
   "music_quantize": 8,
   "music_role_mask": 15,
   "music_running": true,
-  "music_silence": 0.447,
+  "music_silence": 0.135,
   "music_theme_override": 6,
-  "music_variation": 0.311,
+  "music_variation": 0.12,
   "music_visual_reactivity": 1.241,
-  "music_world_crossfade": 3.191,
+  "music_world_crossfade": 22.689,
   "pan_limit": true,
   "pan_limit_radius": 0.163,
   "perf_hud_visible": false,
@@ -362,52 +362,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.233585,
-    "b": 213.806,
-    "g": 0.569823,
-    "r": -0.581483
+    "a": -0.349594,
+    "b": 213.234,
+    "g": 0.569357,
+    "r": -0.581648
   },
   "sht_fractal_v1": {
-    "a": 0.349631,
-    "b": 0.142555,
-    "g": 0.495008,
-    "r": -0.0167334
+    "a": 0.344575,
+    "b": 0.151892,
+    "g": 0.502358,
+    "r": -0.0222252
   },
   "sht_fractal_v2": {
-    "a": 0.186471,
-    "b": 0.0596409,
-    "g": 212.218,
+    "a": 0.189172,
+    "b": 0.0619056,
+    "g": 212.211,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 17.91,
-    "b": 0.00434854,
-    "g": 0.0342902,
-    "r": 7.93084
+    "a": 18.1323,
+    "b": 0.00429777,
+    "g": 0.034412,
+    "r": 7.85493
   },
   "sht_fractal_v4": {
-    "a": 0.17167,
-    "b": 0.695423,
-    "g": 0.690398,
-    "r": 32.9345
+    "a": 0.173505,
+    "b": 0.684975,
+    "g": 0.711862,
+    "r": 33.2647
   },
   "sht_fractal_v5": {
-    "a": 0.241894,
-    "b": 0.116647,
-    "g": 0.118153,
-    "r": 0.245299
+    "a": 0.234687,
+    "b": 0.116543,
+    "g": 0.122456,
+    "r": 0.243007
   },
   "sht_fractal_v6": {
-    "a": 1.09884,
-    "b": 0.732963,
-    "g": 0.71481,
-    "r": 0.757791
+    "a": 1.10152,
+    "b": 0.732772,
+    "g": 0.693673,
+    "r": 0.75927
   },
   "sht_fractal_v7": {
-    "a": 0.804393,
-    "b": 0.978829,
-    "g": 1.26226,
-    "r": 1.18978
+    "a": 0.804606,
+    "b": 0.98757,
+    "g": 1.25774,
+    "r": 1.18988
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -416,10 +416,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.627158,
-    "b": 0.419293,
-    "g": 0.746432,
-    "r": 0.720893
+    "a": 0.624446,
+    "b": 0.420322,
+    "g": 0.75369,
+    "r": 0.723183
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
