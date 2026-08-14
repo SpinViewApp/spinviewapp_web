@@ -1772,6 +1772,11 @@
     state.startAudio = function () {
       var resumePromise;
       var ctx;
+      if (state._retired || !state.worker) {
+        /* Sokol / main-thread GPU owns the device. Do not open a second
+         * AudioContext — Chrome glitches when two graphs run at once. */
+        return Promise.resolve(state);
+      }
       if (!audioSupported()) {
         state.error = "audio-unsupported";
         state.audioStage = "error";
@@ -1985,6 +1990,7 @@
     }
 
     state.stop = function () {
+      state._retired = 1;
       gracefulTeardownSync("stop");
       if (state.worklet) {
         try {

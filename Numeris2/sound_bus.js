@@ -10,7 +10,7 @@
   /* Old App.wasm EM_JS may reference SSOUND_SAMPLE_RATE as a bare JS id
    * (C macros are not expanded inside EM_JS string bodies). */
   if (typeof global.SSOUND_SAMPLE_RATE !== "number")
-    global.SSOUND_SAMPLE_RATE = 44100;
+    global.SSOUND_SAMPLE_RATE = 48000;
 
   function workerSupported(needsCanvas) {
     return (
@@ -30,6 +30,113 @@
     var h = (global.location && location.hostname) || "";
     return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
   }
+
+  /* Firefox keeps Sokol's ScriptProcessor alive in background tabs (throttled
+   * callbacks = lagged tails). Mute the callback + suspend that context even
+   * after the worker bus has been torn down (Safari / main-thread GPU path). */
+  function sokolSilenceProcess(e) {
+    var out = e.outputBuffer;
+    var c, ch, i, n = out.length;
+    for (c = 0; c < out.numberOfChannels; c++) {
+      ch = out.getChannelData(c);
+      for (i = 0; i < n; i++) ch[i] = 0;
+    }
+  }
+
+  function pauseSokolSaudio() {
+    var M, node, ctx;
+    try {
+      M = global.Module;
+    } catch (eM) {
+      return;
+    }
+    if (!M) return;
+    M._numerisSaudioPaused = 1;
+    node = M._saudio_node;
+    ctx = M._saudio_context;
+    if (node && node.onaudioprocess !== sokolSilenceProcess) {
+      if (!node._numerisSavedProcess) node._numerisSavedProcess = node.onaudioprocess;
+      node.onaudioprocess = sokolSilenceProcess;
+      try {
+        node.disconnect();
+      } catch (e0) {}
+    }
+    if (ctx && ctx.state === "running") {
+      try {
+        ctx.suspend();
+      } catch (e1) {}
+    }
+  }
+
+  function resumeSokolSaudio() {
+    var M, node, ctx, p;
+    try {
+      M = global.Module;
+    } catch (eM) {
+      return;
+    }
+    if (!M || !M._numerisSaudioPaused) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden")
+      return;
+    M._numerisSaudioPaused = 0;
+    ctx = M._saudio_context;
+    node = M._saudio_node;
+    if (node && node._numerisSavedProcess) {
+      node.onaudioprocess = node._numerisSavedProcess;
+      node._numerisSavedProcess = null;
+    }
+    if (ctx && ctx.state !== "closed") {
+      try {
+        p = ctx.resume();
+        if (p && typeof p.catch === "function") p.catch(function () {});
+      } catch (e0) {}
+    }
+    if (node && ctx && ctx.destination) {
+      try {
+        node.connect(ctx.destination);
+      } catch (e1) {}
+    }
+  }
+
+  function bindSokolPageMute() {
+    if (global._numerisSokolVisBound) return;
+    global._numerisSokolVisBound = 1;
+    if (typeof document !== "undefined") {
+      document.addEventListener(
+        "visibilitychange",
+        function () {
+          if (document.visibilityState === "hidden") {
+            pauseSokolSaudio();
+            var tick = function () {
+              if (document.visibilityState !== "hidden") return;
+              pauseSokolSaudio();
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          } else resumeSokolSaudio();
+        },
+        true
+      );
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener(
+        "pagehide",
+        function () {
+          pauseSokolSaudio();
+        },
+        true
+      );
+      document.addEventListener(
+        "pointerdown",
+        function () {
+          if (typeof document !== "undefined" && document.visibilityState === "visible")
+            resumeSokolSaudio();
+        },
+        true
+      );
+    }
+  }
+  bindSokolPageMute();
 
   function isMobileUa() {
     try {
@@ -55,7 +162,7 @@
     );
   }
   /* Embedded AudioWorklet processor (andr36) — no separate spin_audio_processor.js fetch. */
-  var SPIN_AUDIO_PROCESSOR_SRC = "/* AudioWorklet: realtime tweet/tone synth (priority path).\n *\n * Envelope matches ssound/sbase.ginc (sustain + exp(-envelop*(t-duration))).\n * legacyTimeScale remains configurable for A/B tests; production uses 1.0 so\n * one device frame advances exactly one sample of tweet.sound time.\n */\nclass SpinAudioProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    var opts = (options && options.processorOptions) || {};\n    this.mode = opts.mode === \"pcm\" ? \"pcm\" : \"inline\";\n    this.lightSynth = !!opts.lightSynth;\n    this.legacyTimeScale =\n      opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0;\n    /* SOUND_UNLOCK_FADEIN_SEC \u2014 soft onset when device first becomes audible. */\n    this.unlockFadeSec =\n      opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12;\n    this.unlockGain = 0;\n    this.unlockActive = this.unlockFadeSec > 0;\n    this.blocks = [];\n    this.queuedFrames = 0;\n    this.current = null;\n    this.offset = 0;\n    this.underruns = 0; /* gap events, not individual samples */\n    this.underrunFrames = 0;\n    this.maxGapFrames = 0;\n    this.gapFrames = 0;\n    this.gapStartL = 0;\n    this.gapStartR = 0;\n    this.lastOutL = 0;\n    this.lastOutR = 0;\n    this.crossfadeFrames = 768;\n    this.holdFrames = 256;\n    this.crossfadeLeft = 0;\n    this.crossfadeFromL = 0;\n    this.crossfadeFromR = 0;\n    this.recoveryLeft = 0;\n    this.recoveryFromL = 0;\n    this.recoveryFromR = 0;\n    this.minQueuedFrames = 0x7fffffff;\n    this.fillWaitLastFrames = 0;\n    this.fillWaitMaxFrames = 0;\n    this.renderFrames = 0;\n    this.needSentAtFrame = 0;\n    this.bufferBoostFrames = 0;\n    this.needThreshold = 4096;\n    this.targetFrames = 8192;\n    this.sourcePort = null;\n    this._tick = 0;\n    this._needSent = false;\n    this.primed = false;\n    this.master = 1.0;\n    this.voices = [];\n    this.nextId = 1;\n    this.frame = 0;\n    this.maxVoices = opts.maxVoices > 0 ? opts.maxVoices | 0 : 24;\n    if (this.maxVoices < 4) this.maxVoices = 4;\n    if (this.maxVoices > 48) this.maxVoices = 48;\n\n    this.port.onmessage = (event) => {\n      var msg = event.data || {};\n      if (msg.type === \"set-mode\") {\n        this.mode = msg.mode === \"pcm\" ? \"pcm\" : \"inline\";\n        return;\n      }\n      if (msg.type === \"play\") {\n        this.playVoice(msg);\n        return;\n      }\n      if (msg.type === \"stop_all\") {\n        this.voices.length = 0;\n        return;\n      }\n      if (msg.type === \"set_master\") {\n        this.master = msg.volume >= 0 ? +msg.volume : 1;\n        return;\n      }\n      if (msg.type === \"set-source-port\") {\n        this.sourcePort = msg.port;\n        this.needThreshold = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;\n        this.targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;\n        this.sourcePort.onmessage = (audioEvent) => {\n          var a = audioEvent.data || {};\n          if (a.type === \"pcm\" && a.samples) {\n            var samples =\n              a.samples instanceof Float32Array\n                ? a.samples\n                : new Float32Array(a.samples);\n            var frames = a.frames | 0;\n            if (frames > 0) {\n              this.blocks.push({ samples: samples, frames: frames });\n              this.queuedFrames += frames;\n              if (this._needSent) {\n                this.fillWaitLastFrames =\n                  this.renderFrames - this.needSentAtFrame;\n                if (this.fillWaitLastFrames > this.fillWaitMaxFrames)\n                  this.fillWaitMaxFrames = this.fillWaitLastFrames;\n              }\n              this._needSent = false;\n              /* First PCM block \u2192 audible immediately (unlock fade covers onset).\n               * Waiting for a deep needThreshold caused multi-second silence on\n               * Android ScriptProcessor when the main thread was busy. */\n              this.primed = true;\n            }\n          } else if (a.type === \"flush\") {\n            /* Drop stale pre-buffered silence so a newly played bird starts at\n             * the next render quantum instead of behind ~170 ms of FIFO. */\n            this.blocks.length = 0;\n            this.current = null;\n            this.offset = 0;\n            this.queuedFrames = 0;\n            this._needSent = false;\n            this.bufferBoostFrames = 0;\n            /* An idle queue ends at zero, so the exact tweet attack can pass\n             * unchanged. Keep the de-zipper only for a real discontinuity. */\n            this.crossfadeLeft =\n              Math.max(Math.abs(this.lastOutL), Math.abs(this.lastOutR)) > 1e-4\n                ? this.crossfadeFrames\n                : 0;\n            this.crossfadeFromL = this.lastOutL;\n            this.crossfadeFromR = this.lastOutR;\n          }\n        };\n        this.sourcePort.start();\n        if (this.mode === \"pcm\") this.requestFill(true);\n        return;\n      }\n      if (msg.type === \"set-thresholds\") {\n        if (msg.needFrames > 0) this.needThreshold = msg.needFrames | 0;\n        if (msg.targetFrames > 0) this.targetFrames = msg.targetFrames | 0;\n        return;\n      }\n      if (msg.type === \"reset-latency\") {\n        this.blocks.length = 0;\n        this.current = null;\n        this.offset = 0;\n        this.queuedFrames = 0;\n        this._needSent = false;\n        this.bufferBoostFrames = 0;\n        this.gapFrames = 0;\n        this.crossfadeLeft = 0;\n        this.unlockGain = 0;\n        this.unlockActive = this.unlockFadeSec > 0;\n        this.primed = false;\n        if (this.mode === \"pcm\") this.requestFill(true);\n        return;\n      }\n    };\n  }\n\n  envelopDecaySeconds(envelop) {\n    if (!(envelop > 1e-6)) return 0.5;\n    var d = Math.log(0.001) / -envelop;\n    if (!isFinite(d) || d < 0) return 0.5;\n    if (d > 4) return 4;\n    return d;\n  }\n\n  playVoice(desc) {\n    if (this.voices.length >= this.maxVoices) this.voices.shift();\n    var fadein = desc.fadein >= 0 ? +desc.fadein : 0.0000006;\n    if (fadein < 0) fadein = 0;\n    var envelop = desc.envelop >= 0 ? +desc.envelop : 8.0;\n    var duration = desc.duration > 0 ? +desc.duration : 0.08;\n    var decay = this.envelopDecaySeconds(envelop);\n    this.voices.push({\n      id: this.nextId++,\n      start: this.frame + (desc.startOffsetFrames | 0),\n      duration: duration,\n      totalLife: duration + decay,\n      volume: desc.volume >= 0 ? +desc.volume : 0.6,\n      fadein: fadein,\n      envelop: envelop,\n      freqX: desc.freqX != null ? +desc.freqX : 2.0,\n      freqY: desc.freqY != null ? +desc.freqY : 4.0,\n      freqZ: desc.freqZ != null ? +desc.freqZ : 0.0,\n      type: desc.soundType === \"tone\" ? \"tone\" : \"tweet\",\n      phase: 0\n    });\n    this.primed = true;\n  }\n\n  hash1(p) {\n    var p2x = (p * 5.3983) % 1;\n    if (p2x < 0) p2x += 1;\n    var p2y = (p * 5.4427) % 1;\n    if (p2y < 0) p2y += 1;\n    var d = p2y * (p2x + 21.5351) + p2x * (p2y + 14.3137);\n    p2x += d;\n    p2y += d;\n    var r = (p2x * p2y * 95.4337) % 1;\n    return r < 0 ? r + 1 : r;\n  }\n  noise(n) {\n    var f = n - Math.floor(n);\n    n = Math.floor(n);\n    f = f * f * (3.0 - 2.0 * f);\n    return this.hash1(n) * (1 - f) + this.hash1(n + 1) * f - 0.5;\n  }\n  noiseSlope(n, loc) {\n    var f = n - Math.floor(n);\n    n = Math.floor(n);\n    if (loc <= 0) f = f >= 1 ? 1 : 0;\n    else {\n      f = f / loc;\n      if (f < 0) f = 0;\n      if (f > 1) f = 1;\n      f = f * f * (3 - 2 * f);\n    }\n    return this.hash1(n) * (1 - f) + this.hash1(n + 1) * f;\n  }\n  smoothstep(edge0, edge1, x) {\n    var t = (x - edge0) / (edge1 - edge0);\n    if (t < 0) t = 0;\n    if (t > 1) t = 1;\n    return t * t * (3 - 2 * t);\n  }\n  tweetVolume(t) {\n    var n1 = this.noiseSlope(t * 11.0, 0.3);\n    var n2 = this.smoothstep(0.0, 1.0, Math.abs(Math.sin(t * 14.0)));\n    var n3 = this.smoothstep(0.4, 0.9, this.noiseSlope(t * 0.5 + 4.0, 0.3));\n    var n = n1 * n2 * 0.2 * n3;\n    n = n * n;\n    if (n < 0) n = 0;\n    if (n > 1) n = 1;\n    return n;\n  }\n  /* Full Shadertoy FM - desktop. Aliases hard above ~Nyquist/4. */\n  tweetHeavy(t) {\n    t = t - 1.5;\n    var f =\n      Math.sin(6.2831 * 2.0 * t) * this.noise(t * 8.1 - 100.0) * 100.0 + 5000.0;\n    f += Math.cos(50.0 * 6.2831 * t);\n    return Math.sin(6.2831 * f * t);\n  }\n  sampleTweetHeavy(t, freqX, freqY) {\n    var volume = this.tweetVolume((t + freqY - 0.5) * 0.6) * 20.0;\n    /* Match tweet.sound exactly; final device mixing performs the clamp. */\n    return this.tweetHeavy((t + freqX) * 0.4) * volume;\n  }\n  /* Mobile: phase-accum chirp in bird range (1.8\u20134.5 kHz), same gate feel. */\n  sampleTweetLight(t, freqX, freqY, voice, dt) {\n    var gate = this.tweetVolume((t + freqY * 0.08) * 0.6);\n    if (gate < 1e-4) {\n      voice.phase = 0;\n      return 0;\n    }\n    /* Phrase offset without jumping into chaotic FM region. */\n    var phrase = (freqX * 0.015) % 0.4;\n    var tt = t + phrase;\n    var sweep =\n      1900 +\n      2200 * (0.5 + 0.5 * Math.sin(tt * 16.0 + freqX * 0.25)) +\n      350 * Math.sin(tt * 37.0);\n    if (sweep > 4500) sweep = 4500;\n    if (sweep < 1200) sweep = 1200;\n    voice.phase += sweep * dt;\n    if (voice.phase > 1e6) voice.phase -= 1e6;\n    var sig = Math.sin(6.28318530718 * voice.phase);\n    sig *= 0.6 + 0.4 * Math.sin(tt * 42.0);\n    return sig * gate * 0.55;\n  }\n  panSimple(pos) {\n    if (pos > 1.25) pos = 1.25;\n    if (pos < -1.25) pos = -1.25;\n    var e0 = 1 - pos,\n      e1 = 1 + pos;\n    var len = Math.sqrt(e0 * e0 + e1 * e1);\n    if (len < 1e-8) return [0.707, 0.707];\n    return [e0 / len, e1 / len];\n  }\n  envelope(t, v) {\n    if (t < 0 || t > v.totalLife) return 0;\n    var e = t < v.duration ? 1.0 : Math.exp(-v.envelop * (t - v.duration));\n    if (v.fadein > 1e-12 && t < v.fadein) e *= t / v.fadein;\n    return e < 0 ? 0 : e > 1 ? 1 : e;\n  }\n\n  requestFill(force) {\n    var effectiveNeed;\n    if (this.mode !== \"pcm\" || !this.sourcePort) return;\n    effectiveNeed = this.needThreshold + (this.bufferBoostFrames >> 1);\n    if (this.queuedFrames >= effectiveNeed) {\n      this._needSent = false;\n      return;\n    }\n    if (!force && this._needSent) return;\n    this._needSent = true;\n    this.needSentAtFrame = this.renderFrames;\n    this.sourcePort.postMessage({\n      type: \"need\",\n      queuedFrames: this.queuedFrames | 0,\n      needFrames: effectiveNeed | 0,\n      targetFrames: (this.targetFrames + this.bufferBoostFrames) | 0\n    });\n  }\n\n  processInline(left, right, n) {\n    var sr = sampleRate;\n    var dt = 1.0 / sr;\n    var i, vi, v, t, env, sig, pan, g, absFrame, endFrame;\n    var still = [];\n    for (i = 0; i < n; i++) {\n      left[i] = 0;\n      right[i] = 0;\n    }\n    for (vi = 0; vi < this.voices.length; vi++) {\n      v = this.voices[vi];\n      endFrame = v.start + Math.ceil(v.totalLife * sr);\n      if (this.frame >= endFrame) continue;\n      still.push(v);\n      /* Legacy tweet.sound writes the same signal to both channels and ignores\n       * freq.z. Keep panning only for tone/mobile voices. */\n      pan = v.type === \"tweet\" && !this.lightSynth ? [1.0, 1.0] : this.panSimple(v.freqZ);\n      for (i = 0; i < n; i++) {\n        absFrame = this.frame + i;\n        if (absFrame < v.start) continue;\n        t = (absFrame - v.start) * dt;\n        if (v.type === \"tweet\") t *= this.legacyTimeScale;\n        env = this.envelope(t, v);\n        if (env <= 1e-5) continue;\n        if (v.type === \"tone\")\n          sig = Math.sin(6.28318530718 * (v.freqX > 20 ? v.freqX : 440) * t) * 0.15;\n        else if (this.lightSynth)\n          sig = this.sampleTweetLight(t, v.freqX, v.freqY, v, dt);\n        else sig = this.sampleTweetHeavy(t, v.freqX, v.freqY);\n        g = sig * v.volume * env * this.master;\n        left[i] += g * pan[0];\n        right[i] += g * pan[1];\n      }\n    }\n    this.voices = still;\n    for (i = 0; i < n; i++) {\n      if (left[i] > 1) left[i] = 1;\n      else if (left[i] < -1) left[i] = -1;\n      if (right[i] > 1) right[i] = 1;\n      else if (right[i] < -1) right[i] = -1;\n    }\n    this.frame += n;\n  }\n\n  processPcm(left, right, n) {\n    var i, si, rawL, rawR, phase, fade;\n    for (i = 0; i < n; i++) {\n      if (!this.current || this.offset >= this.current.frames) {\n        this.current = this.blocks.length ? this.blocks.shift() : null;\n        this.offset = 0;\n      }\n      if (!this.current) {\n        if (this.primed) {\n          if (this.gapFrames === 0) {\n            this.underruns++;\n            this.gapStartL = this.lastOutL;\n            this.gapStartR = this.lastOutR;\n            /* Grow look-ahead only after a real starvation event. */\n            /* Cap — muted warm-up must not inflate to 16k. */\n            this.bufferBoostFrames += 512;\n            if (this.bufferBoostFrames > 2048) this.bufferBoostFrames = 2048;\n          }\n          this.gapFrames++;\n          this.underrunFrames++;\n          if (this.gapFrames > this.maxGapFrames)\n            this.maxGapFrames = this.gapFrames;\n          /* Hold last sample briefly then slow fade \u2014 avoids clicky fade-to-0. */\n          if (this.gapFrames <= this.holdFrames) {\n            left[i] = this.gapStartL;\n            right[i] = this.gapStartR;\n          } else {\n            fade = 1.0 - (this.gapFrames - this.holdFrames) / this.crossfadeFrames;\n            if (fade < 0) fade = 0;\n            left[i] = this.gapStartL * fade;\n            right[i] = this.gapStartR * fade;\n            this.lastOutL = left[i];\n            this.lastOutR = right[i];\n          }\n        } else {\n          left[i] = 0.0;\n          right[i] = 0.0;\n          this.lastOutL = 0.0;\n          this.lastOutR = 0.0;\n        }\n        continue;\n      }\n      si = this.offset * 2;\n      rawL = this.current.samples[si];\n      rawR = this.current.samples[si + 1];\n      if (this.gapFrames > 0) {\n        if (this.crossfadeLeft <= 0) {\n          this.recoveryLeft = this.crossfadeFrames;\n          this.recoveryFromL = this.lastOutL;\n          this.recoveryFromR = this.lastOutR;\n        } else this.recoveryLeft = 0;\n        this.gapFrames = 0;\n      }\n      if (this.crossfadeLeft > 0) {\n        phase = 1.0 - this.crossfadeLeft / this.crossfadeFrames;\n        left[i] = this.crossfadeFromL * (1.0 - phase) + rawL * phase;\n        right[i] = this.crossfadeFromR * (1.0 - phase) + rawR * phase;\n        this.crossfadeLeft--;\n      } else if (this.recoveryLeft > 0) {\n        phase = 1.0 - this.recoveryLeft / this.crossfadeFrames;\n        left[i] = this.recoveryFromL * (1.0 - phase) + rawL * phase;\n        right[i] = this.recoveryFromR * (1.0 - phase) + rawR * phase;\n        this.recoveryLeft--;\n      } else {\n        left[i] = rawL;\n        right[i] = rawR;\n      }\n      this.lastOutL = left[i];\n      this.lastOutR = right[i];\n      this.offset++;\n      this.queuedFrames--;\n      if (this.queuedFrames < 0) this.queuedFrames = 0;\n      if (this.primed && this.queuedFrames < this.minQueuedFrames)\n        this.minQueuedFrames = this.queuedFrames;\n    }\n  }\n\n  process(inputs, outputs) {\n    var output = outputs[0];\n    var left = output[0];\n    var right = output[1] || output[0];\n    var n = left.length;\n\n    if (this.mode === \"inline\") this.processInline(left, right, n);\n    else this.processPcm(left, right, n);\n\n    if (this.unlockActive) {\n      var step = 1.0 / (this.unlockFadeSec * sampleRate);\n      var i, g;\n      for (i = 0; i < n; i++) {\n        this.unlockGain += step;\n        if (this.unlockGain >= 1) {\n          this.unlockGain = 1;\n          this.unlockActive = false;\n          break;\n        }\n        g = this.unlockGain;\n        left[i] *= g;\n        right[i] *= g;\n      }\n    }\n\n    this.renderFrames += n;\n    if (this.mode === \"pcm\") {\n      /* Re-ask every quantum while below target \u2014 a single sticky _needSent\n       * left the FIFO draining during slow worker fills. */\n      if (this.queuedFrames < this.targetFrames + (this.bufferBoostFrames >> 1))\n        this.requestFill(this.queuedFrames < this.needThreshold * 2);\n    }\n    this._tick++;\n    if ((this._tick & 15) === 0) {\n      this.port.postMessage({\n        type: \"stats\",\n        underruns: this.underruns,\n        underrunFrames: this.underrunFrames,\n        maxGapMs: (this.maxGapFrames * 1000) / sampleRate,\n        minQueuedFrames:\n          this.minQueuedFrames === 0x7fffffff ? this.queuedFrames : this.minQueuedFrames,\n        fillWaitMs: (this.fillWaitLastFrames * 1000) / sampleRate,\n        fillWaitMaxMs: (this.fillWaitMaxFrames * 1000) / sampleRate,\n        bufferBoostFrames: this.bufferBoostFrames,\n        queuedFrames:\n          this.mode === \"inline\" ? this.voices.length : this.queuedFrames | 0,\n        blocks: this.blocks.length | 0,\n        mode: this.mode,\n        voices: this.voices.length | 0\n      });\n    }\n    return true;\n  }\n}\n\nregisterProcessor(\"spin-audio-processor\", SpinAudioProcessor);\n";
+  var SPIN_AUDIO_PROCESSOR_SRC = "/* AudioWorklet: realtime tweet/tone synth (priority path).\n *\n * Envelope matches ssound/sbase.ginc (sustain + exp(-envelop*(t-duration))).\n * legacyTimeScale remains configurable for A/B tests; production uses 1.0 so\n * one device frame advances exactly one sample of tweet.sound time.\n */\nclass SpinAudioProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    var opts = (options && options.processorOptions) || {};\n    this.mode = opts.mode === \"pcm\" ? \"pcm\" : \"inline\";\n    this.lightSynth = !!opts.lightSynth;\n    this.legacyTimeScale =\n      opts.legacyTimeScale > 0 ? +opts.legacyTimeScale : 1.0;\n    /* SOUND_UNLOCK_FADEIN_SEC \u2014 soft onset when device first becomes audible. */\n    this.unlockFadeSec =\n      opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.12;\n    this.unlockGain = 0;\n    this.unlockActive = this.unlockFadeSec > 0;\n    this.blocks = [];\n    this.queuedFrames = 0;\n    this.current = null;\n    this.offset = 0;\n    this.underruns = 0; /* gap events, not individual samples */\n    this.underrunFrames = 0;\n    this.maxGapFrames = 0;\n    this.gapFrames = 0;\n    this.gapStartL = 0;\n    this.gapStartR = 0;\n    this.lastOutL = 0;\n    this.lastOutR = 0;\n    this.crossfadeFrames = 192;\n    this.holdFrames = 64;\n    this.healthyQuanta = 0;\n    this.crossfadeLeft = 0;\n    this.crossfadeFromL = 0;\n    this.crossfadeFromR = 0;\n    this.recoveryLeft = 0;\n    this.recoveryFromL = 0;\n    this.recoveryFromR = 0;\n    this.minQueuedFrames = 0x7fffffff;\n    this.fillWaitLastFrames = 0;\n    this.fillWaitMaxFrames = 0;\n    this.renderFrames = 0;\n    this.needSentAtFrame = 0;\n    this.bufferBoostFrames = 0;\n    this.needThreshold = 4096;\n    this.targetFrames = 8192;\n    this.sourcePort = null;\n    this._tick = 0;\n    this._needSent = false;\n    this.primed = false;\n    this.master = 1.0;\n    this.voices = [];\n    this.nextId = 1;\n    this.frame = 0;\n    this.maxVoices = opts.maxVoices > 0 ? opts.maxVoices | 0 : 24;\n    if (this.maxVoices < 4) this.maxVoices = 4;\n    if (this.maxVoices > 48) this.maxVoices = 48;\n\n    this.port.onmessage = (event) => {\n      var msg = event.data || {};\n      if (msg.type === \"set-mode\") {\n        this.mode = msg.mode === \"pcm\" ? \"pcm\" : \"inline\";\n        return;\n      }\n      if (msg.type === \"play\") {\n        this.playVoice(msg);\n        return;\n      }\n      if (msg.type === \"stop_all\") {\n        this.voices.length = 0;\n        return;\n      }\n      if (msg.type === \"set_master\") {\n        this.master = msg.volume >= 0 ? +msg.volume : 1;\n        return;\n      }\n      if (msg.type === \"set-source-port\") {\n        this.sourcePort = msg.port;\n        this.needThreshold = msg.needFrames > 0 ? msg.needFrames | 0 : 2048;\n        this.targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 4096;\n        this.sourcePort.onmessage = (audioEvent) => {\n          var a = audioEvent.data || {};\n          if (a.type === \"pcm\" && a.samples) {\n            var samples =\n              a.samples instanceof Float32Array\n                ? a.samples\n                : new Float32Array(a.samples);\n            var frames = a.frames | 0;\n            if (frames > 0) {\n              this.blocks.push({ samples: samples, frames: frames });\n              this.queuedFrames += frames;\n              if (this._needSent) {\n                this.fillWaitLastFrames =\n                  this.renderFrames - this.needSentAtFrame;\n                if (this.fillWaitLastFrames > this.fillWaitMaxFrames)\n                  this.fillWaitMaxFrames = this.fillWaitLastFrames;\n              }\n              this._needSent = false;\n              /* First PCM block \u2192 audible immediately (unlock fade covers onset).\n               * Waiting for a deep needThreshold caused multi-second silence on\n               * Android ScriptProcessor when the main thread was busy. */\n              this.primed = true;\n            }\n          } else if (a.type === \"flush\") {\n            /* Drop stale pre-buffered silence so a newly played bird starts at\n             * the next render quantum instead of behind ~170 ms of FIFO. */\n            this.blocks.length = 0;\n            this.current = null;\n            this.offset = 0;\n            this.queuedFrames = 0;\n            this._needSent = false;\n            this.bufferBoostFrames = 0;\n            /* An idle queue ends at zero, so the exact tweet attack can pass\n             * unchanged. Keep the de-zipper only for a real discontinuity. */\n            this.crossfadeLeft =\n              Math.max(Math.abs(this.lastOutL), Math.abs(this.lastOutR)) > 1e-4\n                ? this.crossfadeFrames\n                : 0;\n            this.crossfadeFromL = this.lastOutL;\n            this.crossfadeFromR = this.lastOutR;\n          } else if (a.type === \"trim\") {\n            /* Idle look-ahead is stale silence. Drop the tail but keep a\n             * cushion, so latency collapses without starving the sink. */\n            this.trimQueue(a.keepFrames | 0);\n          }\n        };\n        this.sourcePort.start();\n        if (this.mode === \"pcm\") this.requestFill(true);\n        return;\n      }\n      if (msg.type === \"set-thresholds\") {\n        if (msg.needFrames > 0) this.needThreshold = msg.needFrames | 0;\n        if (msg.targetFrames > 0) this.targetFrames = msg.targetFrames | 0;\n        return;\n      }\n      if (msg.type === \"reset-latency\") {\n        this.blocks.length = 0;\n        this.current = null;\n        this.offset = 0;\n        this.queuedFrames = 0;\n        this._needSent = false;\n        this.bufferBoostFrames = 0;\n        this.healthyQuanta = 0;\n        this.gapFrames = 0;\n        this.crossfadeLeft = 0;\n        this.unlockGain = 0;\n        this.unlockActive = this.unlockFadeSec > 0;\n        this.primed = false;\n        if (this.mode === \"pcm\") this.requestFill(true);\n        return;\n      }\n    };\n  }\n\n  envelopDecaySeconds(envelop) {\n    if (!(envelop > 1e-6)) return 0.5;\n    var d = Math.log(0.001) / -envelop;\n    if (!isFinite(d) || d < 0) return 0.5;\n    if (d > 4) return 4;\n    return d;\n  }\n\n  playVoice(desc) {\n    if (this.voices.length >= this.maxVoices) this.voices.shift();\n    var fadein = desc.fadein >= 0 ? +desc.fadein : 0.0000006;\n    if (fadein < 0) fadein = 0;\n    var envelop = desc.envelop >= 0 ? +desc.envelop : 8.0;\n    var duration = desc.duration > 0 ? +desc.duration : 0.08;\n    var decay = this.envelopDecaySeconds(envelop);\n    this.voices.push({\n      id: this.nextId++,\n      start: this.frame + (desc.startOffsetFrames | 0),\n      duration: duration,\n      totalLife: duration + decay,\n      volume: desc.volume >= 0 ? +desc.volume : 0.6,\n      fadein: fadein,\n      envelop: envelop,\n      freqX: desc.freqX != null ? +desc.freqX : 2.0,\n      freqY: desc.freqY != null ? +desc.freqY : 4.0,\n      freqZ: desc.freqZ != null ? +desc.freqZ : 0.0,\n      type: desc.soundType === \"tone\" ? \"tone\" : \"tweet\",\n      phase: 0\n    });\n    this.primed = true;\n  }\n\n  hash1(p) {\n    var p2x = (p * 5.3983) % 1;\n    if (p2x < 0) p2x += 1;\n    var p2y = (p * 5.4427) % 1;\n    if (p2y < 0) p2y += 1;\n    var d = p2y * (p2x + 21.5351) + p2x * (p2y + 14.3137);\n    p2x += d;\n    p2y += d;\n    var r = (p2x * p2y * 95.4337) % 1;\n    return r < 0 ? r + 1 : r;\n  }\n  noise(n) {\n    var f = n - Math.floor(n);\n    n = Math.floor(n);\n    f = f * f * (3.0 - 2.0 * f);\n    return this.hash1(n) * (1 - f) + this.hash1(n + 1) * f - 0.5;\n  }\n  noiseSlope(n, loc) {\n    var f = n - Math.floor(n);\n    n = Math.floor(n);\n    if (loc <= 0) f = f >= 1 ? 1 : 0;\n    else {\n      f = f / loc;\n      if (f < 0) f = 0;\n      if (f > 1) f = 1;\n      f = f * f * (3 - 2 * f);\n    }\n    return this.hash1(n) * (1 - f) + this.hash1(n + 1) * f;\n  }\n  smoothstep(edge0, edge1, x) {\n    var t = (x - edge0) / (edge1 - edge0);\n    if (t < 0) t = 0;\n    if (t > 1) t = 1;\n    return t * t * (3 - 2 * t);\n  }\n  tweetVolume(t) {\n    var n1 = this.noiseSlope(t * 11.0, 0.3);\n    var n2 = this.smoothstep(0.0, 1.0, Math.abs(Math.sin(t * 14.0)));\n    var n3 = this.smoothstep(0.4, 0.9, this.noiseSlope(t * 0.5 + 4.0, 0.3));\n    var n = n1 * n2 * 0.2 * n3;\n    n = n * n;\n    if (n < 0) n = 0;\n    if (n > 1) n = 1;\n    return n;\n  }\n  /* Full Shadertoy FM - desktop. Aliases hard above ~Nyquist/4. */\n  tweetHeavy(t) {\n    t = t - 1.5;\n    var f =\n      Math.sin(6.2831 * 2.0 * t) * this.noise(t * 8.1 - 100.0) * 100.0 + 5000.0;\n    f += Math.cos(50.0 * 6.2831 * t);\n    return Math.sin(6.2831 * f * t);\n  }\n  sampleTweetHeavy(t, freqX, freqY) {\n    var volume = this.tweetVolume((t + freqY - 0.5) * 0.6) * 20.0;\n    /* Match tweet.sound exactly; final device mixing performs the clamp. */\n    return this.tweetHeavy((t + freqX) * 0.4) * volume;\n  }\n  /* Mobile: phase-accum chirp in bird range (1.8\u20134.5 kHz), same gate feel. */\n  sampleTweetLight(t, freqX, freqY, voice, dt) {\n    var gate = this.tweetVolume((t + freqY * 0.08) * 0.6);\n    if (gate < 1e-4) {\n      voice.phase = 0;\n      return 0;\n    }\n    /* Phrase offset without jumping into chaotic FM region. */\n    var phrase = (freqX * 0.015) % 0.4;\n    var tt = t + phrase;\n    var sweep =\n      1900 +\n      2200 * (0.5 + 0.5 * Math.sin(tt * 16.0 + freqX * 0.25)) +\n      350 * Math.sin(tt * 37.0);\n    if (sweep > 4500) sweep = 4500;\n    if (sweep < 1200) sweep = 1200;\n    voice.phase += sweep * dt;\n    if (voice.phase > 1e6) voice.phase -= 1e6;\n    var sig = Math.sin(6.28318530718 * voice.phase);\n    sig *= 0.6 + 0.4 * Math.sin(tt * 42.0);\n    return sig * gate * 0.55;\n  }\n  panSimple(pos) {\n    if (pos > 1.25) pos = 1.25;\n    if (pos < -1.25) pos = -1.25;\n    var e0 = 1 - pos,\n      e1 = 1 + pos;\n    var len = Math.sqrt(e0 * e0 + e1 * e1);\n    if (len < 1e-8) return [0.707, 0.707];\n    return [e0 / len, e1 / len];\n  }\n  envelope(t, v) {\n    if (t < 0 || t > v.totalLife) return 0;\n    var e = t < v.duration ? 1.0 : Math.exp(-v.envelop * (t - v.duration));\n    if (v.fadein > 1e-12 && t < v.fadein) e *= t / v.fadein;\n    return e < 0 ? 0 : e > 1 ? 1 : e;\n  }\n\n  /* Keep the oldest `keep` frames (rounded up to a block) and drop the rest.\n   * Playback stays sample-continuous — only not-yet-heard tail is discarded. */\n  trimQueue(keepFrames) {\n    var keep = keepFrames > 0 ? keepFrames | 0 : 0;\n    var kept = this.current ? this.current.frames - this.offset : 0;\n    var i = 0;\n    if (kept < 0) kept = 0;\n    if (this.queuedFrames <= keep) return;\n    while (i < this.blocks.length && kept < keep) {\n      kept += this.blocks[i].frames;\n      i++;\n    }\n    if (i < this.blocks.length) this.blocks.length = i;\n    this.queuedFrames = kept;\n    this._needSent = false;\n  }\n\n  requestFill(force) {\n    var effectiveNeed;\n    if (this.mode !== \"pcm\" || !this.sourcePort) return;\n    effectiveNeed = this.needThreshold + (this.bufferBoostFrames >> 1);\n    if (this.queuedFrames >= effectiveNeed) {\n      this._needSent = false;\n      return;\n    }\n    if (this._needSent && (this.renderFrames - this.needSentAtFrame) < 384) return;\n    this._needSent = true;\n    this.needSentAtFrame = this.renderFrames;\n    this.sourcePort.postMessage({\n      type: \"need\",\n      queuedFrames: this.queuedFrames | 0,\n      needFrames: effectiveNeed | 0,\n      targetFrames: (this.targetFrames + this.bufferBoostFrames) | 0\n    });\n  }\n\n  processInline(left, right, n) {\n    var sr = sampleRate;\n    var dt = 1.0 / sr;\n    var i, vi, v, t, env, sig, pan, g, absFrame, endFrame;\n    var still = [];\n    for (i = 0; i < n; i++) {\n      left[i] = 0;\n      right[i] = 0;\n    }\n    for (vi = 0; vi < this.voices.length; vi++) {\n      v = this.voices[vi];\n      endFrame = v.start + Math.ceil(v.totalLife * sr);\n      if (this.frame >= endFrame) continue;\n      still.push(v);\n      /* Legacy tweet.sound writes the same signal to both channels and ignores\n       * freq.z. Keep panning only for tone/mobile voices. */\n      pan = v.type === \"tweet\" && !this.lightSynth ? [1.0, 1.0] : this.panSimple(v.freqZ);\n      for (i = 0; i < n; i++) {\n        absFrame = this.frame + i;\n        if (absFrame < v.start) continue;\n        t = (absFrame - v.start) * dt;\n        if (v.type === \"tweet\") t *= this.legacyTimeScale;\n        env = this.envelope(t, v);\n        if (env <= 1e-5) continue;\n        if (v.type === \"tone\")\n          sig = Math.sin(6.28318530718 * (v.freqX > 20 ? v.freqX : 440) * t) * 0.15;\n        else if (this.lightSynth)\n          sig = this.sampleTweetLight(t, v.freqX, v.freqY, v, dt);\n        else sig = this.sampleTweetHeavy(t, v.freqX, v.freqY);\n        g = sig * v.volume * env * this.master;\n        left[i] += g * pan[0];\n        right[i] += g * pan[1];\n      }\n    }\n    this.voices = still;\n    for (i = 0; i < n; i++) {\n      if (left[i] > 1) left[i] = 1;\n      else if (left[i] < -1) left[i] = -1;\n      if (right[i] > 1) right[i] = 1;\n      else if (right[i] < -1) right[i] = -1;\n    }\n    this.frame += n;\n  }\n\n  processPcm(left, right, n) {\n    var i, si, rawL, rawR, phase, fade;\n    for (i = 0; i < n; i++) {\n      if (!this.current || this.offset >= this.current.frames) {\n        this.current = this.blocks.length ? this.blocks.shift() : null;\n        this.offset = 0;\n      }\n      if (!this.current) {\n        if (this.primed) {\n          if (this.gapFrames === 0) {\n            this.underruns++;\n            this.gapStartL = this.lastOutL;\n            this.gapStartR = this.lastOutR;\n            /* Grow look-ahead only after a real starvation event. */\n            /* Cap — muted warm-up must not inflate to 16k. */\n            this.bufferBoostFrames += 256;\n            if (this.bufferBoostFrames > 1024) this.bufferBoostFrames = 1024;\n            this.healthyQuanta = 0;\n          }\n          this.gapFrames++;\n          this.underrunFrames++;\n          if (this.gapFrames > this.maxGapFrames)\n            this.maxGapFrames = this.gapFrames;\n          /* Hold last sample briefly then slow fade \u2014 avoids clicky fade-to-0. */\n          if (this.gapFrames <= this.holdFrames) {\n            left[i] = this.gapStartL;\n            right[i] = this.gapStartR;\n          } else {\n            fade = 1.0 - (this.gapFrames - this.holdFrames) / this.crossfadeFrames;\n            if (fade < 0) fade = 0;\n            left[i] = this.gapStartL * fade;\n            right[i] = this.gapStartR * fade;\n            this.lastOutL = left[i];\n            this.lastOutR = right[i];\n          }\n        } else {\n          left[i] = 0.0;\n          right[i] = 0.0;\n          this.lastOutL = 0.0;\n          this.lastOutR = 0.0;\n        }\n        continue;\n      }\n      si = this.offset * 2;\n      rawL = this.current.samples[si];\n      rawR = this.current.samples[si + 1];\n      if (this.gapFrames > 0) {\n        if (this.crossfadeLeft <= 0) {\n          this.recoveryLeft = this.crossfadeFrames;\n          this.recoveryFromL = this.lastOutL;\n          this.recoveryFromR = this.lastOutR;\n        } else this.recoveryLeft = 0;\n        this.gapFrames = 0;\n      }\n      if (this.crossfadeLeft > 0) {\n        phase = 1.0 - this.crossfadeLeft / this.crossfadeFrames;\n        left[i] = this.crossfadeFromL * (1.0 - phase) + rawL * phase;\n        right[i] = this.crossfadeFromR * (1.0 - phase) + rawR * phase;\n        this.crossfadeLeft--;\n      } else if (this.recoveryLeft > 0) {\n        phase = 1.0 - this.recoveryLeft / this.crossfadeFrames;\n        left[i] = this.recoveryFromL * (1.0 - phase) + rawL * phase;\n        right[i] = this.recoveryFromR * (1.0 - phase) + rawR * phase;\n        this.recoveryLeft--;\n      } else {\n        left[i] = rawL;\n        right[i] = rawR;\n      }\n      this.lastOutL = left[i];\n      this.lastOutR = right[i];\n      this.offset++;\n      this.queuedFrames--;\n      if (this.queuedFrames < 0) this.queuedFrames = 0;\n      if (this.primed && this.queuedFrames < this.minQueuedFrames)\n        this.minQueuedFrames = this.queuedFrames;\n    }\n  }\n\n  process(inputs, outputs) {\n    var output = outputs[0];\n    var left = output[0];\n    var right = output[1] || output[0];\n    var n = left.length;\n\n    if (this.mode === \"inline\") this.processInline(left, right, n);\n    else this.processPcm(left, right, n);\n\n    if (this.unlockActive) {\n      var step = 1.0 / (this.unlockFadeSec * sampleRate);\n      var i, g;\n      for (i = 0; i < n; i++) {\n        this.unlockGain += step;\n        if (this.unlockGain >= 1) {\n          this.unlockGain = 1;\n          this.unlockActive = false;\n          break;\n        }\n        g = this.unlockGain;\n        left[i] *= g;\n        right[i] *= g;\n      }\n    }\n\n    this.renderFrames += n;\n    if (this.mode === \"pcm\") {\n      /* Re-ask every quantum while below target \u2014 a single sticky _needSent\n       * left the FIFO draining during slow worker fills. */\n      if (this.queuedFrames < this.targetFrames + (this.bufferBoostFrames >> 1))\n        this.requestFill(this.queuedFrames < this.needThreshold);\n      /* Give the look-ahead back once the FIFO stays healthy, otherwise one\n       * early hitch ratchets latency up for the rest of the session. */\n      if (this.queuedFrames >= this.needThreshold) {\n        this.healthyQuanta++;\n        if (this.healthyQuanta >= 200 && this.bufferBoostFrames > 0) {\n          this.healthyQuanta = 0;\n          this.bufferBoostFrames -= 256;\n          if (this.bufferBoostFrames < 0) this.bufferBoostFrames = 0;\n        }\n      } else this.healthyQuanta = 0;\n    }\n    this._tick++;\n    if ((this._tick & 15) === 0) {\n      this.port.postMessage({\n        type: \"stats\",\n        underruns: this.underruns,\n        underrunFrames: this.underrunFrames,\n        maxGapMs: (this.maxGapFrames * 1000) / sampleRate,\n        minQueuedFrames:\n          this.minQueuedFrames === 0x7fffffff ? this.queuedFrames : this.minQueuedFrames,\n        fillWaitMs: (this.fillWaitLastFrames * 1000) / sampleRate,\n        fillWaitMaxMs: (this.fillWaitMaxFrames * 1000) / sampleRate,\n        bufferBoostFrames: this.bufferBoostFrames,\n        queuedFrames:\n          this.mode === \"inline\" ? this.voices.length : this.queuedFrames | 0,\n        blocks: this.blocks.length | 0,\n        mode: this.mode,\n        voices: this.voices.length | 0\n      });\n    }\n    return true;\n  }\n}\n\nregisterProcessor(\"spin-audio-processor\", SpinAudioProcessor);\n";
 
   function locate(name, explicit) {
     if (explicit) return explicit;
@@ -85,6 +192,11 @@
      * Old App.wasm may still pass inlineSynth:true â€” ignore it. Use forceInlineSynth
      * only for deliberate A/B tests. */
     var inlineSynth = !!opts.forceInlineSynth;
+    /* Worklet PCM crackles on this GPU-worker path (128-frame quantum vs
+     * blocking WebGL readback). ScriptProcessor consumes the same worker PCM
+     * in 1024-frame callbacks and is the sink that actually stays stable.
+     * Set preferWorklet:true only for A/B. */
+    var preferWorklet = !!opts.preferWorklet;
     var state = {
       ok: false,
       ready: false,
@@ -133,13 +245,13 @@
       vendor: "",
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
-      blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 1024,
-      /* Look-ahead FIFO. Mobile keeps a deeper cushion (GL/ScriptProcessor hitches).
-       * Desktop stays short so SFX are not buried behind ~170–250 ms of silence. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 4608 : 1536),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 768),
+      blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 256,
+      /* One GPU hitch is ~2048 frames. Keep that much look-ahead in the
+       * Worklet; smaller send grain (256) is sliced from the GPU leftover. */
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 3072 : 2048),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 1024),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
-      synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 44100,
+      synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 48000,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
       sampleRate: opts.sampleRate > 0 ? opts.sampleRate | 0 : 0,
       convertPath: "pending",
@@ -148,6 +260,7 @@
       unlockFadeSec: opts.unlockFadeSec > 0 ? +opts.unlockFadeSec : 0.04,
       toneHz: opts.toneHz > 0 ? +opts.toneHz : 440,
       preferCpu: !!opts.preferCpu,
+      preferWorklet: preferWorklet,
       inlineSynth: inlineSynth,
       mobile: mobile
     };
@@ -155,7 +268,7 @@
     function refreshConvertPath() {
       var cfg = state.synthRate | 0;
       var dev = state.sampleRate | 0;
-      if (!(cfg > 0)) cfg = 44100;
+      if (!(cfg > 0)) cfg = 48000;
       if (!(dev > 0)) {
         state.convertPath = "pending";
         return state.convertPath;
@@ -172,13 +285,15 @@
 
     /* ---- optional GPU worker (PCM proto only) ---- */
     if (!inlineSynth) {
-      if (!workerSupported(!state.preferCpu)) {
+      /* OffscreenCanvas is only needed by the GPU module inside the worker,
+       * which degrades to the JS synth on its own — do not fail the bus here. */
+      if (!workerSupported(false)) {
         state.error = "worker-unsupported";
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=andr50";
-      else url += "&v=andr50";
+      if (url.indexOf("?") < 0) url += "?v=gpu16";
+      else url += "&v=gpu16";
       var worker;
       try {
         worker = new Worker(url);
@@ -187,8 +302,9 @@
         return state;
       }
 
-      /* CPU synth does not need another WebGL context beside the raytracer. */
-      var canvas = state.preferCpu ? null : new OffscreenCanvas(state.width, state.height);
+      /* The worker no longer runs a timing shader of its own; the ssound
+       * module creates the only audio GL context, inside the worker. */
+      var canvas = null;
       worker.onmessage = function (ev) {
         var msg = ev.data || {};
         if (msg.type === "ready") {
@@ -301,6 +417,11 @@
       var ctx = state.audioCtx;
       if (ctx && ctx.state === "running" && (state.worklet || state.scriptNode)) {
         state.audioReady = true;
+        if (!state.audioPath) {
+          state.audioPath = state.scriptNode
+            ? "script-pcm"
+            : (state.inlineSynth ? "worklet-inline" : "worklet-pcm");
+        }
         state.audioStage = "ready";
         state.error = "";
         state._gesturePrimed = true;
@@ -371,6 +492,8 @@
     state._backgroundMuted = 0;
     state._backgroundPausing = 0;
     state._backgroundFadeTimer = 0;
+    state._resumeDebounce = 0;
+    state._dacDetached = 0;
     state._unlockFadePending = 0;
 
     /* Desktop can wait for timers. Phone lock/screen-off freezes JS almost
@@ -426,7 +549,50 @@
         clearTimeout(state._backgroundFadeTimer);
         state._backgroundFadeTimer = 0;
       }
+      if (state._resumeDebounce) {
+        clearTimeout(state._resumeDebounce);
+        state._resumeDebounce = 0;
+      }
       state._backgroundPausing = 0;
+    }
+
+    function disconnectDac() {
+      try {
+        if (state.scriptNode) state.scriptNode.disconnect();
+      } catch (e0) {}
+      try {
+        if (state.worklet) state.worklet.disconnect();
+      } catch (e1) {}
+      try {
+        if (state.outputGain) state.outputGain.disconnect();
+      } catch (e2) {}
+      try {
+        if (state._silentAudio) state._silentAudio.pause();
+      } catch (e3) {}
+      state._dacDetached = 1;
+    }
+
+    function reconnectDac() {
+      var ctx = state.audioCtx;
+      var g;
+      if (!ctx || ctx.state === "closed") return;
+      g = ensureOutputGain(ctx);
+      try {
+        if (state.scriptNode) {
+          state.scriptNode.disconnect();
+          state.scriptNode.connect(g);
+        }
+      } catch (e0) {}
+      try {
+        if (state.worklet) {
+          state.worklet.disconnect();
+          state.worklet.connect(g);
+        }
+      } catch (e1) {}
+      try {
+        g.connect(ctx.destination);
+      } catch (e2) {}
+      state._dacDetached = 0;
     }
 
     function muteOutputNow() {
@@ -461,31 +627,28 @@
     }
 
     function pauseForBackground(reason) {
-      if (state._backgroundMuted || state._backgroundPausing) return;
+      if (state._backgroundMuted) return;
       if (state._shutdownBegun || state._tearingDown) return;
+      /* AudioContext starts suspended until the unlock tap. Treating that as
+       * "tab hidden" stopped the worker and left gain at 0 — total silence. */
+      if (
+        isPageAudible() &&
+        reason !== "interrupted" &&
+        reason !== "freeze" &&
+        reason !== "pagehide"
+      )
+        return;
       cancelBackgroundPause();
       state._backgroundPausing = 1;
       state._outputAllowed = 0;
       state._unlockFadePending = 0;
       state._warmupReadyCount = 0;
-      var fadeSec =
-        state.mobile || reason === "interrupted" || reason === "freeze"
-          ? PHONE_LOCK_FADE_SEC
-          : BACKGROUND_FADE_SEC;
-      /* Fade first — instant mute + FIFO flush clicks on tab/page change. */
-      var dur = fadeOutputOut(reason || "background", fadeSec, null);
-      var waitMs = ((dur > 0 ? dur : fadeSec) * 1000 + 20) | 0;
-      /* Phone lock: timers die; busy-wait so the audio thread plays the ramp
-       * before suspend. Short (~55–75 ms) — better than a pop. */
-      if (state.mobile || reason === "interrupted" || reason === "freeze") {
-        busyWaitMs(waitMs);
-        muteOutputNow();
-        finishBackgroundMute(reason || "background");
-        return;
-      }
-      state._backgroundFadeTimer = setTimeout(function () {
-        finishBackgroundMute(reason || "background");
-      }, waitMs);
+      stopWorkerPumpSoft();
+      silenceScriptSink();
+      muteOutputNow();
+      disconnectDac();
+      pauseSokolSaudio();
+      finishBackgroundMute(reason || "background");
     }
 
     function fadeOutputIfAudible(reason, durSec) {
@@ -552,6 +715,8 @@
             state.audioStage = "waiting-gesture";
             return;
           }
+          reconnectDac();
+          resumeSokolSaudio();
           markAudioReadyIfRunning();
           resumeWorkerPump();
           if (wasMuted) trimAudioLatency(reason || "foreground", true);
@@ -563,8 +728,20 @@
     }
 
     function syncPageAudible(trigger) {
-      if (isPageAudible()) resumeFromForeground(trigger || "sync");
-      else pauseForBackground(trigger || "sync");
+      if (isPageAudible()) {
+        /* Tab switches flicker visible/hidden; resume immediately → blips. */
+        if (state._resumeDebounce) clearTimeout(state._resumeDebounce);
+        state._resumeDebounce = setTimeout(function () {
+          state._resumeDebounce = 0;
+          if (isPageAudible()) resumeFromForeground(trigger || "sync");
+        }, 180);
+      } else {
+        if (state._resumeDebounce) {
+          clearTimeout(state._resumeDebounce);
+          state._resumeDebounce = 0;
+        }
+        pauseForBackground(trigger || "sync");
+      }
     }
 
     state.isPageAudible = isPageAudible;
@@ -572,12 +749,33 @@
     function isBackgroundInactive() {
       if (!isPageAudible()) return true;
       if (state._backgroundMuted || state._backgroundPausing) return true;
-      /* Blur / soft mute: audio is fading out — slow the fractal clock too. */
+      /* Mobile: clipboard / system sheets fire window.blur without a matching
+       * focus, and hasFocus() stays false after Copy Link — that was leaving
+       * the fractal freeze_bg stuck after Share closed. Only hard-hide counts. */
+      if (isMobileUa()) return false;
+      /* Desktop: soft blur / unfocused window also freezes the shader clock. */
       if (state.audioReady && state._outputFadedIn && !state._outputAllowed) return true;
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        if (typeof document.hasFocus === "function" && !document.hasFocus()) return true;
+      }
       return false;
     }
 
+    /* Clipboard / Android system UI can blur without focus returning; a
+     * subsequent touch inside the page should unduck audio immediately. */
+    function clearSoftBlurIfVisible() {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden")
+        return;
+      if (state._backgroundMuted || state._backgroundPausing) return;
+      if (state._outputAllowed) return;
+      state._outputAllowed = 1;
+      state._warmupReadyCount = 0;
+      state._outputFadedIn = 0;
+      state._unlockFadePending = 1;
+    }
+
     state.isBackgroundInactive = isBackgroundInactive;
+    state.clearSoftBlurIfVisible = clearSoftBlurIfVisible;
 
     /* Drop a stuck suspended graph so the next gesture can create a fresh
      * AudioContext (addModule is per-context — cleared too). */
@@ -608,6 +806,10 @@
       } catch (e2) {}
       state.audioCtx = null;
       state.audioPath = "";
+      state._backgroundMuted = 0;
+      state._backgroundPausing = 0;
+      state._outputAllowed = 1;
+      state._dacDetached = 0;
     }
 
     /* Master gain before destination — mute soft on reload/teardown and hold
@@ -882,7 +1084,7 @@
       /* Prefer engine clock (44.1k) so worker can skip resample â†’ fewer clicks. */
       var acOpts = {
         latencyHint: "interactive",
-        sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 44100
+        sampleRate: state.synthRate > 0 ? state.synthRate | 0 : 48000
       };
       var ctx;
       try {
@@ -1143,7 +1345,8 @@
 
     state.play = function (desc) {
       /* Drop SFX while tab/window is inactive — avoids ghost glitches on return. */
-      if (state._backgroundMuted || state._backgroundPausing) return 0;
+      if (state._backgroundMuted || state._backgroundPausing || !isPageAudible())
+        return 0;
       /* Start instruments even before AudioContext unlock â€” worker advances
        * voice clocks silently; unlock fade-in avoids a hard onset. */
       if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
@@ -1156,6 +1359,16 @@
       if (state.inlineSynth && state.worklet && state.worklet.port)
         state.worklet.port.postMessage({ type: "stop_all" });
       if (state.worker) state.worker.postMessage({ type: "stop_all" });
+    };
+    /* Mirror the persisted bfx echo settings into the worker synth. */
+    state.setEcho = function (delayMs, feedback, mix) {
+      if (state.worker)
+        state.worker.postMessage({
+          type: "set_echo",
+          delayMs: +delayMs,
+          feedback: +feedback,
+          mix: +mix
+        });
     };
     state.setMaster = function (vol) {
       if (state.inlineSynth && state.worklet && state.worklet.port)
@@ -1180,8 +1393,8 @@
           blockFrames: state.blockFrames,
           targetFrames: state.targetFrames,
           needFrames: state.needFrames,
-          sampleRate: state.sampleRate || state.synthRate || 44100,
-          synthRate: state.synthRate || state.sampleRate || 44100,
+          sampleRate: state.sampleRate || state.synthRate || 48000,
+          synthRate: state.synthRate || state.sampleRate || 48000,
           toneHz: state.toneHz
         },
         [port]
@@ -1214,10 +1427,12 @@
       var lastOutR = 0;
       var gapFrames = 0;
       var bufferBoostFrames = 0;
-      /* Soft underrun: hold last sample briefly, then slow fade — fast fade-to-0
-       * is what the ear hears as random crackle when FPS hitch drains the FIFO. */
-      var holdFrames = 256;
-      var fadeFrames = 768;
+      /* Soft underrun: hold last sample briefly, then fade — fast fade-to-0 is
+       * what the ear hears as random crackle when an FPS hitch drains the FIFO.
+       * Kept short so concealment never smears a real SFX attack. */
+      var holdFrames = 64;
+      var fadeFrames = 192;
+      var healthyBlocks = 0;
       var xfadeLeft = 0;
       var xfadeFromL = 0;
       var xfadeFromR = 0;
@@ -1234,7 +1449,9 @@
       var BUFFER_BOOST_MAX = 4096;
       var BUFFER_BOOST_STEP = 1024;
       var srOut = ctx.sampleRate || 48000;
-      var silencePadFrames = Math.max(256, (srOut * 0.014) | 0); /* ~14 ms */
+      /* Pad just enough to bridge one refill round-trip; 14 ms used to be pure
+       * added latency on every trim. */
+      var silencePadFrames = Math.max(256, (srOut * 0.006) | 0); /* ~6 ms */
 
       function rearmUnlockFade() {
         unlockGain = 0;
@@ -1302,6 +1519,12 @@
       audioPort.onmessage = function (ev) {
         var a = ev.data || {};
         if (a.type === "pcm" && a.samples) {
+          if (
+            state._backgroundMuted ||
+            state._backgroundPausing ||
+            !state._outputAllowed
+          )
+            return;
           var samples =
             a.samples instanceof Float32Array
               ? a.samples
@@ -1315,6 +1538,21 @@
           }
         } else if (a.type === "flush") {
           softClearFifo(false, false);
+        } else if (a.type === "trim") {
+          /* Keep the oldest cushion, drop the stale idle tail — no starvation. */
+          var keep = a.keepFrames > 0 ? a.keepFrames | 0 : 0;
+          if (queuedFrames > keep) {
+            var kept = current ? current.frames - offset : 0;
+            var bi = 0;
+            if (kept < 0) kept = 0;
+            while (bi < blocks.length && kept < keep) {
+              kept += blocks[bi].frames;
+              bi++;
+            }
+            if (bi < blocks.length) blocks.length = bi;
+            queuedFrames = kept;
+            needSent = false;
+          }
         }
       };
       audioPort.start && audioPort.start();
@@ -1346,6 +1584,20 @@
         var right = e.outputBuffer.getChannelData(1);
         var n = left.length;
         var i, si, rawL, rawR, fade, phase;
+        if (
+          state._backgroundMuted ||
+          state._backgroundPausing ||
+          !state._outputAllowed ||
+          state._tearingDown
+        ) {
+          for (i = 0; i < n; i++) {
+            left[i] = 0;
+            right[i] = 0;
+          }
+          lastOutL = 0;
+          lastOutR = 0;
+          return;
+        }
         /* Ask early in the callback so the worker can fill during this quantum. */
         requestFill(queuedFrames < state.needFrames + (bufferBoostFrames >> 1));
         for (i = 0; i < n; i++) {
@@ -1357,6 +1609,7 @@
             if (primed) {
               if (gapFrames === 0) {
                 underruns++;
+                healthyBlocks = 0;
                 bufferBoostFrames += BUFFER_BOOST_STEP;
                 if (bufferBoostFrames > BUFFER_BOOST_MAX)
                   bufferBoostFrames = BUFFER_BOOST_MAX;
@@ -1417,6 +1670,16 @@
             }
           }
         }
+        /* Hand the cold-start boost back once the FIFO stays healthy — without
+         * this a single early hitch keeps the extra latency all session. */
+        if (queuedFrames >= (state.needFrames | 0)) {
+          healthyBlocks++;
+          if (healthyBlocks >= 24 && bufferBoostFrames > 0) {
+            healthyBlocks = 0;
+            bufferBoostFrames -= BUFFER_BOOST_STEP >> 1;
+            if (bufferBoostFrames < 0) bufferBoostFrames = 0;
+          }
+        } else healthyBlocks = 0;
         state.stats.underruns = underruns;
         state.stats.queuedFrames = queuedFrames | 0;
         state.stats.bufferBoostFrames = bufferBoostFrames | 0;
@@ -1509,24 +1772,40 @@
     state.startAudio = function () {
       var resumePromise;
       var ctx;
+      if (state._retired || !state.worker) {
+        /* Sokol / main-thread GPU owns the device. Do not open a second
+         * AudioContext — Chrome glitches when two graphs run at once. */
+        return Promise.resolve(state);
+      }
       if (!audioSupported()) {
         state.error = "audio-unsupported";
         state.audioStage = "error";
         return Promise.reject(new Error(state.error));
       }
+      if (state._startPromise) return state._startPromise;
+      if (
+        state.audioReady &&
+        state.audioCtx &&
+        state.audioCtx.state === "running" &&
+        (state.scriptNode || state.worklet)
+      ) {
+        resumeWorkerPump();
+        fadeOutputIn("already-running");
+        return Promise.resolve(state);
+      }
       state._tearingDown = 0;
+      state._backgroundMuted = 0;
+      state._backgroundPausing = 0;
+      state._outputAllowed = 1;
       if (!state._unlockStarted) state._unlockStarted = true;
       state._unlockAttempts++;
 
-      /* Must stay synchronous in the gesture turn. */
       primeHtmlMedia();
 
-      /* Stuck suspended context: destroy and recreate inside THIS gesture.
-       * Retap used to no-op because audioReady was true while still suspended. */
-      if (state.audioCtx && state.audioCtx.state !== "running") {
-        console.warn(
-          "[sound_bus] recreating AudioContext (was " + state.audioCtx.state + ")"
-        );
+      /* Only recreate a *dead* graph. pointerdown+click used to nuke the
+       * ScriptProcessor on the still-suspended first context. */
+      if (state.audioCtx && state.audioCtx.state === "closed") {
+        console.warn("[sound_bus] recreating AudioContext (was closed)");
         nukeAudioGraph();
       }
 
@@ -1542,7 +1821,9 @@
           " Hz | " +
           state.convertPath +
           " | attempt=" +
-          state._unlockAttempts
+          state._unlockAttempts +
+          " ctx=" +
+          ctx.state
       );
       state.audioStage = "resume";
       try {
@@ -1555,111 +1836,50 @@
         return Promise.reject(resumeErr);
       }
 
-      /* Secure (HTTPS/localhost): Worklet first. ScriptProcessor on the GL thread
-       * causes rare crackles with ur=0 (browser glitch before our FIFO check).
-       * Insecure HTTP: ScriptProcessor immediately, optional Worklet upgrade. */
-      if (!state.worklet && !state.scriptNode) {
-        try {
-          if (workletSupported(ctx) && isSecureEnough()) {
-            if (state._workletModuleReady) {
-              state.audioStage = "worklet";
-              attachWorkletNodeSync(ctx);
-            } else {
-              state.audioStage = "worklet-loading";
-              ensureWorkletModule(ctx)
-                .then(function () {
-                  if (state.worklet) return;
-                  if (!state.audioCtx || state.audioCtx !== ctx) return;
-                  try {
-                    if (state.scriptNode) {
-                      try {
-                        state.scriptNode.disconnect();
-                      } catch (eDisc0) {}
-                      state.scriptNode = null;
-                    }
-                    state.audioStage = "worklet";
-                    attachWorkletNodeSync(ctx);
-                    markAudioReadyIfRunning();
-                    if (state.audioReady && typeof opts.onAudioReady === "function")
-                      opts.onAudioReady(state);
-                    console.log("[sound_bus] Worklet ready (HTTPS path)");
-                  } catch (eWl) {
-                    console.warn("[sound_bus] Worklet attach failed â†’ script-pcm", eWl);
-                    state.error = "worklet-attach:" + (eWl && eWl.message ? eWl.message : eWl);
-                    if (!state.scriptNode) startScriptProcessorFallback(ctx);
-                    markAudioReadyIfRunning();
-                  }
-                })
-                .catch(function (eMod) {
-                  console.warn("[sound_bus] Worklet addModule failed â†’ script-pcm", eMod);
-                  state.error = "worklet-module:" + (eMod && eMod.message ? eMod.message : eMod);
-                  if (!state.worklet && !state.scriptNode) {
-                    try {
-                      startScriptProcessorFallback(ctx);
-                      markAudioReadyIfRunning();
-                    } catch (eFb) {}
-                  }
-                });
-            }
-          } else if (state._workletModuleReady && workletSupported(ctx)) {
-            state.audioStage = "worklet";
-            attachWorkletNodeSync(ctx);
-          } else {
-            state.audioStage = "fallback";
-            startScriptProcessorFallback(ctx);
-            if (workletSupported(ctx)) {
-              ensureWorkletModule(ctx)
-                .then(function () {
-                  if (state.worklet || !state.scriptNode) return;
-                  if (!state.audioCtx || state.audioCtx.state !== "running") return;
-                  try {
-                    try {
-                      state.scriptNode.disconnect();
-                    } catch (eDisc) {}
-                    state.scriptNode = null;
-                    attachWorkletNodeSync(state.audioCtx);
-                    console.log("[sound_bus] upgraded ScriptProcessor â†’ Worklet");
-                  } catch (eUp) {
-                    console.warn("[sound_bus] worklet upgrade failed", eUp);
-                    state.error = "worklet-upgrade:" + (eUp && eUp.message ? eUp.message : eUp);
-                  }
-                })
-                .catch(function () {});
-            }
-          }
-          markAudioReadyIfRunning();
-          if (state.audioReady && typeof opts.onAudioReady === "function")
-            opts.onAudioReady(state);
-        } catch (eSink) {
-          console.warn("[sound_bus] sync sink attach failed", eSink);
-          state.audioStage = "error";
-          state.error = String(eSink && eSink.message ? eSink.message : eSink);
-          state.audioReady = false;
+      function attachSinkIfNeeded() {
+        if (state.worklet || state.scriptNode) return;
+        if (preferWorklet && workletSupported(ctx) && isSecureEnough() &&
+            state._workletModuleReady) {
+          state.audioStage = "worklet";
+          attachWorkletNodeSync(ctx);
+        } else {
+          state.audioStage = "script-pcm";
+          startScriptProcessorFallback(ctx);
+          console.log("[sound_bus] PCM sink=script-pcm ctx=" + ctx.state);
         }
-      } else {
-        markAudioReadyIfRunning();
       }
 
-      flushPendingPlays();
-
-      return Promise.resolve(resumePromise).then(
+      state._startPromise = Promise.resolve(resumePromise).then(
         function () {
           primeAudioGesture(ctx);
+          if (ctx.state !== "running")
+            console.warn("[sound_bus] resume resolved but ctx=" + ctx.state);
+          try {
+            attachSinkIfNeeded();
+          } catch (eSink) {
+            console.warn("[sound_bus] sink attach failed", eSink);
+            state.error = String(eSink && eSink.message ? eSink.message : eSink);
+          }
           markAudioReadyIfRunning();
+          console.log(
+            "[sound_bus] after resume ready=" +
+              (state.audioReady ? 1 : 0) +
+              " ctx=" +
+              ctx.state +
+              " sink=" +
+              (state.scriptNode ? "script" : state.worklet ? "worklet" : "none") +
+              " path=" +
+              (state.audioPath || "?") +
+              " worker=" +
+              (state.worker ? 1 : 0)
+          );
+          resumeWorkerPump();
           if (state.audioReady) {
-            /* Cut silence pre-buffered while suspended / warm-up. */
-            state._outputFadedIn = 0;
-            state._warmupReadyCount = 0;
-            state._unlockFadePending = 1;
-            trimAudioLatency("unlock", true);
-            flattenLatencyBeforeOpen("unlock");
+            state._unlockFadePending = 0;
+            fadeOutputIn("unlock");
             flushPendingPlays();
-          } else
-            console.warn(
-              "[sound_bus] ctx still " +
-                (ctx && ctx.state) +
-                " after resume — next tap will recreate"
-            );
+            if (typeof opts.onAudioReady === "function") opts.onAudioReady(state);
+          }
           return state;
         },
         function (err) {
@@ -1669,6 +1889,17 @@
           throw err;
         }
       );
+      state._startPromise = state._startPromise.then(
+        function (s) {
+          state._startPromise = null;
+          return s;
+        },
+        function (err) {
+          state._startPromise = null;
+          throw err;
+        }
+      );
+      return state._startPromise;
     };
 
     state.primeGesture = function () {
@@ -1687,28 +1918,13 @@
       }, true);
     }
 
-    if (!state._focusBound && typeof window !== "undefined") {
-      state._focusBound = 1;
-      /* Soft mute on blur only — do not stop voices / suspend (startup focus
-       * flicker was leaving a single leftover note of the beat). */
-      window.addEventListener("blur", function () {
-        if (document.visibilityState === "hidden") return;
-        state._outputAllowed = 0;
-        /* Soft duck only — visibility/interrupted handle phone lock sync fade. */
-        fadeOutputIfAudible("blur", BLUR_FADE_SEC);
-      });
-      window.addEventListener("focus", function () {
-        if (document.visibilityState === "hidden") return;
-        cancelBackgroundPause();
-        if (state._backgroundMuted) {
-          syncPageAudible("focus");
-          return;
-        }
-        state._outputAllowed = 1;
-        state._warmupReadyCount = 0;
-        state._outputFadedIn = 0;
-        state._unlockFadePending = 1;
-      });
+    /* Android: Share→Copy Link blurs the window; closing the modal is a
+     * touch that never fires window.focus — unduck here so audio/shader recover. */
+    if (!state._pointerBlurClearBound && typeof document !== "undefined") {
+      state._pointerBlurClearBound = 1;
+      var unduck = function () { clearSoftBlurIfVisible(); };
+      document.addEventListener("pointerdown", unduck, true);
+      document.addEventListener("touchstart", unduck, true);
     }
 
     if (!state._freezeBound && typeof document !== "undefined") {
@@ -1726,10 +1942,12 @@
       try {
         ctx.addEventListener("statechange", function () {
           var st = ctx.state;
-          if (st === "interrupted" || st === "suspended") {
+          if (st === "interrupted") {
             if (!state._backgroundMuted && !state._shutdownBegun)
-              pauseForBackground(st === "interrupted" ? "interrupted" : "ctx-suspended");
+              pauseForBackground("interrupted");
+            return;
           }
+          /* "suspended" is the default before the first gesture — not a hide. */
         });
       } catch (eLc) {}
     }
@@ -1772,6 +1990,7 @@
     }
 
     state.stop = function () {
+      state._retired = 1;
       gracefulTeardownSync("stop");
       if (state.worklet) {
         try {

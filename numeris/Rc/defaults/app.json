@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 79,
+"config_defaults_rev": 82,
 "mainpan": {
   "1": {
     "1": {
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 617,
+  "campaign_depth": 618,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -236,7 +236,7 @@
   "echo_feedback": 0.4,
   "echo_mix": 0.3,
   "full_framerate": false,
-  "hud_master_volume": 0.711111,
+  "hud_master_volume": 0.5355,
   "hud_muted": false,
   "hud_sdf_aa": 1.133,
   "hud_sdf_border1": 0.9,
@@ -278,7 +278,7 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 620,
+  "level_index": 621,
   "level_seed": -764636868,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
@@ -498,8 +498,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 433,
-  "w": 592,
+  "h": 10,
+  "w": 120,
   "x": 0,
   "y": 0
 }
