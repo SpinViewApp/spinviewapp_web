@@ -1,4 +1,4 @@
-/* Proto bus - worker PCM @44.1k â†’ resample â†’ AudioWorklet (desktop + Android).
+/* Proto bus - worker PCM @48k â†’ optional resample â†’ AudioWorklet (desktop + Android).
  *
  * Android note: AudioWorklet needs HTTPS/localhost. On plain HTTP the sink falls
  * back to ScriptProcessor but still consumes the SAME worker PCM (script-pcm),
@@ -242,11 +242,13 @@
       vendor: "",
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
-      blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 256,
-      /* One GPU hitch is ~2048 frames. Keep that much look-ahead in the
-       * Worklet; smaller send grain (256) is sliced from the GPU leftover. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 1536 : 1024),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 768 : 512),
+      /* 512 frames halves MessageChannel traffic versus 256 (94 vs 188
+       * transfers/s at 48 kHz) without increasing the first-note cushion. */
+      blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 512,
+      /* A GPU pass renders 2048 frames at once. Refill before less than one
+       * pass remains, otherwise a readback hitch drains the Worklet FIFO. */
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 4096 : 3072),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 2048 : 1536),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 48000,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
@@ -259,8 +261,80 @@
       preferCpu: !!opts.preferCpu,
       preferWorklet: preferWorklet,
       inlineSynth: inlineSynth,
-      mobile: mobile
+      mobile: mobile,
+      _diagLastMs: 0,
+      _diagWarnMs: 0,
+      _diagUnderruns: -1,
+      _diagUnderrunFrames: 0
     };
+
+    function audioDiagNumber(v, digits) {
+      v = +v || 0;
+      return v.toFixed(digits == null ? 1 : digits);
+    }
+
+    function maybeLogAudioHealth(msg) {
+      var s = state.stats || {};
+      var now = typeof performance !== "undefined" && performance.now
+        ? performance.now() : Date.now();
+      var total = msg.underruns | 0;
+      var frames = msg.underrunFrames | 0;
+      var deltaEvents = state._diagUnderruns >= 0 ? total - state._diagUnderruns : 0;
+      var deltaFrames = frames - (state._diagUnderrunFrames | 0);
+      var active = (s.workerVoices | 0) > 0 || (+s.peak || 0) > 0.0001;
+      var detail =
+        "path=" + (state.audioPath || "pending") +
+        " backend=" + (s.backend || "pending") +
+        " q=" + (msg.queuedFrames | 0) + "/" + state.targetFrames +
+        " min=" + (msg.minQueuedFrames | 0) +
+        " workerQ~" + (s.queued_est | 0) +
+        " wait=" + audioDiagNumber(msg.fillWaitMs) +
+        "/" + audioDiagNumber(msg.fillWaitMaxMs) + "ms" +
+        " gpu=" + audioDiagNumber(s.synthLastMs) +
+        "/" + audioDiagNumber(s.synthMaxMs) + "ms" +
+        " fillMax=" + audioDiagNumber(s.workerFillMaxMs) + "ms" +
+        " pumpLate=" + audioDiagNumber(s.pumpLateLastMs) +
+        "/" + audioDiagNumber(s.pumpLateMaxMs) + "ms" +
+        " edge=" + audioDiagNumber(s.edgeJumpMax, 3) +
+        "/x" + audioDiagNumber(s.edgeRatioMax, 1) +
+        "#" + (s.edgeCount | 0) +
+        " gpuEdge=" + (s.gpuEdgeCount | 0) +
+        " rawEdge=" + audioDiagNumber(s.rawEdgeJumpMax, 3) +
+        "/x" + audioDiagNumber(s.rawEdgeRatioMax, 1) +
+        "#" + (s.rawEdgeCount | 0) +
+        " echoEdge=" + audioDiagNumber(s.echoEdgeJumpMax, 3) +
+        "/x" + audioDiagNumber(s.echoEdgeRatioMax, 1) +
+        "#" + (s.echoEdgeCount | 0) +
+        " echoMix=" + audioDiagNumber(s.echoMix, 2) +
+        " gain=" + audioDiagNumber(s.busGain, 3) +
+        " master=" + audioDiagNumber(s.masterSmooth, 3) +
+        " zeroRun=" + (s.zeroRunMax | 0) +
+        " staleNeed=" + (s.staleNeeds | 0) +
+        " voices=" + (s.workerVoices | 0) +
+        " boost=" + (msg.bufferBoostFrames | 0);
+
+      if (
+        state.audioReady && state._outputFadedIn &&
+        (deltaEvents > 0 || deltaFrames >= 128) &&
+        now - state._diagWarnMs >= 750
+      ) {
+        state._diagWarnMs = now;
+        console.warn(
+          "[audio-health] UNDERRUN +" + Math.max(0, deltaEvents) +
+          " events +" + Math.max(0, deltaFrames) +
+          " frames total=" + total +
+          " maxGap=" + audioDiagNumber(msg.maxGapMs) + "ms " + detail
+        );
+      }
+      if (state.audioReady && active && now - state._diagLastMs >= 5000) {
+        state._diagLastMs = now;
+        console.log(
+          "[audio-health] " + (deltaFrames > 0 ? "STARVED " : "stable ") + detail
+        );
+      }
+      state._diagUnderruns = total;
+      state._diagUnderrunFrames = frames;
+    }
 
     function refreshConvertPath() {
       var cfg = state.synthRate | 0;
@@ -289,8 +363,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu17";
-      else url += "&v=gpu16";
+      if (url.indexOf("?") < 0) url += "?v=gpu25";
+      else url += "&v=gpu25";
       var worker;
       try {
         worker = new Worker(url);
@@ -304,6 +378,50 @@
       var canvas = null;
       worker.onmessage = function (ev) {
         var msg = ev.data || {};
+        if (msg.type === "pcm-capture-started") {
+          state.captureState = "recording";
+          console.log("[audio-capture] recording " + (+msg.seconds || 0) + "s PCM...");
+          return;
+        }
+        if (msg.type === "pcm-capture" && msg.samples) {
+          var pcm = new Float32Array(msg.samples);
+          var frames = Math.min(msg.frames | 0, pcm.length >> 1);
+          var rate = msg.sampleRate > 0 ? msg.sampleRate | 0 : 48000;
+          var wav = new ArrayBuffer(44 + frames * 4);
+          var dv = new DataView(wav);
+          function fourcc(off, value) {
+            for (var ci = 0; ci < 4; ci++) dv.setUint8(off + ci, value.charCodeAt(ci));
+          }
+          fourcc(0, "RIFF"); dv.setUint32(4, 36 + frames * 4, true);
+          fourcc(8, "WAVE"); fourcc(12, "fmt ");
+          dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+          dv.setUint16(22, 2, true); dv.setUint32(24, rate, true);
+          dv.setUint32(28, rate * 4, true); dv.setUint16(32, 4, true);
+          dv.setUint16(34, 16, true); fourcc(36, "data");
+          dv.setUint32(40, frames * 4, true);
+          for (var wi = 0; wi < frames * 2; wi++) {
+            var sv = pcm[wi];
+            if (sv > 1) sv = 1;
+            else if (sv < -1) sv = -1;
+            dv.setInt16(44 + wi * 2, sv < 0 ? sv * 32768 : sv * 32767, true);
+          }
+          var blob = new Blob([wav], { type: "audio/wav" });
+          if (state.lastCaptureUrl) URL.revokeObjectURL(state.lastCaptureUrl);
+          state.lastCaptureBlob = blob;
+          state.lastCaptureUrl = URL.createObjectURL(blob);
+          state.captureState = "ready";
+          state.captureFrames = frames;
+          var link = document.createElement("a");
+          link.href = state.lastCaptureUrl;
+          link.download = "numeris-audio-debug-" + Date.now() + ".wav";
+          link.style.display = "none";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          console.log("[audio-capture] WAV ready frames=" + frames +
+            " rate=" + rate + " url=" + state.lastCaptureUrl);
+          return;
+        }
         if (msg.type === "ready") {
           state.ready = true;
           state.ok = true;
@@ -337,6 +455,7 @@
           state.stats.wasm = msg.wasm | 0;
           state.stats.backend = msg.backend || "";
           state.stats.peak = +msg.peak || 0;
+          state.stats.busGain = msg.bus_gain == null ? 1 : (+msg.bus_gain || 0);
           state.stats.synthRate = msg.synth_rate | 0;
           state.stats.outputRate = msg.output_rate | 0;
           state.stats.configRate = state.synthRate | 0;
@@ -347,6 +466,24 @@
           state.stats.synthMaxMs = +msg.synth_max_ms || 0;
           state.stats.workerFillLastMs = +msg.fill_last_ms || 0;
           state.stats.workerFillMaxMs = +msg.fill_max_ms || 0;
+          state.stats.workerVoices = msg.voices | 0;
+          state.stats.pumpLateLastMs = +msg.pump_late_last_ms || 0;
+          state.stats.pumpLateMaxMs = +msg.pump_late_max_ms || 0;
+          state.stats.pumpLateCount = msg.pump_late_count | 0;
+          state.stats.staleNeeds = msg.stale_needs | 0;
+          state.stats.edgeJumpMax = +msg.edge_jump_max || 0;
+          state.stats.edgeRatioMax = +msg.edge_ratio_max || 0;
+          state.stats.edgeCount = msg.edge_count | 0;
+          state.stats.gpuEdgeCount = msg.gpu_edge_count | 0;
+          state.stats.zeroRunMax = msg.zero_run_max | 0;
+          state.stats.rawEdgeCount = msg.raw_edge_count | 0;
+          state.stats.rawEdgeJumpMax = +msg.raw_edge_jump_max || 0;
+          state.stats.rawEdgeRatioMax = +msg.raw_edge_ratio_max || 0;
+          state.stats.echoEdgeCount = msg.echo_edge_count | 0;
+          state.stats.echoEdgeJumpMax = +msg.echo_edge_jump_max || 0;
+          state.stats.echoEdgeRatioMax = +msg.echo_edge_ratio_max || 0;
+          state.stats.echoMix = +msg.echo_mix || 0;
+          state.stats.masterSmooth = msg.master_smooth == null ? 1 : (+msg.master_smooth || 0);
           /* Worker reports every freshly queued block, earlier than the
            * periodic Worklet HUD stats. Use it to open the muted DAC with the
            * minimum safe FIFO on first activation. */
@@ -1111,13 +1248,14 @@
     /* Android Chrome often ignores resume() alone on touchstart; a sync silent
      * buffer start() in the same turn locks user-activation before touchend/click. */
     function primeHtmlMedia() {
+      if (!state.mobile) return;
       try {
         var a = state._silentAudio;
         if (!a) {
           /* Minimal WAV â€” HTMLMediaElement.play() carries stronger gesture
            * activation on Android WebView than AudioContext.resume() alone. */
           a = new Audio(
-            "data:audio/wav;base64,UklGRmgAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+            "data:audio/wav;base64,UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA"
           );
           a.preload = "auto";
           a.volume = 0.01;
@@ -1181,9 +1319,10 @@
           state.stats.fillWaitMaxMs = +msg.fillWaitMaxMs || 0;
           state.stats.bufferBoostFrames = msg.bufferBoostFrames | 0;
           state.stats.queuedFrames = msg.queuedFrames | 0;
-          state.stats.voices = msg.voices | 0;
+          if (msg.mode === "inline") state.stats.voices = msg.voices | 0;
           state.stats.audioMode = msg.mode || (state.inlineSynth ? "inline" : "pcm");
           maybeReleaseWarmup(msg.queuedFrames | 0);
+          maybeLogAudioHealth(msg);
           if (typeof opts.onAudioStats === "function") opts.onAudioStats(state, msg);
         }
       };
@@ -1298,6 +1437,12 @@
     };
     state.ping = function () {
       if (state.worker) state.worker.postMessage({ type: "ping" });
+    };
+    state.captureAudio = function (seconds) {
+      if (!state.worker) return 0;
+      state.captureState = "requested";
+      state.worker.postMessage({ type: "capture_pcm", seconds: seconds || 5 });
+      return 1;
     };
 
     state._pendingPlays = [];
@@ -1738,9 +1883,10 @@
           state.stats.fillWaitMaxMs = +msg.fillWaitMaxMs || 0;
           state.stats.bufferBoostFrames = msg.bufferBoostFrames | 0;
           state.stats.queuedFrames = msg.queuedFrames | 0;
-          state.stats.voices = msg.voices | 0;
+          if (msg.mode === "inline") state.stats.voices = msg.voices | 0;
           state.stats.audioMode = msg.mode || (state.inlineSynth ? "inline" : "pcm");
           maybeReleaseWarmup(msg.queuedFrames | 0);
+          maybeLogAudioHealth(msg);
           if (typeof opts.onAudioStats === "function") opts.onAudioStats(state, msg);
         }
       };

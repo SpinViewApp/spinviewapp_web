@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu17
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu25
  */
 (function (root) {
   "use strict";
@@ -132,8 +132,21 @@
     var fz = desc.freqZ != null ? +desc.freqZ : 0.0;
     var fw = desc.freqW != null ? +desc.freqW : 1.0;
     var toff = desc.timeOffset != null ? +desc.timeOffset : 0.0;
-    /* Drop leftover silent GPU grain so the next PCM slice re-renders. */
-    gpuHoldOff = gpuHoldLen;
+    /* A new note must never discard audible samples already rendered in
+     * gpuHold. Doing so skips up to GPU_RENDER frames and creates a hard edge
+     * at the next 256-frame PCM block (very audible for continuous music).
+     * Idle look-ahead is all zero, so only discard a genuinely silent tail to
+     * keep the fast first-note response without breaking continuity. */
+    if (gpuHold && gpuHoldOff < gpuHoldLen) {
+      var holdPeak = 0;
+      var hi, ha;
+      for (hi = gpuHoldOff * 2; hi < gpuHoldLen * 2; hi++) {
+        ha = Math.abs(gpuHold[hi]);
+        if (ha > holdPeak) holdPeak = ha;
+        if (holdPeak >= 0.00001) break;
+      }
+      if (holdPeak < 0.00001) gpuHoldOff = gpuHoldLen;
+    }
     return (
       wasm._sound_worker_play(
         variant, vol, dur, fadein, envelop, fx, fy, fz, fw, toff
@@ -176,6 +189,7 @@
   var gpuHold = new Float32Array(GPU_RENDER * 2);
   var gpuHoldOff = 0;
   var gpuHoldLen = 0;
+  var gpuBlockSerial = 0;
 
   function clampPcm(buf, n) {
     var i, v;
@@ -198,6 +212,7 @@
     while (filled < frames) {
       if (gpuHoldOff >= gpuHoldLen) {
         chunk = wasmGenerateBlock(GPU_RENDER);
+        gpuBlockSerial++;
         gpuHold.set(chunk.subarray(0, GPU_RENDER * 2));
         clampPcm(gpuHold, GPU_RENDER * 2);
         gpuHoldOff = 0;
@@ -357,7 +372,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu17");
+            u.searchParams.set("v", "gpu25");
             return u.href;
           } catch (e) {
             return p;
@@ -484,9 +499,46 @@
       return wasmAlive() && wasm._sound_worker_audio_frame
         ? wasm._sound_worker_audio_frame() | 0 : 0;
     },
+    getGpuBlockSerial: function () { return gpuBlockSerial; },
     lastPeak: function () {
       return wasmAlive() && wasm._sound_worker_last_peak
         ? +wasm._sound_worker_last_peak() : 0;
+    },
+    busGain: function () {
+      return wasmAlive() && wasm._sound_worker_bus_gain
+        ? +wasm._sound_worker_bus_gain() : 1;
+    },
+    rawEdgeCount: function () {
+      return wasmAlive() && wasm._sound_worker_raw_edge_count
+        ? wasm._sound_worker_raw_edge_count() | 0 : 0;
+    },
+    rawEdgeJumpMax: function () {
+      return wasmAlive() && wasm._sound_worker_raw_edge_jump_max
+        ? +wasm._sound_worker_raw_edge_jump_max() : 0;
+    },
+    rawEdgeRatioMax: function () {
+      return wasmAlive() && wasm._sound_worker_raw_edge_ratio_max
+        ? +wasm._sound_worker_raw_edge_ratio_max() : 0;
+    },
+    echoEdgeCount: function () {
+      return wasmAlive() && wasm._sound_worker_echo_edge_count
+        ? wasm._sound_worker_echo_edge_count() | 0 : 0;
+    },
+    echoEdgeJumpMax: function () {
+      return wasmAlive() && wasm._sound_worker_echo_edge_jump_max
+        ? +wasm._sound_worker_echo_edge_jump_max() : 0;
+    },
+    echoEdgeRatioMax: function () {
+      return wasmAlive() && wasm._sound_worker_echo_edge_ratio_max
+        ? +wasm._sound_worker_echo_edge_ratio_max() : 0;
+    },
+    echoMix: function () {
+      return wasmAlive() && wasm._sound_worker_echo_mix
+        ? +wasm._sound_worker_echo_mix() : 0;
+    },
+    masterSmooth: function () {
+      return wasmAlive() && wasm._sound_worker_master_smooth
+        ? +wasm._sound_worker_master_smooth() : 1;
     },
     echoLive: function () {
       return wasmAlive() && wasm._sound_worker_last_peak
@@ -536,6 +588,28 @@
   var synthMaxMs = 0;
   var fillLastMs = 0;
   var fillMaxMs = 0;
+  var pumpLateLastMs = 0;
+  var pumpLateMaxMs = 0;
+  var pumpLateCount = 0;
+  var audioPumpDueMs = 0;
+  var slowRenderLogMs = 0;
+  var needCoalesceUntilMs = 0;
+  var ignoredStaleNeeds = 0;
+  var pcmHaveTail = false;
+  var pcmTailL = 0;
+  var pcmTailR = 0;
+  var pcmPrevL = 0;
+  var pcmPrevR = 0;
+  var pcmLastGpuSerial = 0;
+  var pcmEdgeJumpMax = 0;
+  var pcmEdgeRatioMax = 0;
+  var pcmEdgeCount = 0;
+  var pcmGpuEdgeCount = 0;
+  var pcmZeroRunMax = 0;
+  var pcmSignalSeen = false;
+  var capturePcm = null;
+  var captureWriteFrames = 0;
+  var captureTargetFrames = 0;
   var synthReady = false;
   var pendingPlays = [];
   var pcmPool = [];
@@ -590,6 +664,15 @@
       synth_max_ms: synthMaxMs,
       fill_last_ms: fillLastMs,
       fill_max_ms: fillMaxMs,
+      pump_late_last_ms: pumpLateLastMs,
+      pump_late_max_ms: pumpLateMaxMs,
+      pump_late_count: pumpLateCount,
+      stale_needs: ignoredStaleNeeds,
+      edge_jump_max: pcmEdgeJumpMax,
+      edge_ratio_max: pcmEdgeRatioMax,
+      edge_count: pcmEdgeCount,
+      gpu_edge_count: pcmGpuEdgeCount,
+      zero_run_max: pcmZeroRunMax,
       voices: typeof SoundWorkerSsound !== "undefined" ? SoundWorkerSsound.liveVoices() : 0,
       ssound: typeof SoundWorkerSsound !== "undefined" ? 1 : 0,
       wasm: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getBackend &&
@@ -597,7 +680,25 @@
       backend: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getBackend
         ? SoundWorkerSsound.getBackend() : "gpu-unavailable",
       peak: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.lastPeak
-        ? SoundWorkerSsound.lastPeak() : 0
+        ? SoundWorkerSsound.lastPeak() : 0,
+      bus_gain: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.busGain
+        ? SoundWorkerSsound.busGain() : 1,
+      raw_edge_count: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.rawEdgeCount
+        ? SoundWorkerSsound.rawEdgeCount() : 0,
+      raw_edge_jump_max: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.rawEdgeJumpMax
+        ? SoundWorkerSsound.rawEdgeJumpMax() : 0,
+      raw_edge_ratio_max: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.rawEdgeRatioMax
+        ? SoundWorkerSsound.rawEdgeRatioMax() : 0,
+      echo_edge_count: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.echoEdgeCount
+        ? SoundWorkerSsound.echoEdgeCount() : 0,
+      echo_edge_jump_max: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.echoEdgeJumpMax
+        ? SoundWorkerSsound.echoEdgeJumpMax() : 0,
+      echo_edge_ratio_max: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.echoEdgeRatioMax
+        ? SoundWorkerSsound.echoEdgeRatioMax() : 0,
+      echo_mix: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.echoMix
+        ? SoundWorkerSsound.echoMix() : 0,
+      master_smooth: typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.masterSmooth
+        ? SoundWorkerSsound.masterSmooth() : 1
     });
   }
 
@@ -625,11 +726,86 @@
     var ab = acquirePcmBuffer(bytes);
     var out = new Float32Array(ab);
     out.set(samples);
+    if (capturePcm && captureWriteFrames < captureTargetFrames) {
+      var captureFrames = frames;
+      if (captureFrames > captureTargetFrames - captureWriteFrames)
+        captureFrames = captureTargetFrames - captureWriteFrames;
+      capturePcm.set(out.subarray(0, captureFrames * 2), captureWriteFrames * 2);
+      captureWriteFrames += captureFrames;
+      if (captureWriteFrames >= captureTargetFrames) {
+        var captureDone = capturePcm;
+        capturePcm = null;
+        postMessage({
+          type: "pcm-capture",
+          sampleRate: sampleRate | 0,
+          frames: captureWriteFrames,
+          samples: captureDone.buffer
+        }, [captureDone.buffer]);
+      }
+    }
+    var sourceSerial = SoundWorkerSsound.getGpuBlockSerial
+      ? SoundWorkerSsound.getGpuBlockSerial() | 0
+      : 0;
+    var zeroRun = 0;
+    var longestZeroRun = 0;
+    var i, l, r;
+    for (i = 0; i < frames; i++) {
+      l = out[i * 2];
+      r = out[i * 2 + 1];
+      if (Math.abs(l) < 0.000001 && Math.abs(r) < 0.000001) {
+        zeroRun++;
+        if (zeroRun > longestZeroRun) longestZeroRun = zeroRun;
+      } else {
+        zeroRun = 0;
+        pcmSignalSeen = true;
+      }
+    }
+    if (pcmSignalSeen && longestZeroRun > pcmZeroRunMax)
+      pcmZeroRunMax = longestZeroRun;
+    if (pcmHaveTail && frames > 1) {
+      var edgeJump = Math.max(
+        Math.abs(out[0] - pcmTailL),
+        Math.abs(out[1] - pcmTailR)
+      );
+      var adjacentSlope = Math.max(
+        Math.abs(pcmTailL - pcmPrevL),
+        Math.abs(pcmTailR - pcmPrevR),
+        Math.abs(out[2] - out[0]),
+        Math.abs(out[3] - out[1]),
+        0.00001
+      );
+      var edgeRatio = edgeJump / adjacentSlope;
+      if (edgeJump > pcmEdgeJumpMax) pcmEdgeJumpMax = edgeJump;
+      if (edgeRatio > pcmEdgeRatioMax) pcmEdgeRatioMax = edgeRatio;
+      if (edgeJump >= 0.02 && edgeRatio >= 8) {
+        pcmEdgeCount++;
+        if (sourceSerial !== pcmLastGpuSerial) pcmGpuEdgeCount++;
+      }
+    }
+    if (frames > 1) {
+      pcmPrevL = out[(frames - 2) * 2];
+      pcmPrevR = out[(frames - 2) * 2 + 1];
+      pcmTailL = out[(frames - 1) * 2];
+      pcmTailR = out[(frames - 1) * 2 + 1];
+      pcmHaveTail = true;
+      pcmLastGpuSerial = sourceSerial;
+    }
     recycleHint(bytes);
     synthLastMs = performance.now() - synthT0;
     synthBlocks++;
     synthSumMs += synthLastMs;
     if (synthLastMs > synthMaxMs) synthMaxMs = synthLastMs;
+    if (synthLastMs >= 12) {
+      var slowNow = performance.now();
+      if (slowNow - slowRenderLogMs >= 2000) {
+        slowRenderLogMs = slowNow;
+        console.warn(
+          "[audio-worker] slow GPU render " + synthLastMs.toFixed(1) +
+          "ms queue~" + estimatedQueued() +
+          " voices=" + SoundWorkerSsound.liveVoices()
+        );
+      }
+    }
     audioPort.postMessage(
       { type: "pcm", frames: frames, samples: ab },
       [ab]
@@ -637,10 +813,6 @@
     queuedEstimate = estimatedQueued() + frames;
     queuedWallMs = performance.now();
     pcmBlocksSent += 1;
-    if (pcmBlocksSent <= 4 || (pcmBlocksSent & 31) === 0)
-      console.log("[sound_worker] pcm #" + pcmBlocksSent +
-        " frames=" + frames + " synthMs=" + synthLastMs.toFixed(1) +
-        " peak=" + (SoundWorkerSsound.lastPeak ? SoundWorkerSsound.lastPeak() : 0));
     emitStats(false);
     return true;
   }
@@ -657,6 +829,7 @@
     var want = target > 0 ? target : targetFrames;
     var guard = 0;
     var fillT0 = performance.now();
+    var blocksBefore = pcmBlocksSent;
     fillBusy = 1;
     if (want < blockFrames) want = blockFrames;
     if (want > 4096) want = 4096;
@@ -667,6 +840,8 @@
     fillBusy = 0;
     fillLastMs = performance.now() - fillT0;
     if (fillLastMs > fillMaxMs) fillMaxMs = fillLastMs;
+    if (pcmBlocksSent > blocksBefore)
+      needCoalesceUntilMs = performance.now() + 18;
   }
 
   function clearAudioPump() {
@@ -704,9 +879,14 @@
     if (!running || !audioPort) return;
     var q = estimatedQueued();
     var delay = q >= targetFrames ? 12 : q >= needFrames ? 4 : 2;
+    audioPumpDueMs = performance.now() + delay;
     audioPumpTimer = setTimeout(function () {
       audioPumpTimer = 0;
       if (!running || !audioPort || !synthReady) return;
+      pumpLateLastMs = performance.now() - audioPumpDueMs;
+      if (pumpLateLastMs < 0) pumpLateLastMs = 0;
+      if (pumpLateLastMs > 8) pumpLateCount++;
+      if (pumpLateLastMs > pumpLateMaxMs) pumpLateMaxMs = pumpLateLastMs;
       if (estimatedQueued() < targetFrames) fillToTarget(targetFrames);
       scheduleAudioPump();
     }, delay);
@@ -716,14 +896,28 @@
     var msg = ev.data || {};
     if (msg.type === "need") {
       if (!running || pumpPaused) return;
-      noteQueued(msg.queuedFrames | 0);
+      var needNow = performance.now();
+      var reportedQueued = msg.queuedFrames | 0;
+      var localQueued = estimatedQueued();
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
       if (targetFrames < 1024) targetFrames = 1024;
       if (targetFrames > 4096) targetFrames = 4096;
       if (needFrames < 256) needFrames = 256;
       if (needFrames > targetFrames) needFrames = targetFrames;
-      fillToTarget(targetFrames);
+      /* A fill is delivered as several transferred PCM messages. The Worklet
+       * can ask again after receiving only the first one; that queue snapshot
+       * is then older than the worker's just-produced batch. Do not overwrite
+       * the newer local estimate with that stale low value. */
+      if (
+        needNow < needCoalesceUntilMs &&
+        reportedQueued + blockFrames < localQueued
+      ) {
+        ignoredStaleNeeds++;
+      } else {
+        noteQueued(reportedQueued);
+        fillToTarget(targetFrames);
+      }
       scheduleAudioPump();
     }
   }
@@ -743,19 +937,18 @@
   function playSound(msg) {
     var wasLive = SoundWorkerSsound.liveVoices();
     if (audioPort && wasLive <= 0) {
-      /* Idle look-ahead is silence. Remove it before the first new attack so
-       * latency is one fresh PCM block, not the whole safety FIFO. Messages on
-       * this port stay ordered: flush reaches the Worklet before new PCM. */
+      /* Idle look-ahead is stale silence, but an empty FIFO clicks while the
+       * next GPU readback is produced. Keep only a short safety cushion: low
+       * onset latency without starving the realtime Worklet. */
+      var keep = estimatedQueued();
+      var keepMax = Math.max(blockFrames, needFrames >> 1);
+      if (keep > keepMax) keep = keepMax;
+      if (keep < 0) keep = 0;
       if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
-      audioPort.postMessage({ type: "flush" });
-      noteQueued(0);
+      audioPort.postMessage({ type: "trim", keepFrames: keep | 0 });
+      noteQueued(keep);
     }
     var id = SoundWorkerSsound.play(msg);
-    if ((pcmBlocksSent & 7) === 0)
-      console.log("[sound_worker] play " + (msg.soundType || "?") +
-        " id=" + id +
-        " voices=" + SoundWorkerSsound.liveVoices() +
-        " backend=" + SoundWorkerSsound.getBackend());
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
     if (!audioPort) {
       scheduleSilentPump();
@@ -924,6 +1117,16 @@
       if (type === "set_echo") {
         if (SoundWorkerSsound.setEcho)
           SoundWorkerSsound.setEcho(msg.delayMs, msg.feedback, msg.mix);
+        return;
+      }
+      if (type === "capture_pcm") {
+        var captureSeconds = +msg.seconds || 5;
+        if (captureSeconds < 1) captureSeconds = 1;
+        if (captureSeconds > 10) captureSeconds = 10;
+        captureTargetFrames = Math.max(1, Math.floor(sampleRate * captureSeconds));
+        captureWriteFrames = 0;
+        capturePcm = new Float32Array(captureTargetFrames * 2);
+        postMessage({ type: "pcm-capture-started", seconds: captureSeconds });
         return;
       }
       if (type === "ping") {
