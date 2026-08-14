@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 82,
+"config_defaults_rev": 83,
 "mainpan": {
   "1": {
     "1": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 17
+                  "active": 16
                 }
               }
             }
@@ -98,7 +98,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.141282,
+    "ratio": 0.256303,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 618,
+  "campaign_depth": 622,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -232,9 +232,9 @@
   "drag_insert_scale": 0.82,
   "drag_mouse_lift_ratio": 0.5,
   "drag_size_zone": 0.25,
-  "echo_delay_ms": 80,
-  "echo_feedback": 0.4,
-  "echo_mix": 0.3,
+  "echo_delay_ms": 1,
+  "echo_feedback": 0,
+  "echo_mix": 0,
   "full_framerate": false,
   "hud_master_volume": 0.5355,
   "hud_muted": false,
@@ -278,8 +278,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 621,
-  "level_seed": -764636868,
+  "level_index": 625,
+  "level_seed": 84375403,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -293,24 +293,25 @@
   "messages_on_start": true,
   "mind_level": 1,
   "music_bpm_scale": 1,
-  "music_complexity_response": 1.6,
-  "music_difficulty_influence": 0.12,
+  "music_complexity_response": 4.824,
+  "music_difficulty_influence": 0.25,
   "music_enabled": true,
-  "music_jingle_gain": 0.756,
-  "music_level_influence": 0.2,
+  "music_jingle_gain": 1.068,
+  "music_level_influence": 0.317,
   "music_lookahead": 0.085,
   "music_master_gain": 1,
-  "music_note_length": 1,
-  "music_ornaments": 0.22,
-  "music_progress_influence": 0.22,
-  "music_puzzle_gain": 0.769,
+  "music_note_length": 2.231,
+  "music_ornaments": 0.378,
+  "music_progress_influence": 0.27,
+  "music_puzzle_gain": 1.056,
   "music_quantize": 8,
+  "music_role_mask": 15,
   "music_running": true,
-  "music_silence": 0.15,
-  "music_theme_override": -1,
-  "music_variation": 0.18,
-  "music_visual_reactivity": 1.5,
-  "music_world_crossfade": 8,
+  "music_silence": 0.447,
+  "music_theme_override": 6,
+  "music_variation": 0.311,
+  "music_visual_reactivity": 1.241,
+  "music_world_crossfade": 3.191,
   "pan_limit": true,
   "pan_limit_radius": 0.163,
   "perf_hud_visible": false,
@@ -347,7 +348,7 @@
     "g": 0,
     "r": 0
   },
-  "sht_dim": 0.208,
+  "sht_dim": 0.168,
   "sht_dim_zoom": 0.4,
   "sht_enabled": true,
   "sht_flash_color": {
@@ -361,52 +362,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.365679,
-    "b": 215.365,
-    "g": 0.568935,
-    "r": -0.582129
+    "a": -0.233585,
+    "b": 213.806,
+    "g": 0.569823,
+    "r": -0.581483
   },
   "sht_fractal_v1": {
-    "a": 0.348423,
-    "b": 0.152697,
-    "g": 0.490472,
-    "r": -0.0214501
+    "a": 0.349631,
+    "b": 0.142555,
+    "g": 0.495008,
+    "r": -0.0167334
   },
   "sht_fractal_v2": {
-    "a": 0.183325,
-    "b": 0.0610803,
-    "g": 213.003,
+    "a": 0.186471,
+    "b": 0.0596409,
+    "g": 212.218,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 17.6881,
-    "b": 0.00445156,
-    "g": 0.0341498,
-    "r": 7.90651
+    "a": 17.91,
+    "b": 0.00434854,
+    "g": 0.0342902,
+    "r": 7.93084
   },
   "sht_fractal_v4": {
-    "a": 0.180548,
-    "b": 0.695888,
-    "g": 0.708049,
-    "r": 33.364
+    "a": 0.17167,
+    "b": 0.695423,
+    "g": 0.690398,
+    "r": 32.9345
   },
   "sht_fractal_v5": {
-    "a": 0.217172,
-    "b": 0.116125,
-    "g": 0.117848,
-    "r": 0.241682
+    "a": 0.241894,
+    "b": 0.116647,
+    "g": 0.118153,
+    "r": 0.245299
   },
   "sht_fractal_v6": {
-    "a": 1.08318,
-    "b": 0.734552,
-    "g": 0.697162,
-    "r": 0.761273
+    "a": 1.09884,
+    "b": 0.732963,
+    "g": 0.71481,
+    "r": 0.757791
   },
   "sht_fractal_v7": {
-    "a": 0.80401,
-    "b": 0.987248,
-    "g": 1.27238,
-    "r": 1.21038
+    "a": 0.804393,
+    "b": 0.978829,
+    "g": 1.26226,
+    "r": 1.18978
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -415,10 +416,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.631198,
-    "b": 0.405077,
-    "g": 0.746657,
-    "r": 0.715264
+    "a": 0.627158,
+    "b": 0.419293,
+    "g": 0.746432,
+    "r": 0.720893
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
