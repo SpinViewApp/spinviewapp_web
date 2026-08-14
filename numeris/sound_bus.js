@@ -185,8 +185,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu7";
-      else url += "&v=gpu7";
+      if (url.indexOf("?") < 0) url += "?v=gpu14";
+      else url += "&v=gpu14";
       var worker;
       try {
         worker = new Worker(url);
@@ -310,6 +310,11 @@
       var ctx = state.audioCtx;
       if (ctx && ctx.state === "running" && (state.worklet || state.scriptNode)) {
         state.audioReady = true;
+        if (!state.audioPath) {
+          state.audioPath = state.scriptNode
+            ? "script-pcm"
+            : (state.inlineSynth ? "worklet-inline" : "worklet-pcm");
+        }
         state.audioStage = "ready";
         state.error = "";
         state._gesturePrimed = true;
@@ -380,6 +385,8 @@
     state._backgroundMuted = 0;
     state._backgroundPausing = 0;
     state._backgroundFadeTimer = 0;
+    state._resumeDebounce = 0;
+    state._dacDetached = 0;
     state._unlockFadePending = 0;
 
     /* Desktop can wait for timers. Phone lock/screen-off freezes JS almost
@@ -435,7 +442,50 @@
         clearTimeout(state._backgroundFadeTimer);
         state._backgroundFadeTimer = 0;
       }
+      if (state._resumeDebounce) {
+        clearTimeout(state._resumeDebounce);
+        state._resumeDebounce = 0;
+      }
       state._backgroundPausing = 0;
+    }
+
+    function disconnectDac() {
+      try {
+        if (state.scriptNode) state.scriptNode.disconnect();
+      } catch (e0) {}
+      try {
+        if (state.worklet) state.worklet.disconnect();
+      } catch (e1) {}
+      try {
+        if (state.outputGain) state.outputGain.disconnect();
+      } catch (e2) {}
+      try {
+        if (state._silentAudio) state._silentAudio.pause();
+      } catch (e3) {}
+      state._dacDetached = 1;
+    }
+
+    function reconnectDac() {
+      var ctx = state.audioCtx;
+      var g;
+      if (!ctx || ctx.state === "closed") return;
+      g = ensureOutputGain(ctx);
+      try {
+        if (state.scriptNode) {
+          state.scriptNode.disconnect();
+          state.scriptNode.connect(g);
+        }
+      } catch (e0) {}
+      try {
+        if (state.worklet) {
+          state.worklet.disconnect();
+          state.worklet.connect(g);
+        }
+      } catch (e1) {}
+      try {
+        g.connect(ctx.destination);
+      } catch (e2) {}
+      state._dacDetached = 0;
     }
 
     function muteOutputNow() {
@@ -470,31 +520,27 @@
     }
 
     function pauseForBackground(reason) {
-      if (state._backgroundMuted || state._backgroundPausing) return;
+      if (state._backgroundMuted) return;
       if (state._shutdownBegun || state._tearingDown) return;
+      /* AudioContext starts suspended until the unlock tap. Treating that as
+       * "tab hidden" stopped the worker and left gain at 0 — total silence. */
+      if (
+        isPageAudible() &&
+        reason !== "interrupted" &&
+        reason !== "freeze" &&
+        reason !== "pagehide"
+      )
+        return;
       cancelBackgroundPause();
       state._backgroundPausing = 1;
       state._outputAllowed = 0;
       state._unlockFadePending = 0;
       state._warmupReadyCount = 0;
-      var fadeSec =
-        state.mobile || reason === "interrupted" || reason === "freeze"
-          ? PHONE_LOCK_FADE_SEC
-          : BACKGROUND_FADE_SEC;
-      /* Fade first — instant mute + FIFO flush clicks on tab/page change. */
-      var dur = fadeOutputOut(reason || "background", fadeSec, null);
-      var waitMs = ((dur > 0 ? dur : fadeSec) * 1000 + 20) | 0;
-      /* Phone lock: timers die; busy-wait so the audio thread plays the ramp
-       * before suspend. Short (~55–75 ms) — better than a pop. */
-      if (state.mobile || reason === "interrupted" || reason === "freeze") {
-        busyWaitMs(waitMs);
-        muteOutputNow();
-        finishBackgroundMute(reason || "background");
-        return;
-      }
-      state._backgroundFadeTimer = setTimeout(function () {
-        finishBackgroundMute(reason || "background");
-      }, waitMs);
+      stopWorkerPumpSoft();
+      silenceScriptSink();
+      muteOutputNow();
+      disconnectDac();
+      finishBackgroundMute(reason || "background");
     }
 
     function fadeOutputIfAudible(reason, durSec) {
@@ -561,6 +607,7 @@
             state.audioStage = "waiting-gesture";
             return;
           }
+          reconnectDac();
           markAudioReadyIfRunning();
           resumeWorkerPump();
           if (wasMuted) trimAudioLatency(reason || "foreground", true);
@@ -572,8 +619,20 @@
     }
 
     function syncPageAudible(trigger) {
-      if (isPageAudible()) resumeFromForeground(trigger || "sync");
-      else pauseForBackground(trigger || "sync");
+      if (isPageAudible()) {
+        /* Tab switches flicker visible/hidden; resume immediately → blips. */
+        if (state._resumeDebounce) clearTimeout(state._resumeDebounce);
+        state._resumeDebounce = setTimeout(function () {
+          state._resumeDebounce = 0;
+          if (isPageAudible()) resumeFromForeground(trigger || "sync");
+        }, 180);
+      } else {
+        if (state._resumeDebounce) {
+          clearTimeout(state._resumeDebounce);
+          state._resumeDebounce = 0;
+        }
+        pauseForBackground(trigger || "sync");
+      }
     }
 
     state.isPageAudible = isPageAudible;
@@ -638,6 +697,10 @@
       } catch (e2) {}
       state.audioCtx = null;
       state.audioPath = "";
+      state._backgroundMuted = 0;
+      state._backgroundPausing = 0;
+      state._outputAllowed = 1;
+      state._dacDetached = 0;
     }
 
     /* Master gain before destination — mute soft on reload/teardown and hold
@@ -1173,7 +1236,8 @@
 
     state.play = function (desc) {
       /* Drop SFX while tab/window is inactive — avoids ghost glitches on return. */
-      if (state._backgroundMuted || state._backgroundPausing) return 0;
+      if (state._backgroundMuted || state._backgroundPausing || !isPageAudible())
+        return 0;
       /* Start instruments even before AudioContext unlock â€” worker advances
        * voice clocks silently; unlock fade-in avoids a hard onset. */
       if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
@@ -1346,6 +1410,12 @@
       audioPort.onmessage = function (ev) {
         var a = ev.data || {};
         if (a.type === "pcm" && a.samples) {
+          if (
+            state._backgroundMuted ||
+            state._backgroundPausing ||
+            !state._outputAllowed
+          )
+            return;
           var samples =
             a.samples instanceof Float32Array
               ? a.samples
@@ -1405,6 +1475,20 @@
         var right = e.outputBuffer.getChannelData(1);
         var n = left.length;
         var i, si, rawL, rawR, fade, phase;
+        if (
+          state._backgroundMuted ||
+          state._backgroundPausing ||
+          !state._outputAllowed ||
+          state._tearingDown
+        ) {
+          for (i = 0; i < n; i++) {
+            left[i] = 0;
+            right[i] = 0;
+          }
+          lastOutL = 0;
+          lastOutR = 0;
+          return;
+        }
         /* Ask early in the callback so the worker can fill during this quantum. */
         requestFill(queuedFrames < state.needFrames + (bufferBoostFrames >> 1));
         for (i = 0; i < n; i++) {
@@ -1584,19 +1668,30 @@
         state.audioStage = "error";
         return Promise.reject(new Error(state.error));
       }
+      if (state._startPromise) return state._startPromise;
+      if (
+        state.audioReady &&
+        state.audioCtx &&
+        state.audioCtx.state === "running" &&
+        (state.scriptNode || state.worklet)
+      ) {
+        resumeWorkerPump();
+        fadeOutputIn("already-running");
+        return Promise.resolve(state);
+      }
       state._tearingDown = 0;
+      state._backgroundMuted = 0;
+      state._backgroundPausing = 0;
+      state._outputAllowed = 1;
       if (!state._unlockStarted) state._unlockStarted = true;
       state._unlockAttempts++;
 
-      /* Must stay synchronous in the gesture turn. */
       primeHtmlMedia();
 
-      /* Stuck suspended context: destroy and recreate inside THIS gesture.
-       * Retap used to no-op because audioReady was true while still suspended. */
-      if (state.audioCtx && state.audioCtx.state !== "running") {
-        console.warn(
-          "[sound_bus] recreating AudioContext (was " + state.audioCtx.state + ")"
-        );
+      /* Only recreate a *dead* graph. pointerdown+click used to nuke the
+       * ScriptProcessor on the still-suspended first context. */
+      if (state.audioCtx && state.audioCtx.state === "closed") {
+        console.warn("[sound_bus] recreating AudioContext (was closed)");
         nukeAudioGraph();
       }
 
@@ -1612,16 +1707,10 @@
           " Hz | " +
           state.convertPath +
           " | attempt=" +
-          state._unlockAttempts
+          state._unlockAttempts +
+          " ctx=" +
+          ctx.state
       );
-      if ((state.sampleRate | 0) !== (state.synthRate | 0))
-        console.warn(
-          "[sound_bus] device refused the engine rate (" +
-            state.synthRate +
-            " Hz) and runs at " +
-            state.sampleRate +
-            " Hz — synth follows the device, no resample"
-        );
       state.audioStage = "resume";
       try {
         resumePromise = ctx.state !== "running" ? ctx.resume() : Promise.resolve();
@@ -1633,54 +1722,50 @@
         return Promise.reject(resumeErr);
       }
 
-      /* Same worker GPU PCM on every origin. ScriptProcessor is the sink:
-       * HTTPS used to wait on addModule with audioPath empty ("locked"), then
-       * attach a 128-frame Worklet that underruns. HTTP attached ScriptProcessor
-       * immediately (stable) and sometimes relabeled after a Worklet "upgrade". */
-      if (!state.worklet && !state.scriptNode) {
-        try {
-          if (preferWorklet && workletSupported(ctx) && isSecureEnough() &&
-              state._workletModuleReady) {
-            state.audioStage = "worklet";
-            attachWorkletNodeSync(ctx);
-          } else {
-            state.audioStage = "script-pcm";
-            startScriptProcessorFallback(ctx);
-            console.log("[sound_bus] PCM sink=script-pcm (Worklet PCM disabled — GPU readback grain)");
-          }
-          markAudioReadyIfRunning();
-          if (state.audioReady && typeof opts.onAudioReady === "function")
-            opts.onAudioReady(state);
-        } catch (eSink) {
-          console.warn("[sound_bus] sync sink attach failed", eSink);
-          state.audioStage = "error";
-          state.error = String(eSink && eSink.message ? eSink.message : eSink);
-          state.audioReady = false;
+      function attachSinkIfNeeded() {
+        if (state.worklet || state.scriptNode) return;
+        if (preferWorklet && workletSupported(ctx) && isSecureEnough() &&
+            state._workletModuleReady) {
+          state.audioStage = "worklet";
+          attachWorkletNodeSync(ctx);
+        } else {
+          state.audioStage = "script-pcm";
+          startScriptProcessorFallback(ctx);
+          console.log("[sound_bus] PCM sink=script-pcm ctx=" + ctx.state);
         }
-      } else {
-        markAudioReadyIfRunning();
       }
 
-      flushPendingPlays();
-
-      return Promise.resolve(resumePromise).then(
+      state._startPromise = Promise.resolve(resumePromise).then(
         function () {
           primeAudioGesture(ctx);
+          if (ctx.state !== "running")
+            console.warn("[sound_bus] resume resolved but ctx=" + ctx.state);
+          try {
+            attachSinkIfNeeded();
+          } catch (eSink) {
+            console.warn("[sound_bus] sink attach failed", eSink);
+            state.error = String(eSink && eSink.message ? eSink.message : eSink);
+          }
           markAudioReadyIfRunning();
+          console.log(
+            "[sound_bus] after resume ready=" +
+              (state.audioReady ? 1 : 0) +
+              " ctx=" +
+              ctx.state +
+              " sink=" +
+              (state.scriptNode ? "script" : state.worklet ? "worklet" : "none") +
+              " path=" +
+              (state.audioPath || "?") +
+              " worker=" +
+              (state.worker ? 1 : 0)
+          );
+          resumeWorkerPump();
           if (state.audioReady) {
-            /* Cut silence pre-buffered while suspended / warm-up. */
-            state._outputFadedIn = 0;
-            state._warmupReadyCount = 0;
-            state._unlockFadePending = 1;
-            trimAudioLatency("unlock", true);
-            flattenLatencyBeforeOpen("unlock");
+            state._unlockFadePending = 0;
+            fadeOutputIn("unlock");
             flushPendingPlays();
-          } else
-            console.warn(
-              "[sound_bus] ctx still " +
-                (ctx && ctx.state) +
-                " after resume — next tap will recreate"
-            );
+            if (typeof opts.onAudioReady === "function") opts.onAudioReady(state);
+          }
           return state;
         },
         function (err) {
@@ -1690,6 +1775,17 @@
           throw err;
         }
       );
+      state._startPromise = state._startPromise.then(
+        function (s) {
+          state._startPromise = null;
+          return s;
+        },
+        function (err) {
+          state._startPromise = null;
+          throw err;
+        }
+      );
+      return state._startPromise;
     };
 
     state.primeGesture = function () {
@@ -1706,30 +1802,6 @@
         /* Capture: phone lock fires this then freezes JS — handle ASAP. */
         syncPageAudible("visibility");
       }, true);
-    }
-
-    if (!state._focusBound && typeof window !== "undefined") {
-      state._focusBound = 1;
-      /* Soft mute on blur only — do not stop voices / suspend (startup focus
-       * flicker was leaving a single leftover note of the beat). */
-      window.addEventListener("blur", function () {
-        if (document.visibilityState === "hidden") return;
-        state._outputAllowed = 0;
-        /* Soft duck only — visibility/interrupted handle phone lock sync fade. */
-        fadeOutputIfAudible("blur", BLUR_FADE_SEC);
-      });
-      window.addEventListener("focus", function () {
-        if (document.visibilityState === "hidden") return;
-        cancelBackgroundPause();
-        if (state._backgroundMuted) {
-          syncPageAudible("focus");
-          return;
-        }
-        state._outputAllowed = 1;
-        state._warmupReadyCount = 0;
-        state._outputFadedIn = 0;
-        state._unlockFadePending = 1;
-      });
     }
 
     /* Android: Share→Copy Link blurs the window; closing the modal is a
@@ -1756,10 +1828,12 @@
       try {
         ctx.addEventListener("statechange", function () {
           var st = ctx.state;
-          if (st === "interrupted" || st === "suspended") {
+          if (st === "interrupted") {
             if (!state._backgroundMuted && !state._shutdownBegun)
-              pauseForBackground(st === "interrupted" ? "interrupted" : "ctx-suspended");
+              pauseForBackground("interrupted");
+            return;
           }
+          /* "suspended" is the default before the first gesture — not a hide. */
         });
       } catch (eLc) {}
     }

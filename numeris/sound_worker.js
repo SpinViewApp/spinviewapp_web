@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu6
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu14
  */
 (function (root) {
   "use strict";
@@ -132,6 +132,8 @@
     var fz = desc.freqZ != null ? +desc.freqZ : 0.0;
     var fw = desc.freqW != null ? +desc.freqW : 1.0;
     var toff = desc.timeOffset != null ? +desc.timeOffset : 0.0;
+    /* Drop leftover silent GPU grain so the next PCM slice re-renders. */
+    gpuHoldOff = gpuHoldLen;
     return (
       wasm._sound_worker_play(
         variant, vol, dur, fadein, envelop, fx, fy, fz, fw, toff
@@ -287,7 +289,7 @@
     try {
       if (typeof importScripts === "function") {
         var loaded = false;
-        var names = ["SoundWorker.js?v=gpu6", "./SoundWorker.js?v=gpu6"];
+        var names = ["SoundWorker.js?v=gpu14", "./SoundWorker.js?v=gpu14"];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
           try {
@@ -353,7 +355,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu6");
+            u.searchParams.set("v", "gpu14");
             return u.href;
           } catch (e) {
             return p;
@@ -367,9 +369,9 @@
           try {
             if (
               typeof wasm._sound_worker_version !== "function" ||
-              (wasm._sound_worker_version() | 0) < 20
+              (wasm._sound_worker_version() | 0) < 22
             ) {
-              loadError = "SoundWorker.wasm predates Numeris GPU worker v20";
+              loadError = "SoundWorker.wasm predates Numeris GPU worker v22";
               wasm = null;
               backend = "gpu-unavailable";
               return false;
@@ -511,6 +513,7 @@
   "use strict";
 
   var running = false;
+  var pumpPaused = false;
   var tickDelayMs = 16;
   var tickTimer = 0;
   var audioPort = null;
@@ -632,6 +635,10 @@
     queuedEstimate = estimatedQueued() + frames;
     queuedWallMs = performance.now();
     pcmBlocksSent += 1;
+    if (pcmBlocksSent <= 4 || (pcmBlocksSent & 31) === 0)
+      console.log("[sound_worker] pcm #" + pcmBlocksSent +
+        " frames=" + frames + " synthMs=" + synthLastMs.toFixed(1) +
+        " peak=" + (SoundWorkerSsound.lastPeak ? SoundWorkerSsound.lastPeak() : 0));
     emitStats(false);
     return true;
   }
@@ -706,6 +713,7 @@
   function onAudioMessage(ev) {
     var msg = ev.data || {};
     if (msg.type === "need") {
+      if (!running || pumpPaused) return;
       noteQueued(msg.queuedFrames | 0);
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
@@ -724,6 +732,7 @@
     audioPort.onmessage = onAudioMessage;
     audioPort.start && audioPort.start();
     noteQueued(0);
+    console.log("[sound_worker] audio port attached synthReady=" + (synthReady ? 1 : 0));
     if (synthReady) fillToTarget(targetFrames);
     scheduleAudioPump();
     postMessage({ type: "audio-attached", blockFrames: blockFrames, targetFrames: targetFrames });
@@ -731,6 +740,11 @@
 
   function playSound(msg) {
     var id = SoundWorkerSsound.play(msg);
+    if ((pcmBlocksSent & 7) === 0)
+      console.log("[sound_worker] play " + (msg.soundType || "?") +
+        " id=" + id +
+        " voices=" + SoundWorkerSsound.liveVoices() +
+        " backend=" + SoundWorkerSsound.getBackend());
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
     if (!audioPort) {
       scheduleSilentPump();
@@ -763,6 +777,7 @@
           SoundWorkerSsound.getConfigRate ? SoundWorkerSsound.getConfigRate() : 48000);
         preferCpu = !!msg.preferCpu;
         synthReady = false;
+        pumpPaused = false;
         pendingPlays.length = 0;
         if (blockFrames < 128) blockFrames = 128;
         if (blockFrames > 512) blockFrames = 512;
@@ -818,6 +833,11 @@
       }
       if (type === "play") {
         try {
+          if (pumpPaused) return;
+          if (!running) {
+            running = true;
+            if (synthReady && audioPort) scheduleAudioPump();
+          }
           if (!synthReady) {
             if (pendingPlays.length >= 64) pendingPlays.shift();
             pendingPlays.push(msg);
@@ -845,13 +865,17 @@
       }
       if (type === "shutdown_soft") {
         pendingPlays.length = 0;
+        pumpPaused = true;
         running = false;
         clearAudioPump();
+        clearSilentPump();
         SoundWorkerSsound.stopAll();
+        if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
         postMessage({ type: "shutdown_soft" });
         return;
       }
       if (type === "resume_soft") {
+        pumpPaused = false;
         if (!running) running = true;
         if (synthReady && audioPort) {
           scheduleAudioPump();
@@ -897,6 +921,7 @@
       }
       if (type === "stop") {
         running = false;
+        pumpPaused = true;
         audioPort = null;
         clearTick();
         clearAudioPump();
