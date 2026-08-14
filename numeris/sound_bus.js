@@ -188,14 +188,11 @@
   function createBus(opts) {
     opts = opts || {};
     var mobile = isMobileUa();
-    /* Normal path: GPU worker PCM. forceInlineSynth is the production fallback
-     * when worker WebGL2 is unavailable: it runs on the realtime AudioWorklet
-     * thread so Android render stalls cannot starve audio. */
+    /* Normal path: faithful GPU-worker PCM. Inline synthesis remains a
+     * diagnostic path only; it cannot reproduce every generated .sound. */
     var inlineSynth = !!opts.forceInlineSynth;
-    /* Worklet PCM crackles on this GPU-worker path (128-frame quantum vs
-     * blocking WebGL readback). ScriptProcessor consumes the same worker PCM
-     * in 1024-frame callbacks and is the sink that actually stays stable.
-     * Set preferWorklet:true only for A/B. */
+    /* AudioWorklet is the low-latency sink. ScriptProcessor remains available
+     * for old or insecure WebViews where the Worklet cannot be installed. */
     var preferWorklet = !!opts.preferWorklet;
     var state = {
       ok: false,
@@ -248,8 +245,8 @@
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 256,
       /* One GPU hitch is ~2048 frames. Keep that much look-ahead in the
        * Worklet; smaller send grain (256) is sliced from the GPU leftover. */
-      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 3072 : 2048),
-      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 1536 : 1024),
+      targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 1536 : 1024),
+      needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 768 : 512),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
       synthRate: opts.synthRate > 0 ? opts.synthRate | 0 : 48000,
       /* 0 until unlock â€” then AudioContext.sampleRate (may differ â†’ resample). */
@@ -292,7 +289,7 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu16";
+      if (url.indexOf("?") < 0) url += "?v=gpu17";
       else url += "&v=gpu16";
       var worker;
       try {
@@ -350,6 +347,11 @@
           state.stats.synthMaxMs = +msg.synth_max_ms || 0;
           state.stats.workerFillLastMs = +msg.fill_last_ms || 0;
           state.stats.workerFillMaxMs = +msg.fill_max_ms || 0;
+          /* Worker reports every freshly queued block, earlier than the
+           * periodic Worklet HUD stats. Use it to open the muted DAC with the
+           * minimum safe FIFO on first activation. */
+          if (state.audioReady && !state._outputFadedIn)
+            maybeReleaseWarmup(msg.queued_est | 0);
           if (typeof opts.onStats === "function") opts.onStats(state, msg);
           return;
         }
@@ -503,7 +505,7 @@
     var BLUR_FADE_SEC = state.mobile ? 0.04 : 0.06;
     var PHONE_LOCK_FADE_SEC = 0.055;
     /* Tab/browser kill: timers never run — short ramp + busy-wait only. */
-    var TERMINAL_LEAVE_FADE_SEC = 0.04;
+    var TERMINAL_LEAVE_FADE_SEC = 0.008;
 
     function isTerminalLeaveReason(reason) {
       return (
@@ -842,7 +844,7 @@
       state._outputFadedIn = 1;
       g = gNode.gain;
       t = ctx.currentTime;
-      dur = Math.max(0.06, state.unlockFadeSec > 0 ? state.unlockFadeSec : 0.08);
+      dur = Math.max(0.02, state.unlockFadeSec > 0 ? state.unlockFadeSec : 0.02);
       try {
         g.cancelScheduledValues(t);
         g.setValueAtTime(0, t);
@@ -888,10 +890,6 @@
       }
       state._warmupReadyCount = (state._warmupReadyCount | 0) + 1;
       var required = state._unlockFadePending ? 1 : 2;
-      if (state._warmupReadyCount === 1 && required > 1) {
-        flattenLatencyBeforeOpen("pre-fade");
-        return; /* wait one more healthy fill after flatten */
-      }
       if (state._warmupReadyCount < required) return;
       state._unlockFadePending = 0;
       fadeOutputIn("fifo-ready");
@@ -990,9 +988,11 @@
         : state.mobile
           ? PHONE_LOCK_FADE_SEC
           : 0.20;
-      var waitMs = ((dur > 0 ? dur : fadeBase) * 1000 + 15) | 0;
+      var waitMs = isTerminalLeaveReason(reason)
+        ? ((dur > 0 ? dur : fadeBase) * 1000 + 2) | 0
+        : ((dur > 0 ? dur : fadeBase) * 1000 + 15) | 0;
       if (isTerminalLeaveReason(reason)) {
-        if (waitMs > 55) waitMs = 55;
+        if (waitMs > 12) waitMs = 12;
       } else if (waitMs > 90) waitMs = 90;
       busyWaitMs(waitMs);
       silenceScriptSink();
@@ -1001,7 +1001,7 @@
       if (ctx && ctx.state === "running") {
         try {
           var sus = ctx.suspend();
-          if (sus && typeof sus.then === "function") {
+          if (!isTerminalLeaveReason(reason) && sus && typeof sus.then === "function") {
             var done = false;
             sus.then(function () {
               done = true;
@@ -1349,11 +1349,15 @@
         return 0;
       /* Start instruments even before AudioContext unlock â€” worker advances
        * voice clocks silently; unlock fade-in avoids a hard onset. */
-      if (state.worker || (state.inlineSynth && state.worklet) || state._scriptPlay)
+      if (!state.audioReady) {
+        if (!state._unlockStarted) return 0;
+        if (state._pendingPlays.length >= 8) state._pendingPlays.shift();
+        state._pendingPlays.push(desc || {});
+        return 1;
+      }
+      if (state.worker || state._scriptPlay)
         return sendPlayReady(desc || {});
-      if (state._pendingPlays.length >= 32) state._pendingPlays.shift();
-      state._pendingPlays.push(desc || {});
-      return 1;
+      return 0;
     };
     state.stopAll = function () {
       if (state.inlineSynth && state.worklet && state.worklet.port)
@@ -1772,7 +1776,7 @@
     state.startAudio = function () {
       var resumePromise;
       var ctx;
-      if (state._retired || (!state.worker && !state.inlineSynth)) {
+      if (state._retired || !state.worker) {
         /* Sokol / main-thread GPU owns the device. Do not open a second
          * AudioContext — Chrome glitches when two graphs run at once. */
         return Promise.resolve(state);
@@ -1842,9 +1846,24 @@
           state.audioStage = "worklet-module";
           /* Loading a worklet while AudioContext is suspended can hang on
            * Android. Do it after resume, inside the user-gesture chain. */
-          return ensureWorkletModule(ctx).then(function () {
-            state.audioStage = "worklet";
-            attachWorkletNodeSync(ctx);
+          return Promise.race([
+            ensureWorkletModule(ctx).then(function () { return "ok"; }),
+            new Promise(function (resolve) {
+              setTimeout(function () { resolve("timeout"); }, 1500);
+            })
+          ]).then(function (status) {
+            if (status === "ok") {
+              state.audioStage = "worklet";
+              attachWorkletNodeSync(ctx);
+              return;
+            }
+            console.warn("[sound_bus] Worklet timeout; using ScriptProcessor PCM");
+            state.audioStage = "script-pcm";
+            startScriptProcessorFallback(ctx);
+          }, function (err) {
+            console.warn("[sound_bus] Worklet unavailable; using ScriptProcessor PCM", err);
+            state.audioStage = "script-pcm";
+            startScriptProcessorFallback(ctx);
           });
         }
         state.audioStage = "script-pcm";
@@ -1877,8 +1896,10 @@
           );
           resumeWorkerPump();
           if (state.audioReady) {
-            state._unlockFadePending = 0;
-            fadeOutputIn("unlock");
+            /* Keep DAC muted until fresh PCM reaches the safety threshold.
+             * Opening gain on an empty Worklet produced the first-tap pop. */
+            state._unlockFadePending = 1;
+            state._warmupReadyCount = 0;
             flushPendingPlays();
             if (typeof opts.onAudioReady === "function") opts.onAudioReady(state);
           }

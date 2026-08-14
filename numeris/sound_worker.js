@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu16
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu17
  */
 (function (root) {
   "use strict";
@@ -320,11 +320,13 @@
           preGl = gpuCanvas.getContext("webgl2", {
             alpha: false,
             antialias: false,
-            depth: true,
+            depth: false,
             stencil: false,
-            preserveDrawingBuffer: false,
-            powerPreference: "low-power"
+            preserveDrawingBuffer: false
           });
+          /* Some Android drivers reject the lean worker context but accept
+           * their default WebGL2 attributes. Retry before abandoning GPU PCM. */
+          if (!preGl) preGl = gpuCanvas.getContext("webgl2");
         } catch (eGl) {
           gpuCanvas = null;
           preGl = null;
@@ -355,7 +357,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu16");
+            u.searchParams.set("v", "gpu17");
             return u.href;
           } catch (e) {
             return p;
@@ -739,6 +741,15 @@
   }
 
   function playSound(msg) {
+    var wasLive = SoundWorkerSsound.liveVoices();
+    if (audioPort && wasLive <= 0) {
+      /* Idle look-ahead is silence. Remove it before the first new attack so
+       * latency is one fresh PCM block, not the whole safety FIFO. Messages on
+       * this port stay ordered: flush reaches the Worklet before new PCM. */
+      if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
+      audioPort.postMessage({ type: "flush" });
+      noteQueued(0);
+    }
     var id = SoundWorkerSsound.play(msg);
     if ((pcmBlocksSent & 7) === 0)
       console.log("[sound_worker] play " + (msg.soundType || "?") +
