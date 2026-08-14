@@ -31,6 +31,113 @@
     return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
   }
 
+  /* Firefox keeps Sokol's ScriptProcessor alive in background tabs (throttled
+   * callbacks = lagged tails). Mute the callback + suspend that context even
+   * after the worker bus has been torn down (Safari / main-thread GPU path). */
+  function sokolSilenceProcess(e) {
+    var out = e.outputBuffer;
+    var c, ch, i, n = out.length;
+    for (c = 0; c < out.numberOfChannels; c++) {
+      ch = out.getChannelData(c);
+      for (i = 0; i < n; i++) ch[i] = 0;
+    }
+  }
+
+  function pauseSokolSaudio() {
+    var M, node, ctx;
+    try {
+      M = global.Module;
+    } catch (eM) {
+      return;
+    }
+    if (!M) return;
+    M._numerisSaudioPaused = 1;
+    node = M._saudio_node;
+    ctx = M._saudio_context;
+    if (node && node.onaudioprocess !== sokolSilenceProcess) {
+      if (!node._numerisSavedProcess) node._numerisSavedProcess = node.onaudioprocess;
+      node.onaudioprocess = sokolSilenceProcess;
+      try {
+        node.disconnect();
+      } catch (e0) {}
+    }
+    if (ctx && ctx.state === "running") {
+      try {
+        ctx.suspend();
+      } catch (e1) {}
+    }
+  }
+
+  function resumeSokolSaudio() {
+    var M, node, ctx, p;
+    try {
+      M = global.Module;
+    } catch (eM) {
+      return;
+    }
+    if (!M || !M._numerisSaudioPaused) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden")
+      return;
+    M._numerisSaudioPaused = 0;
+    ctx = M._saudio_context;
+    node = M._saudio_node;
+    if (node && node._numerisSavedProcess) {
+      node.onaudioprocess = node._numerisSavedProcess;
+      node._numerisSavedProcess = null;
+    }
+    if (ctx && ctx.state !== "closed") {
+      try {
+        p = ctx.resume();
+        if (p && typeof p.catch === "function") p.catch(function () {});
+      } catch (e0) {}
+    }
+    if (node && ctx && ctx.destination) {
+      try {
+        node.connect(ctx.destination);
+      } catch (e1) {}
+    }
+  }
+
+  function bindSokolPageMute() {
+    if (global._numerisSokolVisBound) return;
+    global._numerisSokolVisBound = 1;
+    if (typeof document !== "undefined") {
+      document.addEventListener(
+        "visibilitychange",
+        function () {
+          if (document.visibilityState === "hidden") {
+            pauseSokolSaudio();
+            var tick = function () {
+              if (document.visibilityState !== "hidden") return;
+              pauseSokolSaudio();
+              requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          } else resumeSokolSaudio();
+        },
+        true
+      );
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener(
+        "pagehide",
+        function () {
+          pauseSokolSaudio();
+        },
+        true
+      );
+      document.addEventListener(
+        "pointerdown",
+        function () {
+          if (typeof document !== "undefined" && document.visibilityState === "visible")
+            resumeSokolSaudio();
+        },
+        true
+      );
+    }
+  }
+  bindSokolPageMute();
+
   function isMobileUa() {
     try {
       return /Android|iPhone|iPad|iPod|Mobile/i.test(
@@ -185,8 +292,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu14";
-      else url += "&v=gpu14";
+      if (url.indexOf("?") < 0) url += "?v=gpu15";
+      else url += "&v=gpu15";
       var worker;
       try {
         worker = new Worker(url);
@@ -540,6 +647,7 @@
       silenceScriptSink();
       muteOutputNow();
       disconnectDac();
+      pauseSokolSaudio();
       finishBackgroundMute(reason || "background");
     }
 
@@ -608,6 +716,7 @@
             return;
           }
           reconnectDac();
+          resumeSokolSaudio();
           markAudioReadyIfRunning();
           resumeWorkerPump();
           if (wasMuted) trimAudioLatency(reason || "foreground", true);

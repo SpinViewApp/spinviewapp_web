@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu14
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu15
  */
 (function (root) {
   "use strict";
@@ -289,7 +289,7 @@
     try {
       if (typeof importScripts === "function") {
         var loaded = false;
-        var names = ["SoundWorker.js?v=gpu14", "./SoundWorker.js?v=gpu14"];
+        var names = ["SoundWorker.js?v=gpu15", "./SoundWorker.js?v=gpu15"];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
           try {
@@ -355,7 +355,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu14");
+            u.searchParams.set("v", "gpu15");
             return u.href;
           } catch (e) {
             return p;
@@ -369,9 +369,9 @@
           try {
             if (
               typeof wasm._sound_worker_version !== "function" ||
-              (wasm._sound_worker_version() | 0) < 22
+              (wasm._sound_worker_version() | 0) < 21
             ) {
-              loadError = "SoundWorker.wasm predates Numeris GPU worker v22";
+              loadError = "SoundWorker.wasm predates Numeris GPU worker v21";
               wasm = null;
               backend = "gpu-unavailable";
               return false;
