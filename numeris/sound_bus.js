@@ -642,7 +642,7 @@
     var BLUR_FADE_SEC = state.mobile ? 0.04 : 0.06;
     var PHONE_LOCK_FADE_SEC = 0.055;
     /* Tab/browser kill: timers never run — short ramp + busy-wait only. */
-    var TERMINAL_LEAVE_FADE_SEC = 0.008;
+    var TERMINAL_LEAVE_FADE_SEC = state.mobile ? 0.025 : 0.035;
 
     function isTerminalLeaveReason(reason) {
       return (
@@ -756,6 +756,10 @@
       try {
         if (state._pendingPlays) state._pendingPlays.length = 0;
       } catch (eP) {}
+      silenceScriptSink();
+      muteOutputNow();
+      disconnectDac();
+      pauseSokolSaudio();
       try {
         var ctxP = state.audioCtx;
         if (ctxP && ctxP.state === "running") ctxP.suspend();
@@ -782,12 +786,24 @@
       state._outputAllowed = 0;
       state._unlockFadePending = 0;
       state._warmupReadyCount = 0;
-      stopWorkerPumpSoft();
-      silenceScriptSink();
-      muteOutputNow();
-      disconnectDac();
-      pauseSokolSaudio();
-      finishBackgroundMute(reason || "background");
+      /* Fade on the audio timeline first. Clearing PCM or disconnecting here
+       * would turn a tab switch / phone lock into a hard waveform edge. */
+      var fadeSec = reason === "freeze" || reason === "interrupted"
+        ? PHONE_LOCK_FADE_SEC
+        : BACKGROUND_FADE_SEC;
+      fadeOutputOut(reason || "background", fadeSec, null);
+      if (state.mobile) {
+        /* JS may freeze immediately after visibility/pagehide. AudioParam runs
+         * on the audio thread while this short wait lets the ramp finish. */
+        var wait = fadeSec * 1000 + 4;
+        if (wait > 65) wait = 65;
+        busyWaitMs(wait);
+        finishBackgroundMute(reason || "background");
+      } else {
+        state._backgroundFadeTimer = setTimeout(function () {
+          finishBackgroundMute(reason || "background");
+        }, (fadeSec * 1000 + 20) | 0);
+      }
     }
 
     function fadeOutputIfAudible(reason, durSec) {
@@ -1129,7 +1145,7 @@
         ? ((dur > 0 ? dur : fadeBase) * 1000 + 2) | 0
         : ((dur > 0 ? dur : fadeBase) * 1000 + 15) | 0;
       if (isTerminalLeaveReason(reason)) {
-        if (waitMs > 12) waitMs = 12;
+        if (waitMs > 42) waitMs = 42;
       } else if (waitMs > 90) waitMs = 90;
       busyWaitMs(waitMs);
       silenceScriptSink();
