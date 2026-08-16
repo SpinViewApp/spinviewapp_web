@@ -75,7 +75,20 @@
     } catch (eM) {
       return;
     }
-    if (!M || !M._numerisSaudioPaused) return;
+    if (!M) return;
+    /* Numeris owns the device through its Worklet bus. A stale App.wasm may
+     * still expose Sokol's ScriptProcessor; reconnecting it on pointerdown or
+     * pageshow bypasses outputGain and is heard as an un-ramped pop. */
+    if (global._numerisSoundBusOwnsDevice) {
+      node = M._saudio_node;
+      if (node) {
+        try { node.disconnect(); } catch (eOwn0) {}
+        node.onaudioprocess = sokolSilenceProcess;
+      }
+      M._numerisSaudioPaused = 1;
+      return;
+    }
+    if (!M._numerisSaudioPaused) return;
     if (typeof document !== "undefined" && document.visibilityState === "hidden")
       return;
     M._numerisSaudioPaused = 0;
@@ -175,6 +188,7 @@
       "    this.bufferBoostStep = opts.bufferBoostStep > 0 ? opts.bufferBoostStep | 0 : 512;\n" +
       "    this.healthyQuantaTarget = opts.healthyQuantaTarget > 0 ? opts.healthyQuantaTarget | 0 : 1200;\n" +
       "    this.riskBoostCooldown = 0;\n" +
+      "    this.fifoReadyNotified = false;\n" +
       "    this.needThreshold = 4096;"
     )
     .replace(
@@ -188,6 +202,39 @@
       "        if (this.healthyQuanta >= this.healthyQuantaTarget && this.bufferBoostFrames > 0) {\n" +
       "          this.healthyQuanta = 0;\n" +
       "          this.bufferBoostFrames -= Math.max(256, this.bufferBoostStep >> 1);"
+    )
+    .replace(
+      "      if (msg.type === \"set-mode\") {",
+      "      if (msg.type === \"arm-fifo-ready\") {\n" +
+      "        this.fifoReadyNotified = false;\n" +
+      "        if (this.queuedFrames >= this.needThreshold) {\n" +
+      "          this.fifoReadyNotified = true;\n" +
+      "          this.port.postMessage({ type: \"fifo-ready\", queuedFrames: this.queuedFrames | 0 });\n" +
+      "        }\n" +
+      "        return;\n" +
+      "      }\n" +
+      "      if (msg.type === \"set-mode\") {"
+    )
+    .replace(
+      "              this.queuedFrames += frames;\n              if (this._needSent) {",
+      "              this.queuedFrames += frames;\n" +
+      "              if (!this.fifoReadyNotified && this.queuedFrames >= this.needThreshold) {\n" +
+      "                this.fifoReadyNotified = true;\n" +
+      "                this.port.postMessage({ type: \"fifo-ready\", queuedFrames: this.queuedFrames | 0 });\n" +
+      "              }\n" +
+      "              if (this._needSent) {"
+    )
+    .replace(
+      "            this.queuedFrames = 0;\n            this._needSent = false;",
+      "            this.queuedFrames = 0;\n" +
+      "            this.fifoReadyNotified = false;\n" +
+      "            this._needSent = false;"
+    )
+    .replace(
+      "        this.queuedFrames = 0;\n        this._needSent = false;",
+      "        this.queuedFrames = 0;\n" +
+      "        this.fifoReadyNotified = false;\n" +
+      "        this._needSent = false;"
     )
     .replace(
       "              }\n              this._needSent = false;\n              /* First PCM block",
@@ -237,6 +284,9 @@
 
   function createBus(opts) {
     opts = opts || {};
+    /* One and only one browser audio device owner. */
+    global._numerisSoundBusOwnsDevice = 1;
+    pauseSokolSaudio();
     var mobile = isMobileUa();
     /* Normal path: faithful GPU-worker PCM. Inline synthesis remains a
      * diagnostic path only; it cannot reproduce every generated .sound. */
@@ -413,8 +463,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu25";
-      else url += "&v=gpu25";
+      if (url.indexOf("?") < 0) url += "?v=gpu26";
+      else url += "&v=gpu26";
       var worker;
       try {
         worker = new Worker(url);
@@ -493,6 +543,11 @@
           if ((msg.token | 0) === (state._warmupBarrierToken | 0)) {
             state._warmupReadyCount = 0;
             state._warmupReleaseAllowed = 1;
+            /* Query the sink itself after the producer barrier. */
+            try {
+              if (state.worklet && state.worklet.port)
+                state.worklet.port.postMessage({ type: "arm-fifo-ready" });
+            } catch (eArm) {}
             console.log(
               "[sound_bus] first-unlock barrier ready q=" +
                 (msg.queued_est | 0) +
@@ -547,11 +602,8 @@
           state.stats.echoEdgeRatioMax = +msg.echo_edge_ratio_max || 0;
           state.stats.echoMix = +msg.echo_mix || 0;
           state.stats.masterSmooth = msg.master_smooth == null ? 1 : (+msg.master_smooth || 0);
-          /* Worker reports every freshly queued block, earlier than the
-           * periodic Worklet HUD stats. Use it to open the muted DAC with the
-           * minimum safe FIFO on first activation. */
-          if (state.audioReady && !state._outputFadedIn)
-            maybeReleaseWarmup(msg.queued_est | 0);
+          /* queued_est is producer-side only. Never open the DAC from it: PCM
+           * may still be in transit to the actual sink FIFO. */
           if (typeof opts.onStats === "function") opts.onStats(state, msg);
           return;
         }
@@ -943,7 +995,20 @@
           resumeSokolSaudio();
           markAudioReadyIfRunning();
           resumeWorkerPump();
-          if (wasMuted) trimAudioLatency(reason || "foreground", true);
+          if (wasMuted) {
+            /* Flush stale pre-suspend PCM while gain is zero, then wait for a
+             * worker barrier AND the sink-local fifo-ready acknowledgement. */
+            state._warmupReleaseAllowed = 0;
+            state._warmupReadyCount = 0;
+            trimAudioLatency(reason || "foreground", true);
+            state._warmupBarrierToken = ((state._warmupBarrierToken | 0) + 1) | 0;
+            if (state.worker)
+              state.worker.postMessage({
+                type: "warmup_barrier",
+                token: state._warmupBarrierToken
+              });
+            else state._warmupReleaseAllowed = 1;
+          }
         })
         .catch(function () {
           nukeAudioGraph();
@@ -1348,7 +1413,11 @@
             "data:audio/wav;base64,UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA"
           );
           a.preload = "auto";
-          a.volume = 0.01;
+          /* Activation aid only: never open a second audible media path. */
+          a.defaultMuted = true;
+          a.muted = true;
+          a.volume = 0;
+          a.playsInline = true;
           state._silentAudio = a;
         }
         var p = a.play();
@@ -1403,6 +1472,10 @@
       });
       node.port.onmessage = function (ev) {
         var msg = ev.data || {};
+        if (msg.type === "fifo-ready") {
+          maybeReleaseWarmup(msg.queuedFrames | 0);
+          return;
+        }
         if (msg.type === "stats") {
           state.stats.underruns = msg.underruns | 0;
           state.stats.underrunFrames = msg.underrunFrames | 0;
@@ -1967,6 +2040,10 @@
       });
       node.port.onmessage = function (ev) {
         var msg = ev.data || {};
+        if (msg.type === "fifo-ready") {
+          maybeReleaseWarmup(msg.queuedFrames | 0);
+          return;
+        }
         if (msg.type === "stats") {
           state.stats.underruns = msg.underruns | 0;
           state.stats.underrunFrames = msg.underrunFrames | 0;

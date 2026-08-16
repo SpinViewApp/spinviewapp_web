@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu25
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu26
  */
 (function (root) {
   "use strict";
@@ -754,7 +754,7 @@
       : 0;
     var zeroRun = 0;
     var longestZeroRun = 0;
-    var i, l, r;
+    var i, l, r, edgeDetected = false;
     for (i = 0; i < frames; i++) {
       l = out[i * 2];
       r = out[i * 2 + 1];
@@ -786,6 +786,19 @@
       if (edgeJump >= 0.02 && edgeRatio >= 8) {
         pcmEdgeCount++;
         if (sourceSerial !== pcmLastGpuSerial) pcmGpuEdgeCount++;
+        edgeDetected = true;
+      }
+    }
+    if (edgeDetected) {
+      /* A valid waveform cannot jump sharply while both neighbouring slopes
+       * stay small. Smooth only that diagnosed boundary (64 samples ~=1.3ms),
+       * which removes GPU-block/reset pops without smearing normal attacks. */
+      var edgeFadeFrames = frames < 64 ? frames : 64;
+      var edgePhase;
+      for (i = 0; i < edgeFadeFrames; i++) {
+        edgePhase = (i + 1) / edgeFadeFrames;
+        out[i * 2] = pcmTailL * (1 - edgePhase) + out[i * 2] * edgePhase;
+        out[i * 2 + 1] = pcmTailR * (1 - edgePhase) + out[i * 2 + 1] * edgePhase;
       }
     }
     if (frames > 1) {
