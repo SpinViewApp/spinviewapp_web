@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 133,
+"config_defaults_rev": 135,
 "mainpan": {
   "1": {
     "1": {
@@ -35,7 +35,7 @@
   },
   "2": {
     "1": {
-      "active_tab": 2,
+      "active_tab": 1,
       "ratio": 0,
       "s0": {
         "app": {
