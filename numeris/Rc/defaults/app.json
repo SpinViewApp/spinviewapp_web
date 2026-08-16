@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 143,
+"config_defaults_rev": 144,
 "mainpan": {
   "1": {
     "1": {
@@ -484,7 +484,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
   "sht_quality_preset": 0,
-  "sht_render_scale": 2,
+  "sht_render_scale": 1.45165,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
