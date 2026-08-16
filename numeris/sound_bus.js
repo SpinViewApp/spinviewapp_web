@@ -174,6 +174,7 @@
       "    this.bufferBoostMax = opts.bufferBoostMax > 0 ? opts.bufferBoostMax | 0 : 3072;\n" +
       "    this.bufferBoostStep = opts.bufferBoostStep > 0 ? opts.bufferBoostStep | 0 : 512;\n" +
       "    this.healthyQuantaTarget = opts.healthyQuantaTarget > 0 ? opts.healthyQuantaTarget | 0 : 1200;\n" +
+      "    this.riskBoostCooldown = 0;\n" +
       "    this.needThreshold = 4096;"
     )
     .replace(
@@ -187,6 +188,30 @@
       "        if (this.healthyQuanta >= this.healthyQuantaTarget && this.bufferBoostFrames > 0) {\n" +
       "          this.healthyQuanta = 0;\n" +
       "          this.bufferBoostFrames -= Math.max(256, this.bufferBoostStep >> 1);"
+    )
+    .replace(
+      "              }\n              this._needSent = false;\n              /* First PCM block",
+      "              }\n" +
+      "              /* A refill that consumed the whole low-water reserve is\n" +
+      "               * an underrun warning even if it arrived a few samples in\n" +
+      "               * time. Buy one temporary step before the audible gap. */\n" +
+      "              if (this.fillWaitLastFrames >= this.needThreshold &&\n" +
+      "                  this.queuedFrames < this.needThreshold &&\n" +
+      "                  this.riskBoostCooldown <= 0) {\n" +
+      "                this.bufferBoostFrames += this.bufferBoostStep;\n" +
+      "                if (this.bufferBoostFrames > this.bufferBoostMax)\n" +
+      "                  this.bufferBoostFrames = this.bufferBoostMax;\n" +
+      "                this.riskBoostCooldown = 1000;\n" +
+      "                this.healthyQuanta = 0;\n" +
+      "              }\n" +
+      "              this._needSent = false;\n" +
+      "              /* First PCM block"
+    )
+    .replace(
+      "    this.renderFrames += n;\n    if (this.mode === \"pcm\") {",
+      "    this.renderFrames += n;\n" +
+      "    if (this.riskBoostCooldown > 0) this.riskBoostCooldown--;\n" +
+      "    if (this.mode === \"pcm\") {"
     );
 
   function locate(name, explicit) {
@@ -464,6 +489,19 @@
           if (typeof opts.onAudioAttached === "function") opts.onAudioAttached(state, msg);
           return;
         }
+        if (msg.type === "warmup-barrier") {
+          if ((msg.token | 0) === (state._warmupBarrierToken | 0)) {
+            state._warmupReadyCount = 0;
+            state._warmupReleaseAllowed = 1;
+            console.log(
+              "[sound_bus] first-unlock barrier ready q=" +
+                (msg.queued_est | 0) +
+                " blocks=" +
+                (msg.pcm_blocks | 0)
+            );
+          }
+          return;
+        }
         if (msg.type === "stats") {
           state.stats.n = msg.n | 0;
           state.stats.last_ms = +msg.last_ms || 0;
@@ -659,6 +697,10 @@
     state._resumeDebounce = 0;
     state._dacDetached = 0;
     state._unlockFadePending = 0;
+    /* First-unlock barrier: worker stats may arrive while startAudio() is still
+     * attaching the sink. Never open the DAC before pending plays are flushed. */
+    state._warmupReleaseAllowed = 0;
+    state._warmupBarrierToken = 0;
 
     /* Desktop can wait for timers. Phone lock/screen-off freezes JS almost
      * immediately — any setTimeout fade is cut mid-way → pop. Mobile uses a
@@ -795,7 +837,9 @@
     }
 
     function pauseForBackground(reason) {
-      if (state._backgroundMuted) return;
+      /* A phone lock/app switch can emit several lifecycle events. Preserve the
+       * first audio-timeline ramp instead of restarting it until JS freezes. */
+      if (state._backgroundMuted || state._backgroundPausing) return;
       if (state._shutdownBegun || state._tearingDown) return;
       /* AudioContext starts suspended until the unlock tap. Treating that as
        * "tab hidden" stopped the worker and left gain at 0 — total silence. */
@@ -981,6 +1025,7 @@
       state._workletModulePromise = null;
       state._gesturePrimed = false;
       state._outputFadedIn = 0;
+      state._warmupReleaseAllowed = 0;
       try {
         if (state.audioCtx && state.audioCtx.state !== "closed") state.audioCtx.close();
       } catch (e2) {}
@@ -1022,7 +1067,10 @@
       state._outputFadedIn = 1;
       g = gNode.gain;
       t = ctx.currentTime;
-      dur = Math.max(0.02, state.unlockFadeSec > 0 ? state.unlockFadeSec : 0.02);
+      /* The Worklet's own ramp often expires while it is consuming silent
+       * warm-up PCM. Keep a short output-stage ramp for the actual first note. */
+      dur = Math.max(state.mobile ? 0.05 : 0.03,
+        state.unlockFadeSec > 0 ? state.unlockFadeSec : 0.02);
       try {
         g.cancelScheduledValues(t);
         g.setValueAtTime(0, t);
@@ -1061,6 +1109,7 @@
       var need = state.needFrames > 0 ? state.needFrames | 0 : 768;
       if (state._outputFadedIn) return;
       if (!state.audioReady) return;
+      if (!state._warmupReleaseAllowed) return;
       if (state._backgroundMuted || state._backgroundPausing || !state._outputAllowed) return;
       if ((queued | 0) < need) {
         state._warmupReadyCount = 0;
@@ -2109,7 +2158,17 @@
              * Opening gain on an empty Worklet produced the first-tap pop. */
             state._unlockFadePending = 1;
             state._warmupReadyCount = 0;
+            state._warmupReleaseAllowed = 0;
             flushPendingPlays();
+            /* Same Worker channel as play: acknowledgement is emitted only
+             * after all pending plays and their immediate refill were handled. */
+            state._warmupBarrierToken = ((state._warmupBarrierToken | 0) + 1) | 0;
+            if (state.worker)
+              state.worker.postMessage({
+                type: "warmup_barrier",
+                token: state._warmupBarrierToken
+              });
+            else state._warmupReleaseAllowed = 1;
             if (typeof opts.onAudioReady === "function") opts.onAudioReady(state);
           }
           return state;
@@ -2194,12 +2253,12 @@
       state._unloadBound = 1;
       var onPageHide = function (ev) {
         if (ev && ev.persisted) return;
-        cancelBackgroundPause();
         /* Android app switch: recover on return — do not destroy the graph. */
         if (state.mobile) {
           pauseForBackground("pagehide");
           return;
         }
+        cancelBackgroundPause();
         gracefulTeardownSync("pagehide");
       };
       var onTerminalLeave = function (ev) {

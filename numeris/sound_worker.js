@@ -600,6 +600,7 @@
   var slowRenderLogMs = 0;
   var needCoalesceUntilMs = 0;
   var ignoredStaleNeeds = 0;
+  var pendingWarmupBarrier = 0;
   var pcmHaveTail = false;
   var pcmTailL = 0;
   var pcmTailR = 0;
@@ -851,6 +852,18 @@
       needCoalesceUntilMs = performance.now() + 18;
   }
 
+  function finishWarmupBarrier(token) {
+    token = token | 0;
+    if (!token) return;
+    if (synthReady && audioPort) fillToTarget(needFrames);
+    postMessage({
+      type: "warmup-barrier",
+      token: token,
+      queued_est: estimatedQueued() | 0,
+      pcm_blocks: pcmBlocksSent | 0
+    });
+  }
+
   function clearAudioPump() {
     if (audioPumpTimer) {
       clearTimeout(audioPumpTimer);
@@ -1020,19 +1033,29 @@
             backend: backend || "gpu-unavailable",
             load_error: err || ""
           });
-          if (pendingPlays.length) {
+           if (pendingPlays.length) {
             var q = pendingPlays.splice(0, pendingPlays.length);
             for (var qi = 0; qi < q.length; qi++) playSound(q[qi]);
-          } else if (audioPort) {
-            fillToTarget(targetFrames);
-          }
+           } else if (audioPort) {
+             fillToTarget(targetFrames);
+           }
+           if (pendingWarmupBarrier) {
+             var barrier = pendingWarmupBarrier;
+             pendingWarmupBarrier = 0;
+             finishWarmupBarrier(barrier);
+           }
         }
         SoundWorkerSsound.load({ preferCpu: preferCpu })
           .then(postReady)
           .catch(function () { postReady("gpu-unavailable"); });
-        return;
-      }
-      if (type === "set-audio-port") {
+         return;
+       }
+       if (type === "warmup_barrier") {
+         if (synthReady) finishWarmupBarrier(msg.token | 0);
+         else pendingWarmupBarrier = msg.token | 0;
+         return;
+       }
+       if (type === "set-audio-port") {
         if (msg.blockFrames > 0) blockFrames = msg.blockFrames | 0;
         if (blockFrames < 128) blockFrames = 128;
         if (blockFrames > 512) blockFrames = 512;
