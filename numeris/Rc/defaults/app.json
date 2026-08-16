@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 146,
+"config_defaults_rev": 147,
 "mainpan": {
   "1": {
     "1": {
@@ -484,7 +484,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
   "sht_quality_preset": 0,
-  "sht_render_scale": 1.45165,
+  "sht_render_scale": 2,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
@@ -517,8 +517,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 10,
-  "w": 120,
+  "h": 1032,
+  "w": 1920,
   "x": 0,
   "y": 0
 }
