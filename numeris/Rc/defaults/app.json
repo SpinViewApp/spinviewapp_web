@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 141,
+"config_defaults_rev": 142,
 "mainpan": {
   "1": {
     "1": {
@@ -236,8 +236,8 @@
   "echo_feedback": 0,
   "echo_mix": 0,
   "full_framerate": false,
-  "hud_master_volume": 0.35425,
-  "hud_muted": true,
+  "hud_master_volume": 0.41875,
+  "hud_muted": false,
   "hud_sdf_aa": 1.133,
   "hud_sdf_border1": 0.9,
   "hud_sdf_border1_color": {
@@ -380,52 +380,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.273218,
-    "b": 214.58,
-    "g": 0.569718,
-    "r": -0.581683
+    "a": -0.223856,
+    "b": 213.339,
+    "g": 0.568461,
+    "r": -0.581798
   },
   "sht_fractal_v1": {
-    "a": 0.34602,
-    "b": 0.143301,
-    "g": 0.498398,
-    "r": -0.0198689
+    "a": 0.349194,
+    "b": 0.148726,
+    "g": 0.48825,
+    "r": -0.0201341
   },
   "sht_fractal_v2": {
-    "a": 0.186952,
-    "b": 0.0590986,
-    "g": 212.71,
+    "a": 0.186838,
+    "b": 0.060837,
+    "g": 216.093,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 18.1701,
-    "b": 0.00445874,
-    "g": 0.0343548,
-    "r": 8.09815
+    "a": 18.1218,
+    "b": 0.00437018,
+    "g": 0.0339413,
+    "r": 8.06136
   },
   "sht_fractal_v4": {
-    "a": 0.180666,
-    "b": 0.693876,
-    "g": 0.708518,
-    "r": 32.8161
+    "a": 0.17777,
+    "b": 0.686123,
+    "g": 0.688822,
+    "r": 33.5258
   },
   "sht_fractal_v5": {
-    "a": 0.224705,
-    "b": 0.122118,
-    "g": 0.117886,
-    "r": 0.238239
+    "a": 0.220095,
+    "b": 0.117608,
+    "g": 0.115577,
+    "r": 0.239183
   },
   "sht_fractal_v6": {
-    "a": 1.12019,
-    "b": 0.734754,
-    "g": 0.701829,
-    "r": 0.756111
+    "a": 1.11366,
+    "b": 0.717333,
+    "g": 0.713445,
+    "r": 0.753673
   },
   "sht_fractal_v7": {
-    "a": 0.810806,
-    "b": 0.978302,
-    "g": 1.2613,
-    "r": 1.20609
+    "a": 0.809212,
+    "b": 0.981435,
+    "g": 1.26426,
+    "r": 1.20715
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -434,10 +434,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.639869,
-    "b": 0.42713,
-    "g": 0.757826,
-    "r": 0.715409
+    "a": 0.630238,
+    "b": 0.433281,
+    "g": 0.755835,
+    "r": 0.714684
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -484,7 +484,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
   "sht_quality_preset": 0,
-  "sht_render_scale": 0.9,
+  "sht_render_scale": 2,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
