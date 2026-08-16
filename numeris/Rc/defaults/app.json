@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 135,
+"config_defaults_rev": 141,
 "mainpan": {
   "1": {
     "1": {
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 631,
+  "campaign_depth": 633,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -236,8 +236,8 @@
   "echo_feedback": 0,
   "echo_mix": 0,
   "full_framerate": false,
-  "hud_master_volume": 0.5355,
-  "hud_muted": false,
+  "hud_master_volume": 0.35425,
+  "hud_muted": true,
   "hud_sdf_aa": 1.133,
   "hud_sdf_border1": 0.9,
   "hud_sdf_border1_color": {
@@ -278,8 +278,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 634,
-  "level_seed": -954528633,
+  "level_index": 636,
+  "level_seed": 1735370693,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -380,52 +380,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.407508,
-    "b": 214.68,
-    "g": 0.569622,
-    "r": -0.58145
+    "a": -0.273218,
+    "b": 214.58,
+    "g": 0.569718,
+    "r": -0.581683
   },
   "sht_fractal_v1": {
-    "a": 0.347642,
-    "b": 0.143858,
-    "g": 0.490784,
-    "r": -0.017072
+    "a": 0.34602,
+    "b": 0.143301,
+    "g": 0.498398,
+    "r": -0.0198689
   },
   "sht_fractal_v2": {
-    "a": 0.183877,
-    "b": 0.0591688,
-    "g": 210.48,
+    "a": 0.186952,
+    "b": 0.0590986,
+    "g": 212.71,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 18.2103,
-    "b": 0.00444247,
-    "g": 0.0341699,
-    "r": 8.07431
+    "a": 18.1701,
+    "b": 0.00445874,
+    "g": 0.0343548,
+    "r": 8.09815
   },
   "sht_fractal_v4": {
-    "a": 0.174411,
-    "b": 0.698295,
-    "g": 0.700725,
-    "r": 34.2008
+    "a": 0.180666,
+    "b": 0.693876,
+    "g": 0.708518,
+    "r": 32.8161
   },
   "sht_fractal_v5": {
-    "a": 0.228927,
-    "b": 0.12087,
-    "g": 0.119963,
-    "r": 0.246163
+    "a": 0.224705,
+    "b": 0.122118,
+    "g": 0.117886,
+    "r": 0.238239
   },
   "sht_fractal_v6": {
-    "a": 1.0987,
-    "b": 0.73421,
-    "g": 0.704008,
-    "r": 0.761639
+    "a": 1.12019,
+    "b": 0.734754,
+    "g": 0.701829,
+    "r": 0.756111
   },
   "sht_fractal_v7": {
-    "a": 0.810793,
-    "b": 0.981823,
-    "g": 1.26688,
-    "r": 1.20298
+    "a": 0.810806,
+    "b": 0.978302,
+    "g": 1.2613,
+    "r": 1.20609
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -434,10 +434,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.62531,
-    "b": 0.433932,
-    "g": 0.752514,
-    "r": 0.726202
+    "a": 0.639869,
+    "b": 0.42713,
+    "g": 0.757826,
+    "r": 0.715409
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -484,7 +484,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
   "sht_quality_preset": 0,
-  "sht_render_scale": 2,
+  "sht_render_scale": 0.9,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
