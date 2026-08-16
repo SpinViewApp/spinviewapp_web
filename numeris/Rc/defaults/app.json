@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 127,
+"config_defaults_rev": 128,
 "mainpan": {
   "1": {
     "1": {
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 630,
+  "campaign_depth": 631,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -278,8 +278,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 633,
-  "level_seed": 298096698,
+  "level_index": 634,
+  "level_seed": -954528633,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -484,7 +484,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": true,
   "sht_quality_preset": 0,
-  "sht_render_scale": 0.8,
+  "sht_render_scale": 2,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
