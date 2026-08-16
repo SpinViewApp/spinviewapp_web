@@ -500,6 +500,11 @@
         ? wasm._sound_worker_audio_frame() | 0 : 0;
     },
     getGpuBlockSerial: function () { return gpuBlockSerial; },
+    /* Samples already synthesized but not yet consumed by the PCM pump. */
+    getProducerHoldFrames: function () {
+      var hold = gpuHoldLen - gpuHoldOff;
+      return hold > 0 ? hold | 0 : 0;
+    },
     lastPeak: function () {
       return wasmAlive() && wasm._sound_worker_last_peak
         ? +wasm._sound_worker_last_peak() : 0;
@@ -832,8 +837,10 @@
     var blocksBefore = pcmBlocksSent;
     fillBusy = 1;
     if (want < blockFrames) want = blockFrames;
-    if (want > 4096) want = 4096;
-    while (running && audioPort && estimatedQueued() < want && guard < 16) {
+    /* Android starts at 4096, so the old 4096 clamp silently cancelled every
+     * adaptive boost requested by the realtime sink after an underrun. */
+    if (want > 12288) want = 12288;
+    while (running && audioPort && estimatedQueued() < want && guard < 24) {
       sendPcmBlock();
       guard++;
     }
@@ -902,7 +909,7 @@
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
       if (targetFrames < 1024) targetFrames = 1024;
-      if (targetFrames > 4096) targetFrames = 4096;
+      if (targetFrames > 12288) targetFrames = 12288;
       if (needFrames < 256) needFrames = 256;
       if (needFrames > targetFrames) needFrames = targetFrames;
       /* A fill is delivered as several transferred PCM messages. The Worklet
@@ -948,7 +955,19 @@
       audioPort.postMessage({ type: "trim", keepFrames: keep | 0 });
       noteQueued(keep);
     }
-    var id = SoundWorkerSsound.play(msg);
+    /* timeOffset is relative to what the listener hears now. The GPU producer
+     * is already ahead by the Worklet FIFO plus its unread 2048-frame block;
+     * subtract that lead or adaptive buffering delays every musical note. */
+    var scheduled = msg;
+    if (msg && msg.timeOffset > 0 && sampleRate > 0) {
+      var holdFrames = SoundWorkerSsound.getProducerHoldFrames
+        ? SoundWorkerSsound.getProducerHoldFrames()
+        : 0;
+      var producerLead = (estimatedQueued() + holdFrames) / sampleRate;
+      scheduled = Object.assign({}, msg);
+      scheduled.timeOffset = Math.max(0, (+msg.timeOffset || 0) - producerLead);
+    }
+    var id = SoundWorkerSsound.play(scheduled);
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
     if (!audioPort) {
       scheduleSilentPump();
