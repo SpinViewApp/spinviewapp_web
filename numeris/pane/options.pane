@@ -19,6 +19,7 @@
         { "label": "Living", "pane": "living" },
         { "label": "Colors", "pane": "state_colors" },
         { "label": "Hitstop", "pane": "hitstop" },
+        { "label": "Flash", "pane": "flash" },
         { "label": "Background", "pane": "background" },
         { "label": "Shader", "pane": "shader" },
         { "label": "Audio", "pane": "audio" },

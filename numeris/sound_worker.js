@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu26
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu27
  */
 (function (root) {
   "use strict";
@@ -957,6 +957,13 @@
 
   function attachAudioPort(port) {
     clearSilentPump();
+    /* A settings change may replace Worklet <-> ScriptProcessor without
+     * restarting the synth worker. Retire the old MessagePort first so only
+     * one PCM consumer can request/fill audio at a time. */
+    if (audioPort && audioPort !== port) {
+      try { audioPort.onmessage = null; } catch (eOldHandler) {}
+      try { audioPort.close(); } catch (eOldClose) {}
+    }
     audioPort = port;
     audioPort.onmessage = onAudioMessage;
     audioPort.start && audioPort.start();

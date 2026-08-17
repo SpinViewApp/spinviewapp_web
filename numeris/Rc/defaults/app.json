@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 147,
+"config_defaults_rev": 151,
 "mainpan": {
   "1": {
     "1": {
@@ -58,7 +58,7 @@
               },
               "tabs": {
                 "ui:numeris_options_tabs": {
-                  "active": 16
+                  "active": 17
                 }
               }
             }
@@ -117,7 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "campaign_depth": 633,
+  "campaign_depth": 639,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -236,6 +236,7 @@
   "echo_feedback": 0,
   "echo_mix": 0,
   "full_framerate": false,
+  "hud_flash_intensity": 1,
   "hud_master_volume": 0.41875,
   "hud_muted": false,
   "hud_sdf_aa": 1.133,
@@ -278,8 +279,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 636,
-  "level_seed": 1735370693,
+  "level_index": 642,
+  "level_seed": -988919411,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -305,7 +306,7 @@
   "music_progress_influence": 0.27,
   "music_puzzle_gain": 1.056,
   "music_quantize": 8,
-  "music_role_mask": 15,
+  "music_role_mask": 47,
   "music_running": true,
   "music_silence": 0.135,
   "music_theme_override": 6,
@@ -357,7 +358,15 @@
     "r": 1
   },
   "sht_board_shine_reach": 0.3,
-  "sht_board_shine_success": 2.35,
+  "sht_board_shine_success": 1.175,
+  "sht_completion_flash": 0.42,
+  "sht_completion_flash_color": {
+    "a": 1,
+    "b": 0.72,
+    "g": 0.94,
+    "r": 0.98
+  },
+  "sht_completion_flash_per_line": 0.08,
   "sht_custom_time": 0,
   "sht_depth_fog": 1.939,
   "sht_depth_fog_color": {
@@ -375,57 +384,58 @@
     "g": 0.95,
     "r": 0.92
   },
+  "sht_flash_comfort_v": 1,
   "sht_flash_decay": 4.5,
-  "sht_flash_intensity": 0.55,
+  "sht_flash_intensity": 0.275,
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.223856,
-    "b": 213.339,
-    "g": 0.568461,
-    "r": -0.581798
+    "a": -0.235942,
+    "b": 213.843,
+    "g": 0.569379,
+    "r": -0.581987
   },
   "sht_fractal_v1": {
-    "a": 0.349194,
-    "b": 0.148726,
-    "g": 0.48825,
-    "r": -0.0201341
+    "a": 0.347286,
+    "b": 0.151784,
+    "g": 0.493067,
+    "r": -0.0174061
   },
   "sht_fractal_v2": {
-    "a": 0.186838,
-    "b": 0.060837,
-    "g": 216.093,
+    "a": 0.181729,
+    "b": 0.0611817,
+    "g": 210.27,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 18.1218,
-    "b": 0.00437018,
-    "g": 0.0339413,
-    "r": 8.06136
+    "a": 17.705,
+    "b": 0.00434321,
+    "g": 0.0335242,
+    "r": 7.91318
   },
   "sht_fractal_v4": {
-    "a": 0.17777,
-    "b": 0.686123,
-    "g": 0.688822,
-    "r": 33.5258
+    "a": 0.178685,
+    "b": 0.688189,
+    "g": 0.697507,
+    "r": 33.3055
   },
   "sht_fractal_v5": {
-    "a": 0.220095,
-    "b": 0.117608,
-    "g": 0.115577,
-    "r": 0.239183
+    "a": 0.216845,
+    "b": 0.113192,
+    "g": 0.124339,
+    "r": 0.236354
   },
   "sht_fractal_v6": {
-    "a": 1.11366,
-    "b": 0.717333,
-    "g": 0.713445,
-    "r": 0.753673
+    "a": 1.0978,
+    "b": 0.719998,
+    "g": 0.712229,
+    "r": 0.746276
   },
   "sht_fractal_v7": {
-    "a": 0.809212,
-    "b": 0.981435,
-    "g": 1.26426,
-    "r": 1.20715
+    "a": 0.813224,
+    "b": 0.975901,
+    "g": 1.25764,
+    "r": 1.21172
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -434,10 +444,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.630238,
-    "b": 0.433281,
-    "g": 0.755835,
-    "r": 0.714684
+    "a": 0.6253,
+    "b": 0.432693,
+    "g": 0.756985,
+    "r": 0.726224
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -452,7 +462,7 @@
   "sht_music_visual_tail": 0.72,
   "sht_music_visual_travel": 0.82,
   "sht_music_visual_width": 0.085,
-  "sht_neutral_flash": 0.035,
+  "sht_neutral_flash": 0.0175,
   "sht_neutral_flash_color": {
     "a": 1,
     "b": 1,
@@ -463,14 +473,14 @@
   "sht_opacity": 1,
   "sht_paused": false,
   "sht_penalty_bank_tilt": 0.3,
-  "sht_penalty_flash": 0.42,
+  "sht_penalty_flash": 0.21,
   "sht_penalty_flash_color": {
     "a": 1,
     "b": 0.08,
     "g": 0.12,
     "r": 1
   },
-  "sht_penalty_flash_per_line": 0.12,
+  "sht_penalty_flash_per_line": 0.06,
   "sht_penalty_hit_lag": 0.09,
   "sht_penalty_lag_per_line": 0.045,
   "sht_penalty_motion": 0.32,
@@ -482,7 +492,7 @@
   "sht_place_twist_return": 7.5,
   "sht_place_twist_success": 1.45,
   "sht_place_twist_warning": 1.62,
-  "sht_quality_hud": true,
+  "sht_quality_hud": false,
   "sht_quality_preset": 0,
   "sht_render_scale": 2,
   "sht_shader_index": 0,
@@ -490,17 +500,18 @@
   "sht_shader_pan_response": 0.38,
   "sht_shader_tilt_response": 0.42,
   "sht_shader_zoom_response": 0.28,
-  "sht_success_flash_per_line": 0.14,
+  "sht_success_flash_per_line": 0.07,
   "sht_success_lag_per_line": 0.055,
+  "sht_tile_drop_flash": 0.11,
   "sht_time_scale": 0,
-  "sht_warning_flash": 0.32,
+  "sht_warning_flash": 0.16,
   "sht_warning_flash_color": {
     "a": 1,
     "b": 0.1,
     "g": 0.68,
     "r": 1
   },
-  "sht_warning_flash_per_line": 0.08,
+  "sht_warning_flash_per_line": 0.04,
   "sht_warning_hit_lag": 0.075,
   "sht_warning_lag_per_line": 0.035,
   "tile_hitbox_ratio": 1.512,
@@ -517,8 +528,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 1032,
-  "w": 1920,
+  "h": 10,
+  "w": 120,
   "x": 0,
   "y": 0
 }

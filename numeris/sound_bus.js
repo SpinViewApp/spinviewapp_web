@@ -463,8 +463,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu26";
-      else url += "&v=gpu26";
+      if (url.indexOf("?") < 0) url += "?v=gpu27";
+      else url += "&v=gpu27";
       var worker;
       try {
         worker = new Worker(url);
@@ -1502,6 +1502,7 @@
         return;
       }
       var channel = new MessageChannel();
+      state.audioPort = null; /* source port is owned by the AudioWorkletNode */
       attachWorkerAudioPort(channel.port1);
       node.port.postMessage(
         {
@@ -1629,6 +1630,8 @@
         else if (msg.soundType === "numeris_orbit") inlineBase = 110;
         else if (msg.soundType === "numeris_prism" || msg.soundType === "numeris_chime")
           inlineBase = 220;
+        else if (msg.soundType === "numeris_spark")
+          inlineBase = 330;
         if (inlineBase > 0) {
           inlineMsg = {};
           for (k in msg)
@@ -1759,6 +1762,7 @@
           : 0;
       var channel = new MessageChannel();
       var audioPort = channel.port2;
+      state.audioPort = audioPort;
       /* Cap cold-start boost — unbounded growth made first Android unlock lag
        * hundreds of ms until background recreate reset the graph. */
       var BUFFER_BOOST_MAX = state.mobile ? 8192 : 3072;
@@ -2008,6 +2012,97 @@
       requestFill(true);
       /* Plays stay on the worker (same as worklet-pcm / desktop). */
     }
+
+    function detachCurrentSink() {
+      if (state.worklet) {
+        try { state.worklet.port.onmessage = null; } catch (e0) {}
+        try { state.worklet.disconnect(); } catch (e1) {}
+        state.worklet = null;
+      }
+      if (state.scriptNode) {
+        try { state.scriptNode.onaudioprocess = null; } catch (e2) {}
+        try { state.scriptNode.disconnect(); } catch (e3) {}
+        state.scriptNode = null;
+      }
+      if (state.audioPort) {
+        try { state.audioPort.onmessage = null; } catch (e4) {}
+        try { state.audioPort.close(); } catch (e5) {}
+        state.audioPort = null;
+      }
+      state._scriptTrimLatency = null;
+      state._scriptSoftTrimLatency = null;
+      state._scriptSilenceForTeardown = null;
+      state.audioReady = false;
+      state.audioPath = "switching";
+      state._outputFadedIn = 0;
+      state._warmupReadyCount = 0;
+      state._warmupReleaseAllowed = 0;
+    }
+
+    /* Runtime A/B test: keep the exact same GPU synth worker and PCM stream,
+     * and replace only the browser sink. This isolates Worklet scheduling from
+     * synthesis/transport bugs and avoids restarting the score. */
+    state.setSinkMode = function (useWorklet) {
+      preferWorklet = !!useWorklet;
+      state.preferWorklet = preferWorklet;
+      state.sinkSwitchError = "";
+      if (!state.audioCtx || (!state.worklet && !state.scriptNode))
+        return Promise.resolve(state);
+      if ((preferWorklet && state.worklet) || (!preferWorklet && state.scriptNode))
+        return Promise.resolve(state);
+      if (state._sinkSwitchPromise) return state._sinkSwitchPromise;
+
+      var ctx = state.audioCtx;
+      var target = preferWorklet ? "worklet" : "main-thread";
+      state.audioStage = "switching-" + target;
+      state._sinkSwitchPromise = new Promise(function (resolve) {
+        fadeOutputOut("sink-switch", 0.045, resolve);
+      }).then(function () {
+        detachCurrentSink();
+        if (preferWorklet) {
+          if (!workletSupported(ctx) || !isSecureEnough())
+            throw new Error("AudioWorklet unavailable in this browser/context");
+          return ensureWorkletModule(ctx).then(function () {
+            attachWorkletNodeSync(ctx);
+          });
+        }
+        startScriptProcessorFallback(ctx);
+      }).then(function () {
+        state.audioStage = state.worklet ? "worklet" : "script-pcm";
+        markAudioReadyIfRunning();
+        state._warmupBarrierToken = ((state._warmupBarrierToken | 0) + 1) | 0;
+        if (state.worker)
+          state.worker.postMessage({
+            type: "warmup_barrier",
+            token: state._warmupBarrierToken
+          });
+        else state._warmupReleaseAllowed = 1;
+        console.log("[sound_bus] sink switched dynamically to " + state.audioPath);
+        return state;
+      }).catch(function (err) {
+        state.sinkSwitchError = String(err && err.message ? err.message : err);
+        state.error = "sink-switch:" + state.sinkSwitchError;
+        /* Never leave a running context without a sink. If Worklet selection
+         * failed, restore the main-thread PCM fallback immediately. */
+        if (!state.worklet && !state.scriptNode) {
+          preferWorklet = false;
+          state.preferWorklet = false;
+          startScriptProcessorFallback(ctx);
+          state.audioStage = "script-pcm";
+          markAudioReadyIfRunning();
+          state._warmupReleaseAllowed = 1;
+        }
+        console.warn("[sound_bus] dynamic sink switch failed", err);
+        return state;
+      }).then(function (result) {
+        state._sinkSwitchPromise = null;
+        return result;
+      }, function (err) {
+        state._sinkSwitchPromise = null;
+        throw err;
+      });
+      return state._sinkSwitchPromise;
+    };
 
     async function startWorkletPath(ctx) {
       var modStatus = await Promise.race([
