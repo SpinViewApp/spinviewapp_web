@@ -1,7 +1,7 @@
 {
   "root": {
     "type": "H",
-    "ratio": 0.20,
+    "ratio": 0.28,
     "1": {
       "type": "V",
       "ratio": 0.38,
@@ -15,7 +15,7 @@
     },
     "2": {
       "type": "V",
-      "ratio": 0.72,
+      "ratio": 0.55,
       "1": { "fmap": "numeris_render_fmap", "cmd": "view" },
       "2": { "fmap": "numeris_sokol_render_fmap", "cmd": "render" }
     }

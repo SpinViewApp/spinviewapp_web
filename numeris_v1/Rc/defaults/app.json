@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 153,
+"config_defaults_rev": 152,
 "mainpan": {
   "1": {
     "1": {
@@ -35,95 +35,70 @@
   },
   "2": {
     "1": {
-      "1": {
-        "1": {
-          "active_tab": 0,
-          "s0": {
-            "app": {
-              "cmd": "options",
-              "func": "numeris_options_fmap",
-              "pane_uid": 3,
-              "state": {
-                "ui_state": {
-                  "sections": {
-                    "section:Challenge share": {
-                      "open": false
-                    }
-                  },
-                  "tabs": {
-                    "ui:numeris_options_tabs": {
-                      "active": 0
-                    }
-                  }
+      "active_tab": 1,
+      "ratio": 0,
+      "s0": {
+        "app": {
+          "cmd": "view",
+          "func": "numeris_render_fmap",
+          "pane_uid": 4
+        }
+      },
+      "s1": {
+        "app": {
+          "cmd": "options",
+          "func": "numeris_options_fmap",
+          "pane_uid": 3,
+          "state": {
+            "ui_state": {
+              "sections": {
+                "section:Challenge share": {
+                  "open": false
+                }
+              },
+              "tabs": {
+                "ui:numeris_options_tabs": {
+                  "active": 17
                 }
               }
-            },
-            "tabs": {
             }
-          },
-          "s1": {
-            "app": {
-              "cmd": "Waveform",
-              "func": "soundui_fmap",
-              "pane_uid": 5
-            },
-            "tabs": {
-            }
-          },
-          "s2": {
-            "app": {
-              "cmd": "history",
-              "func": "panhistory_fmap",
-              "pane_uid": 3
-            },
-            "tabs": {
-            }
-          },
-          "s3": {
-            "app": {
-              "cmd": "Prefs",
-              "func": "soundui_fmap",
-              "pane_uid": 6
-            },
-            "tabs": {
-            }
-          },
-          "type": "T"
-        },
-        "2": {
-          "active_tab": 0,
-          "s0": {
-            "app": {
-              "cmd": "render",
-              "func": "numeris_sokol_render_fmap",
-              "pane_uid": 5
-            }
-          },
-          "s1": {
-            "app": {
-              "cmd": "view",
-              "func": "numeris_render_fmap",
-              "pane_uid": 4
-            }
-          },
-          "type": "T"
-        },
-        "ratio": 0.189601,
-        "type": "V"
+          }
+        }
       },
-      "2": {
-        "active_tab": 0,
-        "type": "empty"
+      "s2": {
+        "app": {
+          "cmd": "Waveform",
+          "func": "soundui_fmap",
+          "pane_uid": 5
+        }
       },
-      "ratio": 0.728739,
-      "type": "V"
+      "s3": {
+        "app": {
+          "cmd": "history",
+          "func": "panhistory_fmap",
+          "pane_uid": 3
+        }
+      },
+      "s4": {
+        "app": {
+          "cmd": "Prefs",
+          "func": "soundui_fmap",
+          "pane_uid": 6
+        }
+      },
+      "type": "T"
     },
     "2": {
       "active_tab": 0,
+      "app": {
+        "cmd": "render",
+        "func": "numeris_sokol_render_fmap",
+        "pane_uid": 5
+      },
       "ratio": 0,
-      "type": "empty"
+      "type": ""
     },
-    "ratio": 0.870432,
+    "ratio": 0.256303,
     "type": "V"
   },
   "ratio": 0.362086,
@@ -142,10 +117,7 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "branch_lineage": -1703330206,
-  "branch_root": 12648430,
-  "branch_world": 0,
-  "campaign_depth": 641,
+  "campaign_depth": 639,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -307,8 +279,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 644,
-  "level_seed": 193914100,
+  "level_index": 642,
+  "level_seed": -988919411,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -334,7 +306,7 @@
   "music_progress_influence": 0.27,
   "music_puzzle_gain": 1.056,
   "music_quantize": 8,
-  "music_role_mask": 63,
+  "music_role_mask": 47,
   "music_running": true,
   "music_silence": 0.135,
   "music_theme_override": 6,
@@ -418,52 +390,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -1.12743,
-    "b": 196.862,
-    "g": 0.589629,
-    "r": -0.567968
+    "a": -0.235942,
+    "b": 213.843,
+    "g": 0.569379,
+    "r": -0.581987
   },
   "sht_fractal_v1": {
-    "a": 0.177322,
-    "b": 0.117766,
-    "g": 0.436878,
-    "r": 0.063563
+    "a": 0.347286,
+    "b": 0.151784,
+    "g": 0.493067,
+    "r": -0.0174061
   },
   "sht_fractal_v2": {
-    "a": 0.0741951,
-    "b": 0.0655324,
-    "g": 163.81,
+    "a": 0.181729,
+    "b": 0.0611817,
+    "g": 210.27,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 15.9294,
-    "b": 0.00384035,
-    "g": 0.0333955,
-    "r": 10.037
+    "a": 17.705,
+    "b": 0.00434321,
+    "g": 0.0335242,
+    "r": 7.91318
   },
   "sht_fractal_v4": {
-    "a": 0.18106,
-    "b": 0.901342,
-    "g": 0.633648,
-    "r": 39.1273
+    "a": 0.178685,
+    "b": 0.688189,
+    "g": 0.697507,
+    "r": 33.3055
   },
   "sht_fractal_v5": {
-    "a": 0.423735,
-    "b": 0.134996,
-    "g": 0.0787905,
-    "r": 0.129464
+    "a": 0.216845,
+    "b": 0.113192,
+    "g": 0.124339,
+    "r": 0.236354
   },
   "sht_fractal_v6": {
-    "a": 0.723899,
-    "b": 0.323625,
-    "g": 0.465891,
-    "r": 0.764852
+    "a": 1.0978,
+    "b": 0.719998,
+    "g": 0.712229,
+    "r": 0.746276
   },
   "sht_fractal_v7": {
-    "a": 0.69947,
-    "b": 0.983575,
-    "g": 1.10695,
-    "r": 1.07482
+    "a": 0.813224,
+    "b": 0.975901,
+    "g": 1.25764,
+    "r": 1.21172
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -472,10 +444,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.642884,
-    "b": 0.787079,
-    "g": 0.731033,
-    "r": 0.740774
+    "a": 0.6253,
+    "b": 0.432693,
+    "g": 0.756985,
+    "r": 0.726224
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -522,7 +494,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": false,
   "sht_quality_preset": 0,
-  "sht_render_scale": 1.54359,
+  "sht_render_scale": 2,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
