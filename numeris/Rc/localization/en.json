@@ -25,128 +25,131 @@
   },
   "messages": {
     "start": [
-      { "text": "The system is listening. Find the structure." },
-      { "text": "Every tile changes more than one possibility." },
-      { "text": "Read the crossings before choosing a number." },
-      { "text": "Level {level}. The shape of the answer is already here." },
-      { "text": "Do not rush the first move. Let the board reveal its rhythm." },
-      { "text": "Difficulty {difficulty}. Your patterns are adapting faster than it is." },
-      { "text": "One stable line can unlock the entire board." },
-      { "text": "The obvious move is information, even when it is not the answer." }
+      { "text": "Find the structure." },
+      { "text": "Read the crossings." },
+      { "text": "Let the pattern speak." },
+      { "text": "Level {level}. Trust the shape." },
+      { "text": "One line can unlock everything." },
+      { "text": "Difficulty {difficulty}. Stay fluid." },
+      { "text": "Start with certainty." },
+      { "text": "Every move reveals something." }
     ],
     "named_start": [
-      { "text": "Welcome back, {player}. The board remembers your rhythm." },
-      { "text": "{player}, this structure matches the way you search." },
-      { "text": "Ready, {player}? World {world} is paying attention." },
-      { "text": "{player}, your Mind Level is {mind_level}. Trust what you have trained." }
+      { "text": "Welcome back, {player}." },
+      { "text": "{player}, trust your rhythm." },
+      { "text": "Ready, {player}?" },
+      { "text": "Mind {mind_level}. You are ready." }
     ],
     "complete": [
-      { "text": "Beautiful. The structure holds." },
-      { "text": "Solved. Every line agrees." },
-      { "text": "Clean reasoning. No loose ends." },
-      { "text": "Pattern stabilized. Moving deeper." },
-      { "text": "Excellent. The board has nothing left to hide." },
-      { "text": "Another pattern added to your internal library." },
-      { "text": "The answer looked inevitable after you found it." },
-      { "text": "Mind Level {mind_level}: the signal is getting clearer." }
+      { "text": "Beautiful. It holds." },
+      { "text": "Every line agrees." },
+      { "text": "Clean reasoning." },
+      { "text": "Pattern stabilized." },
+      { "text": "Nothing left hidden." },
+      { "text": "Another pattern learned." },
+      { "text": "The answer became inevitable." },
+      { "text": "Mind {mind_level}. Signal clearer." }
     ],
     "named_complete": [
-      { "text": "That was unmistakably your solution, {player}." },
-      { "text": "{player}, your decisions made the board look simple." },
-      { "text": "The system predicted pressure. You produced clarity, {player}." },
-      { "text": "Keep that feeling, {player}. You built it move by move." }
+      { "text": "Your signature, {player}." },
+      { "text": "{player}, you made it simple." },
+      { "text": "Clarity under pressure, {player}." },
+      { "text": "Keep that feeling, {player}." }
     ],
     "fast": [
-      { "text": "So fast. You recognized the structure before it settled." },
-      { "text": "Immediate pattern recognition." },
-      { "text": "You were already ahead of the board." },
+      { "text": "Fast read. Clean finish." },
+      { "text": "Pattern caught instantly." },
+      { "text": "Already ahead." },
       { "text": "No search. Recognition." },
-      { "text": "Your first instinct carried the whole solution." },
-      { "text": "The board barely had time to become difficult." }
+      { "text": "First instinct. Right instinct." },
+      { "text": "The board never caught up." },
+      { "text": "Solved in one breath." },
+      { "text": "Pure reflex." }
     ],
     "breakthrough": [
-      { "text": "That was faster than your usual rhythm. Something just clicked." },
-      { "text": "A real acceleration. Your baseline just moved." },
-      { "text": "You solved that before your normal thinking window opened." },
-      { "text": "New speed detected. Not luck: compression." },
-      { "text": "You did not merely improve. You changed approach." }
+      { "text": "Your rhythm just accelerated." },
+      { "text": "New personal pace." },
+      { "text": "That clicked early." },
+      { "text": "New speed detected." },
+      { "text": "Your approach evolved." },
+      { "text": "A real breakthrough." }
     ],
     "precise": [
-      { "text": "Precise. Almost no wasted motion." },
-      { "text": "Clean path. Every move had a purpose." },
-      { "text": "You solved it without disturbing the structure." },
-      { "text": "Excellent restraint. You touched only what mattered." },
-      { "text": "That solution was surgical." },
-      { "text": "Your accuracy is becoming a habit." }
+      { "text": "Precise. Nothing wasted." },
+      { "text": "Every move mattered." },
+      { "text": "The structure stayed clean." },
+      { "text": "Only what mattered." },
+      { "text": "Surgical solution." },
+      { "text": "Precision is becoming instinct." }
     ],
     "experimental": [
-      { "text": "You mapped the board by testing it. Smart exploration." },
-      { "text": "Every probe reduced the unknown." },
-      { "text": "Bold search, controlled recovery, solid result." },
-      { "text": "You turned uncertainty into data." },
-      { "text": "Curiosity found the route that caution could not." }
+      { "text": "Smart exploration." },
+      { "text": "Every test reduced the unknown." },
+      { "text": "Bold search. Solid result." },
+      { "text": "Uncertainty became data." },
+      { "text": "Curiosity found the route." }
     ],
     "hesitant": [
-      { "text": "You are thinking longer than usual. That often precedes a jump." },
-      { "text": "This pause is not weakness. Your model is reorganizing." },
-      { "text": "Your rhythm changed. Let the crossings simplify the choice." },
-      { "text": "You normally move sooner. Look for the one line that constrains two." },
-      { "text": "The board feels dense because one hidden certainty is doing too much work." }
+      { "text": "A pause can reveal the jump." },
+      { "text": "Your model is reorganizing." },
+      { "text": "Let the crossings simplify it." },
+      { "text": "Find the line that binds two." },
+      { "text": "One certainty is still hidden." }
     ],
     "patient": [
-      { "text": "Patience is producing precision." },
-      { "text": "You waited for certainty, then moved cleanly." },
-      { "text": "Slow is smooth. Smooth becomes fast." },
-      { "text": "You are protecting the structure instead of forcing it." },
-      { "text": "Deep focus detected. Keep the pace that feels inevitable." }
+      { "text": "Patience creates precision." },
+      { "text": "You waited, then moved cleanly." },
+      { "text": "Smooth becomes fast." },
+      { "text": "You protected the structure." },
+      { "text": "Deep focus detected." }
     ],
     "resilient": [
-      { "text": "You absorbed the contradiction and still closed every line." },
-      { "text": "Recovery complete. The wrong branch made the right one clearer." },
-      { "text": "You did not lose momentum; you converted friction into evidence." },
-      { "text": "That correction was more valuable than a perfect first guess." },
-      { "text": "The board pushed back. You learned faster." }
+      { "text": "You closed every line." },
+      { "text": "Recovery complete." },
+      { "text": "Friction became evidence." },
+      { "text": "That correction mattered." },
+      { "text": "The board pushed. You learned." }
     ],
     "returning": [
-      { "text": "Your previous rhythm is still here. It will return within a few moves." },
-      { "text": "Welcome back. Start gently; pattern memory wakes quickly." },
-      { "text": "The system kept your signature. Continue where your intuition left off." },
-      { "text": "A short return is enough to reactivate a deep skill." }
+      { "text": "Your rhythm is still here." },
+      { "text": "Welcome back. Start gently." },
+      { "text": "Your signature remains." },
+      { "text": "Pattern memory wakes quickly." }
     ],
     "focus_return": [
-      { "text": "Attention restored. You can re-enter through the most constrained line." },
-      { "text": "The pause changed your viewpoint. Use the fresh angle." },
-      { "text": "You stepped away more often than usual. The pattern is still waiting, unchanged." }
+      { "text": "Attention restored." },
+      { "text": "Use the fresh angle." },
+      { "text": "The pattern is still waiting." }
     ],
     "motion": [
-      { "text": "Your hands are active today. Let the board move, but keep one line mentally still." },
-      { "text": "Motion detected. Your visual focus remains remarkably stable." },
-      { "text": "The device is moving; your reasoning does not have to." }
+      { "text": "Move the board. Hold the line." },
+      { "text": "Motion detected. Focus stable." },
+      { "text": "The device moves. You stay clear." }
     ],
     "short_session": [
-      { "text": "A short session can sharpen one instinct. Make this board that instinct." },
-      { "text": "Brief return, clear target: one pattern stronger than before." },
-      { "text": "You do not need a long session to create a lasting improvement." }
+      { "text": "One board can sharpen an instinct." },
+      { "text": "Brief return. Clear target." },
+      { "text": "Small session. Real progress." }
     ],
     "long_session": [
-      { "text": "Long-session focus detected. Protect accuracy; speed will follow." },
-      { "text": "You have stayed deep for a while. Relax your eyes and read the whole shape." },
-      { "text": "Endurance is active. Keep the next solution light, not forced." }
+      { "text": "Long focus detected." },
+      { "text": "Relax your eyes. Read the whole." },
+      { "text": "Endurance active. Stay light." }
     ],
     "mastery": [
-      { "text": "Difficulty {difficulty}, and still you made the structure coherent." },
-      { "text": "This depth once required effort. Now it looks like your natural language." },
-      { "text": "High pressure, stable decisions. That is trained mastery." }
+      { "text": "Difficulty {difficulty}. Still coherent." },
+      { "text": "This depth feels natural now." },
+      { "text": "Stable choices under pressure." }
     ],
     "forecast": [
-      { "text": "Tier {tier} begins with a warm-up. Learn its accent before it raises its voice." },
-      { "text": "This level prepares the final pressure of tier {tier}." },
-      { "text": "The next tier changes the logic, not the goal. Your habits will transfer." },
-      { "text": "Near the tier boundary. Expect denser crossings and fewer obvious anchors." },
-      { "text": "World {world}, tier {tier}: the board is teaching the skill the finale will test." },
-      { "text": "A new operator pattern is approaching. Read relationships before values." },
-      { "text": "Final stretch of this tier. Save speed for the moment certainty appears." },
-      { "text": "The next structure will look unfamiliar for only a few moves." }
+      { "text": "Tier {tier}. Learn its accent." },
+      { "text": "The finale is approaching." },
+      { "text": "New logic. Same instinct." },
+      { "text": "Denser crossings ahead." },
+      { "text": "World {world}. Pressure rising." },
+      { "text": "A new operator approaches." },
+      { "text": "Final stretch. Stay precise." },
+      { "text": "The unfamiliar will fade." }
     ],
     "reward": [
       { "text": "GREAT" },
@@ -157,7 +160,15 @@
     "reward_fast": [
       { "text": "BRILLIANT" },
       { "text": "SO FAST" },
-      { "text": "INSTANT" }
+      { "text": "LIGHTNING" },
+      { "text": "PURE REFLEX" },
+      { "text": "UNTOUCHABLE" }
+    ],
+    "reward_instant": [
+      { "text": "INSTANT" },
+      { "text": "ONE BREATH" },
+      { "text": "ZERO HESITATION" },
+      { "text": "PURE INSTINCT" }
     ],
     "reward_precise": [
       { "text": "PRECISE" },

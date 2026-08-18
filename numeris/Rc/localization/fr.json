@@ -25,128 +25,131 @@
   },
   "messages": {
     "start": [
-      { "text": "Le systeme ecoute. Trouve la structure." },
-      { "text": "Chaque tuile change plus d'une possibilite." },
-      { "text": "Observe les croisements avant de choisir." },
-      { "text": "Niveau {level}. La forme de la reponse est deja ici." },
-      { "text": "Ne presse pas le premier geste. Laisse le rythme apparaitre." },
-      { "text": "Difficulte {difficulty}. Tes reflexes s'adaptent plus vite qu'elle." },
-      { "text": "Une seule ligne stable peut ouvrir tout le plateau." },
-      { "text": "Le geste evident reste une information, meme s'il n'est pas la reponse." }
+      { "text": "Trouve la structure." },
+      { "text": "Lis les croisements." },
+      { "text": "Laisse parler le motif." },
+      { "text": "Niveau {level}. Fie-toi a la forme." },
+      { "text": "Une ligne peut tout ouvrir." },
+      { "text": "Difficulte {difficulty}. Reste fluide." },
+      { "text": "Commence par une certitude." },
+      { "text": "Chaque geste revele un indice." }
     ],
     "named_start": [
-      { "text": "Bon retour, {player}. Le plateau se souvient de ton rythme." },
-      { "text": "{player}, cette structure correspond a ta facon de chercher." },
-      { "text": "Pret, {player}? Le monde {world} porte attention." },
-      { "text": "{player}, ton niveau mental est {mind_level}. Fais confiance a ton entrainement." }
+      { "text": "Bon retour, {player}." },
+      { "text": "{player}, fie-toi a ton rythme." },
+      { "text": "Pret, {player}?" },
+      { "text": "Mind {mind_level}. Tu es pret." }
     ],
     "complete": [
-      { "text": "Magnifique. La structure tient." },
-      { "text": "Resolue. Toutes les lignes concordent." },
-      { "text": "Raisonnement propre. Aucun fil libre." },
-      { "text": "Structure stabilisee. Descendons plus loin." },
-      { "text": "Excellent. Le plateau n'a plus rien a cacher." },
-      { "text": "Un nouveau motif vient d'entrer dans ta memoire." },
-      { "text": "La reponse semble inevitable une fois que tu l'as vue." },
-      { "text": "Niveau mental {mind_level}: le signal devient plus clair." }
+      { "text": "Magnifique. Ca tient." },
+      { "text": "Toutes les lignes concordent." },
+      { "text": "Raisonnement propre." },
+      { "text": "Structure stabilisee." },
+      { "text": "Plus rien n'est cache." },
+      { "text": "Un nouveau motif appris." },
+      { "text": "La reponse est devenue evidente." },
+      { "text": "Mind {mind_level}. Signal plus clair." }
     ],
     "named_complete": [
-      { "text": "Cette solution portait vraiment ta signature, {player}." },
-      { "text": "{player}, tes decisions ont rendu le plateau simple." },
-      { "text": "Le systeme prevoyait de la pression. Tu as produit de la clarte, {player}." },
-      { "text": "Garde cette sensation, {player}. Tu l'as construite geste par geste." }
+      { "text": "Ta signature, {player}." },
+      { "text": "{player}, tu l'as rendu simple." },
+      { "text": "Clarte sous pression, {player}." },
+      { "text": "Garde cette sensation, {player}." }
     ],
     "fast": [
-      { "text": "Si rapide. Tu as reconnu la structure avant qu'elle se pose." },
-      { "text": "Reconnaissance immediate du motif." },
-      { "text": "Tu avais deja un coup d'avance." },
-      { "text": "Pas de recherche. Une reconnaissance." },
-      { "text": "Ta premiere intuition portait toute la solution." },
-      { "text": "Le plateau a peine eu le temps de devenir difficile." }
+      { "text": "Lecture rapide. Fin propre." },
+      { "text": "Motif saisi immediatement." },
+      { "text": "Deja en avance." },
+      { "text": "Pas de recherche. Reconnaissance." },
+      { "text": "Premier instinct. Le bon." },
+      { "text": "Le plateau n'a pas suivi." },
+      { "text": "Resolue en un souffle." },
+      { "text": "Pur reflexe." }
     ],
     "breakthrough": [
-      { "text": "Plus rapide que ton rythme habituel. Quelque chose vient de cliquer." },
-      { "text": "Une vraie acceleration. Ta reference vient de changer." },
-      { "text": "Tu as resolu avant ta fenetre de reflexion habituelle." },
-      { "text": "Nouvelle vitesse detectee. Pas de chance: de la compression." },
-      { "text": "Tu ne t'es pas seulement ameliore. Tu as change d'approche." }
+      { "text": "Ton rythme vient d'accelerer." },
+      { "text": "Nouveau rythme personnel." },
+      { "text": "Le declic est venu tot." },
+      { "text": "Nouvelle vitesse detectee." },
+      { "text": "Ton approche a evolue." },
+      { "text": "Une vraie percee." }
     ],
     "precise": [
-      { "text": "Precis. Presque aucun mouvement perdu." },
-      { "text": "Trajectoire propre. Chaque geste comptait." },
-      { "text": "Tu as resolu sans deranger la structure." },
-      { "text": "Excellente retenue. Tu as touche seulement ce qui comptait." },
-      { "text": "Cette solution etait chirurgicale." },
-      { "text": "Ta precision devient une habitude." }
+      { "text": "Precis. Rien de perdu." },
+      { "text": "Chaque geste comptait." },
+      { "text": "La structure est restee propre." },
+      { "text": "Seulement l'essentiel." },
+      { "text": "Solution chirurgicale." },
+      { "text": "La precision devient instinct." }
     ],
     "experimental": [
-      { "text": "Tu as cartographie le plateau en le testant. Exploration intelligente." },
-      { "text": "Chaque essai a reduit l'inconnu." },
-      { "text": "Recherche audacieuse, reprise controlee, resultat solide." },
-      { "text": "Tu as transforme l'incertitude en donnees." },
-      { "text": "La curiosite a trouve le chemin que la prudence ne voyait pas." }
+      { "text": "Exploration intelligente." },
+      { "text": "Chaque essai reduit l'inconnu." },
+      { "text": "Recherche audacieuse. Resultat solide." },
+      { "text": "L'incertitude devient donnee." },
+      { "text": "La curiosite a trouve le chemin." }
     ],
     "hesitant": [
-      { "text": "Tu reflechis plus longtemps que d'habitude. Cela precede souvent un bond." },
-      { "text": "Cette pause n'est pas une faiblesse. Ton modele se reorganise." },
-      { "text": "Ton rythme a change. Laisse les croisements simplifier le choix." },
-      { "text": "Tu bouges normalement plus tot. Cherche la ligne qui en contraint deux." },
-      { "text": "Le plateau semble dense car une certitude cachee fait trop de travail." }
+      { "text": "Une pause peut reveler le bond." },
+      { "text": "Ton modele se reorganise." },
+      { "text": "Laisse les croisements simplifier." },
+      { "text": "Trouve la ligne qui en lie deux." },
+      { "text": "Une certitude reste cachee." }
     ],
     "patient": [
-      { "text": "Ta patience produit de la precision." },
-      { "text": "Tu as attendu la certitude, puis bouge proprement." },
-      { "text": "Lent devient fluide. Fluide devient rapide." },
-      { "text": "Tu proteges la structure au lieu de la forcer." },
-      { "text": "Concentration profonde detectee. Garde ce rythme inevitable." }
+      { "text": "La patience cree la precision." },
+      { "text": "Tu as attendu, puis bien bouge." },
+      { "text": "Fluide devient rapide." },
+      { "text": "Tu as protege la structure." },
+      { "text": "Concentration profonde detectee." }
     ],
     "resilient": [
-      { "text": "Tu as absorbe la contradiction et ferme chaque ligne." },
-      { "text": "Reprise terminee. La mauvaise branche a clarifie la bonne." },
-      { "text": "Tu n'as pas perdu l'elan; tu as transforme la friction en preuve." },
-      { "text": "Cette correction valait plus qu'un premier choix parfait." },
-      { "text": "Le plateau a resiste. Tu as appris plus vite." }
+      { "text": "Tu as ferme chaque ligne." },
+      { "text": "Reprise terminee." },
+      { "text": "La friction devient preuve." },
+      { "text": "Cette correction comptait." },
+      { "text": "Le plateau resiste. Tu apprends." }
     ],
     "returning": [
-      { "text": "Ton ancien rythme est encore la. Il reviendra en quelques gestes." },
-      { "text": "Bon retour. Commence doucement; la memoire des motifs se reveille vite." },
-      { "text": "Le systeme a garde ta signature. Reprends ou ton intuition s'est arretee." },
-      { "text": "Un court retour suffit pour reactiver une competence profonde." }
+      { "text": "Ton rythme est encore la." },
+      { "text": "Bon retour. Commence doucement." },
+      { "text": "Ta signature reste intacte." },
+      { "text": "La memoire des motifs se reveille." }
     ],
     "focus_return": [
-      { "text": "Attention restauree. Reviens par la ligne la plus contrainte." },
-      { "text": "La pause a change ton point de vue. Utilise cet angle neuf." },
-      { "text": "Tu t'es eloigne plus souvent. Le motif attend encore, intact." }
+      { "text": "Attention restauree." },
+      { "text": "Utilise cet angle neuf." },
+      { "text": "Le motif attend encore." }
     ],
     "motion": [
-      { "text": "Tes mains sont actives. Laisse bouger le plateau, garde une ligne immobile en tete." },
-      { "text": "Mouvement detecte. Ton attention visuelle reste etonnamment stable." },
-      { "text": "L'appareil bouge; ton raisonnement n'est pas oblige de le suivre." }
+      { "text": "Bouge le plateau. Garde la ligne." },
+      { "text": "Mouvement detecte. Focus stable." },
+      { "text": "L'appareil bouge. Tu restes clair." }
     ],
     "short_session": [
-      { "text": "Une courte session peut aiguiser un instinct. Choisis celui-ci." },
-      { "text": "Retour bref, cible claire: un motif plus fort qu'avant." },
-      { "text": "Une longue session n'est pas necessaire pour creer un progres durable." }
+      { "text": "Un plateau aiguise un instinct." },
+      { "text": "Retour bref. Cible claire." },
+      { "text": "Petite session. Vrai progres." }
     ],
     "long_session": [
-      { "text": "Concentration longue detectee. Protege la precision; la vitesse suivra." },
-      { "text": "Tu es en profondeur depuis un moment. Relache les yeux et lis la forme entiere." },
-      { "text": "L'endurance est active. Garde la prochaine solution legere, sans la forcer." }
+      { "text": "Longue concentration detectee." },
+      { "text": "Relache les yeux. Lis l'ensemble." },
+      { "text": "Endurance active. Reste leger." }
     ],
     "mastery": [
-      { "text": "Difficulte {difficulty}, et tu as quand meme rendu la structure coherente." },
-      { "text": "Cette profondeur demandait un effort. Elle ressemble maintenant a ta langue naturelle." },
-      { "text": "Forte pression, decisions stables. Voila une maitrise entrainee." }
+      { "text": "Difficulte {difficulty}. Toujours coherent." },
+      { "text": "Cette profondeur devient naturelle." },
+      { "text": "Decisions stables sous pression." }
     ],
     "forecast": [
-      { "text": "Le palier {tier} commence par un echauffement. Apprends son accent." },
-      { "text": "Ce niveau prepare la pression finale du palier {tier}." },
-      { "text": "Le prochain palier change la logique, pas le but. Tes acquis suivront." },
-      { "text": "Frontiere du palier proche. Attends-toi a des croisements plus denses." },
-      { "text": "Monde {world}, palier {tier}: le plateau enseigne ce que la finale testera." },
-      { "text": "Un nouveau motif d'operateur approche. Lis les relations avant les valeurs." },
-      { "text": "Derniere portion du palier. Garde ta vitesse pour la certitude." },
-      { "text": "La prochaine structure ne semblera nouvelle que quelques gestes." }
+      { "text": "Palier {tier}. Apprends son accent." },
+      { "text": "La finale approche." },
+      { "text": "Nouvelle logique. Meme instinct." },
+      { "text": "Croisements plus denses devant." },
+      { "text": "Monde {world}. La pression monte." },
+      { "text": "Un nouvel operateur approche." },
+      { "text": "Derniere ligne droite. Reste precis." },
+      { "text": "L'inconnu va vite disparaitre." }
     ],
     "reward": [
       { "text": "SUPERBE" },
@@ -157,7 +160,15 @@
     "reward_fast": [
       { "text": "BRILLANT" },
       { "text": "SI RAPIDE" },
-      { "text": "INSTANTANE" }
+      { "text": "ECLAIR" },
+      { "text": "PUR REFLEXE" },
+      { "text": "INTOUCHABLE" }
+    ],
+    "reward_instant": [
+      { "text": "INSTANTANE" },
+      { "text": "UN SOUFFLE" },
+      { "text": "ZERO HESITATION" },
+      { "text": "PUR INSTINCT" }
     ],
     "reward_precise": [
       { "text": "PRECIS" },
