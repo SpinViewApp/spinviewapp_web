@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 160,
+"config_defaults_rev": 161,
 "mainpan": {
   "1": {
     "1": {
@@ -52,7 +52,7 @@
                   },
                   "tabs": {
                     "ui:numeris_options_tabs": {
-                      "active": 7
+                      "active": 0
                     }
                   }
                 }
@@ -145,8 +145,8 @@
   "branch_lineage": -1703330206,
   "branch_root": 12648430,
   "branch_world": 0,
-  "campaign_depth": 3,
-  "campaign_mode": true,
+  "campaign_depth": 165,
+  "campaign_mode": false,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
     "a": 0.72,
@@ -308,8 +308,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 6,
-  "level_seed": 1546070606,
+  "level_index": 0,
+  "level_seed": 0,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
