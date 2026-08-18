@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 156,
+"config_defaults_rev": 157,
 "mainpan": {
   "1": {
     "1": {
@@ -52,7 +52,7 @@
                   },
                   "tabs": {
                     "ui:numeris_options_tabs": {
-                      "active": 0
+                      "active": 7
                     }
                   }
                 }
@@ -145,7 +145,7 @@
   "branch_lineage": -1703330206,
   "branch_root": 12648430,
   "branch_world": 0,
-  "campaign_depth": 3,
+  "campaign_depth": 2,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -308,8 +308,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 6,
-  "level_seed": 1546070606,
+  "level_index": 5,
+  "level_seed": -865000904,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -419,52 +419,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.814644,
-    "b": 206.536,
-    "g": 0.564761,
-    "r": -0.579374
+    "a": -0.805723,
+    "b": 207.813,
+    "g": 0.564074,
+    "r": -0.580005
   },
   "sht_fractal_v1": {
-    "a": 0.298403,
-    "b": 0.148918,
-    "g": 0.472107,
-    "r": -0.0380571
+    "a": 0.285936,
+    "b": 0.143982,
+    "g": 0.48042,
+    "r": -0.0337589
   },
   "sht_fractal_v2": {
-    "a": 0.188112,
-    "b": 0.0697647,
-    "g": 226.606,
+    "a": 0.187146,
+    "b": 0.0708883,
+    "g": 225.726,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 20.9568,
-    "b": 0.00498103,
-    "g": 0.036953,
-    "r": 8.19018
+    "a": 20.8456,
+    "b": 0.00501234,
+    "g": 0.0373624,
+    "r": 8.06202
   },
   "sht_fractal_v4": {
-    "a": 0.168921,
-    "b": 0.726263,
-    "g": 0.602453,
-    "r": 36.3432
+    "a": 0.168685,
+    "b": 0.714442,
+    "g": 0.607623,
+    "r": 35.818
   },
   "sht_fractal_v5": {
-    "a": 0.192866,
-    "b": 0.114905,
-    "g": 0.113939,
-    "r": 0.249962
+    "a": 0.213242,
+    "b": 0.123542,
+    "g": 0.112864,
+    "r": 0.251955
   },
   "sht_fractal_v6": {
-    "a": 1.03798,
-    "b": 0.616851,
-    "g": 0.692841,
-    "r": 0.676458
+    "a": 1.00597,
+    "b": 0.620089,
+    "g": 0.682624,
+    "r": 0.66563
   },
   "sht_fractal_v7": {
-    "a": 0.812929,
-    "b": 1.01115,
-    "g": 1.23805,
-    "r": 1.23819
+    "a": 0.813119,
+    "b": 1.02555,
+    "g": 1.24728,
+    "r": 1.23759
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -473,10 +473,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.702624,
-    "b": 0.442199,
-    "g": 0.747265,
-    "r": 0.699534
+    "a": 0.700847,
+    "b": 0.424725,
+    "g": 0.750258,
+    "r": 0.699852
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -523,7 +523,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": false,
   "sht_quality_preset": 0,
-  "sht_render_scale": 1.75532,
+  "sht_render_scale": 1.22002,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
@@ -557,8 +557,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 1032,
-  "w": 1920,
+  "h": 10,
+  "w": 120,
   "x": 0,
   "y": 0
 }
