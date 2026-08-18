@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 162,
+"config_defaults_rev": 163,
 "mainpan": {
   "1": {
     "1": {
@@ -108,7 +108,7 @@
           },
           "type": "T"
         },
-        "ratio": 0.189601,
+        "ratio": 0.205817,
         "type": "V"
       },
       "2": {
@@ -142,11 +142,12 @@
     "r": 0.05
   },
   "bg_tweets_enabled": false,
-  "branch_lineage": -1703330206,
-  "branch_root": 12648430,
+  "branch_label": "",
+  "branch_lineage": 295175052,
+  "branch_root": -1673363214,
   "branch_world": 0,
-  "campaign_depth": 165,
-  "campaign_mode": false,
+  "campaign_depth": 463,
+  "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
     "a": 0.72,
@@ -308,8 +309,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 0,
-  "level_seed": 0,
+  "level_index": 466,
+  "level_seed": 670594358,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -419,52 +420,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.814644,
-    "b": 206.536,
-    "g": 0.564761,
-    "r": -0.579374
+    "a": 1.18962,
+    "b": 188.664,
+    "g": 0.577877,
+    "r": -0.571906
   },
   "sht_fractal_v1": {
-    "a": 0.298403,
-    "b": 0.148918,
-    "g": 0.472107,
-    "r": -0.0380571
+    "a": 0.303978,
+    "b": 0.253874,
+    "g": 0.501723,
+    "r": 0.0526874
   },
   "sht_fractal_v2": {
-    "a": 0.188112,
-    "b": 0.0697647,
-    "g": 226.606,
+    "a": 0.0882892,
+    "b": 0.128038,
+    "g": 207.242,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 20.9568,
-    "b": 0.00498103,
-    "g": 0.036953,
-    "r": 8.19018
+    "a": 16.286,
+    "b": 0.00489486,
+    "g": 0.0274708,
+    "r": 9.10961
   },
   "sht_fractal_v4": {
-    "a": 0.168921,
-    "b": 0.726263,
-    "g": 0.602453,
-    "r": 36.3432
+    "a": 0.2491,
+    "b": 0.780895,
+    "g": 0.280783,
+    "r": 44.3191
   },
   "sht_fractal_v5": {
-    "a": 0.192866,
-    "b": 0.114905,
-    "g": 0.113939,
-    "r": 0.249962
+    "a": 0.270325,
+    "b": 0.288119,
+    "g": 0.0816361,
+    "r": 0.143015
   },
   "sht_fractal_v6": {
-    "a": 1.03798,
-    "b": 0.616851,
-    "g": 0.692841,
-    "r": 0.676458
+    "a": 0.755678,
+    "b": 0.46696,
+    "g": 0.639583,
+    "r": 0.502395
   },
   "sht_fractal_v7": {
-    "a": 0.812929,
-    "b": 1.01115,
-    "g": 1.23805,
-    "r": 1.23819
+    "a": 0.710377,
+    "b": 1.09512,
+    "g": 1.24311,
+    "r": 1.14324
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -473,10 +474,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.702624,
-    "b": 0.442199,
-    "g": 0.747265,
-    "r": 0.699534
+    "a": 0.619651,
+    "b": 0.365568,
+    "g": 0.68118,
+    "r": 0.774036
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
