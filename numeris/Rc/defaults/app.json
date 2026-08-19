@@ -1,132 +1,75 @@
 {
-"config_defaults_rev": 163,
+"config_defaults_rev": 166,
 "mainpan": {
   "1": {
     "1": {
       "active_tab": 0,
+      "app": {
+        "cmd": "options",
+        "func": "numeris_options_fmap",
+        "pane_uid": 3,
+        "state": {
+          "ui_state": {
+            "tabs": {
+              "ui:numeris_options_tabs": {
+              }
+            }
+          }
+        }
+      },
       "ratio": 0,
-      "type": "empty"
+      "type": ""
     },
     "2": {
       "1": {
         "active_tab": 0,
+        "app": {
+          "cmd": "Waveform",
+          "func": "soundui_fmap",
+          "pane_uid": 5
+        },
         "ratio": 0,
-        "type": "empty"
+        "type": ""
       },
       "2": {
-        "1": {
-          "active_tab": 0,
-          "ratio": 0,
-          "type": "empty"
+        "app": {
+          "cmd": "Prefs",
+          "func": "soundui_fmap",
+          "pane_uid": 6
         },
-        "2": {
-          "active_tab": 0,
-          "ratio": 0,
-          "type": "empty"
-        },
-        "ratio": 0.560897,
-        "type": "V"
+        "ratio": 0,
+        "type": ""
       },
-      "ratio": 0.195726,
+      "ratio": 0.55,
       "type": "V"
     },
-    "ratio": 0.382763,
+    "ratio": 0.38,
     "type": "V"
   },
   "2": {
     "1": {
-      "1": {
-        "1": {
-          "active_tab": 0,
-          "s0": {
-            "app": {
-              "cmd": "options",
-              "func": "numeris_options_fmap",
-              "pane_uid": 3,
-              "state": {
-                "ui_state": {
-                  "sections": {
-                    "section:Challenge share": {
-                      "open": false
-                    }
-                  },
-                  "tabs": {
-                    "ui:numeris_options_tabs": {
-                      "active": 0
-                    }
-                  }
-                }
-              }
-            },
-            "tabs": {
-            }
-          },
-          "s1": {
-            "app": {
-              "cmd": "Waveform",
-              "func": "soundui_fmap",
-              "pane_uid": 5
-            },
-            "tabs": {
-            }
-          },
-          "s2": {
-            "app": {
-              "cmd": "history",
-              "func": "panhistory_fmap",
-              "pane_uid": 3
-            },
-            "tabs": {
-            }
-          },
-          "s3": {
-            "app": {
-              "cmd": "Prefs",
-              "func": "soundui_fmap",
-              "pane_uid": 6
-            },
-            "tabs": {
-            }
-          },
-          "type": "T"
-        },
-        "2": {
-          "active_tab": 0,
-          "s0": {
-            "app": {
-              "cmd": "render",
-              "func": "numeris_sokol_render_fmap",
-              "pane_uid": 5
-            }
-          },
-          "s1": {
-            "app": {
-              "cmd": "view",
-              "func": "numeris_render_fmap",
-              "pane_uid": 4
-            }
-          },
-          "type": "T"
-        },
-        "ratio": 0.205817,
-        "type": "V"
+      "app": {
+        "cmd": "view",
+        "func": "numeris_render_fmap",
+        "pane_uid": 8
       },
-      "2": {
-        "active_tab": 0,
-        "type": "empty"
-      },
-      "ratio": 0.728739,
-      "type": "V"
+      "ratio": 0,
+      "type": ""
     },
     "2": {
       "active_tab": 0,
+      "app": {
+        "cmd": "render",
+        "func": "numeris_sokol_render_fmap",
+        "pane_uid": 9
+      },
       "ratio": 0,
-      "type": "empty"
+      "type": ""
     },
-    "ratio": 0.870432,
+    "ratio": 0.178571,
     "type": "V"
   },
-  "ratio": 0.362086,
+  "ratio": 0.2,
   "type": "H"
 },
 "numeris": {
@@ -143,10 +86,10 @@
   },
   "bg_tweets_enabled": false,
   "branch_label": "",
-  "branch_lineage": 295175052,
+  "branch_lineage": -1084001230,
   "branch_root": -1673363214,
   "branch_world": 0,
-  "campaign_depth": 463,
+  "campaign_depth": 11,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -309,8 +252,8 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 466,
-  "level_seed": 670594358,
+  "level_index": 14,
+  "level_seed": -418718741,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
   "message_fade_in": 0.177,
@@ -420,52 +363,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": 1.18962,
-    "b": 188.664,
-    "g": 0.577877,
-    "r": -0.571906
+    "a": -0.859357,
+    "b": 207.505,
+    "g": 0.562839,
+    "r": -0.58063
   },
   "sht_fractal_v1": {
-    "a": 0.303978,
-    "b": 0.253874,
-    "g": 0.501723,
-    "r": 0.0526874
+    "a": 0.341514,
+    "b": 0.116717,
+    "g": 0.524115,
+    "r": -0.0164077
   },
   "sht_fractal_v2": {
-    "a": 0.0882892,
-    "b": 0.128038,
-    "g": 207.242,
+    "a": 0.201517,
+    "b": 0.0464755,
+    "g": 202.759,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 16.286,
-    "b": 0.00489486,
-    "g": 0.0274708,
-    "r": 9.10961
+    "a": 19.4338,
+    "b": 0.0052311,
+    "g": 0.0391567,
+    "r": 8.51842
   },
   "sht_fractal_v4": {
-    "a": 0.2491,
-    "b": 0.780895,
-    "g": 0.280783,
-    "r": 44.3191
+    "a": 0.178463,
+    "b": 0.728789,
+    "g": 0.643652,
+    "r": 32.8556
   },
   "sht_fractal_v5": {
-    "a": 0.270325,
-    "b": 0.288119,
-    "g": 0.0816361,
-    "r": 0.143015
+    "a": 0.201243,
+    "b": 0.110752,
+    "g": 0.109144,
+    "r": 0.205467
   },
   "sht_fractal_v6": {
-    "a": 0.755678,
-    "b": 0.46696,
-    "g": 0.639583,
-    "r": 0.502395
+    "a": 0.985375,
+    "b": 0.69412,
+    "g": 0.711226,
+    "r": 0.729378
   },
   "sht_fractal_v7": {
-    "a": 0.710377,
-    "b": 1.09512,
-    "g": 1.24311,
-    "r": 1.14324
+    "a": 0.843381,
+    "b": 1.04202,
+    "g": 1.29554,
+    "r": 1.24027
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -474,10 +417,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.619651,
-    "b": 0.365568,
-    "g": 0.68118,
-    "r": 0.774036
+    "a": 0.629452,
+    "b": 0.346936,
+    "g": 0.783736,
+    "r": 0.736632
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -558,8 +501,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 10,
-  "w": 120,
+  "h": 1032,
+  "w": 1920,
   "x": 0,
   "y": 0
 }

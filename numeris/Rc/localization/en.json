@@ -40,6 +40,16 @@
       { "text": "Ready, {player}?" },
       { "text": "Mind {mind_level}. You are ready." }
     ],
+    "boss_warning": [
+      { "text": "Warning. Transient lines are latching onto the board." },
+      { "text": "Alert: the pattern is spreading. Hold the core." },
+      { "text": "Caution. Unstable equations incoming." },
+      { "text": "Overgrowth. Isolate the permanent lines." },
+      { "text": "Warning: growth beyond the core." },
+      { "text": "Stay sharp. The board will not stay still." },
+      { "text": "Structural alert. Trust only the core." },
+      { "text": "Stray branches are not meant to last." }
+    ],
     "complete": [
       { "text": "Beautiful. It holds." },
       { "text": "Every line agrees." },

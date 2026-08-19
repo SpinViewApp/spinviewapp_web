@@ -40,6 +40,16 @@
       { "text": "Pret, {player}?" },
       { "text": "Mind {mind_level}. Tu es pret." }
     ],
+    "boss_warning": [
+      { "text": "Warning. Des lignes transitoires s'accrochent au plateau." },
+      { "text": "Alerte : le motif se propage. Stabilise le noyau." },
+      { "text": "Attention. Equations instables en approche." },
+      { "text": "Surtension. Isole les lignes permanentes." },
+      { "text": "Avertissement : croissance hors du coeur." },
+      { "text": "Vigilance. Le plateau refuse de rester ferme." },
+      { "text": "Alerte structurelle. Ne suis que le noyau." },
+      { "text": "Les branches parasites n'ont pas a durer." }
+    ],
     "complete": [
       { "text": "Magnifique. Ca tient." },
       { "text": "Toutes les lignes concordent." },
