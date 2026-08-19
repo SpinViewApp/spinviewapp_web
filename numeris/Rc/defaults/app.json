@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 166,
+"config_defaults_rev": 167,
 "mainpan": {
   "1": {
     "1": {
@@ -66,7 +66,7 @@
       "ratio": 0,
       "type": ""
     },
-    "ratio": 0.178571,
+    "ratio": 0.459341,
     "type": "V"
   },
   "ratio": 0.2,
@@ -89,7 +89,7 @@
   "branch_lineage": -1084001230,
   "branch_root": -1673363214,
   "branch_world": 0,
-  "campaign_depth": 11,
+  "campaign_depth": 463,
   "campaign_mode": true,
   "campaign_seed": 12648430,
   "cellfx_bank_border_color": {
@@ -252,7 +252,7 @@
   "letter_op_pad": 0.35,
   "letter_overlap": 0,
   "letter_vanish_mode": 1,
-  "level_index": 14,
+  "level_index": 466,
   "level_seed": -418718741,
   "message_appear_sec": 2.182,
   "message_fade_enabled": true,
@@ -363,52 +363,52 @@
   "sht_fractal_random_level": true,
   "sht_fractal_transition": 1.299,
   "sht_fractal_v0": {
-    "a": -0.859357,
-    "b": 207.505,
-    "g": 0.562839,
-    "r": -0.58063
+    "a": 1.19393,
+    "b": 187.521,
+    "g": 0.57821,
+    "r": -0.571417
   },
   "sht_fractal_v1": {
-    "a": 0.341514,
-    "b": 0.116717,
-    "g": 0.524115,
-    "r": -0.0164077
+    "a": 0.312669,
+    "b": 0.253087,
+    "g": 0.503056,
+    "r": 0.0534684
   },
   "sht_fractal_v2": {
-    "a": 0.201517,
-    "b": 0.0464755,
-    "g": 202.759,
+    "a": 0.0960061,
+    "b": 0.126943,
+    "g": 207.995,
     "r": 62.4639
   },
   "sht_fractal_v3": {
-    "a": 19.4338,
-    "b": 0.0052311,
-    "g": 0.0391567,
-    "r": 8.51842
+    "a": 16.1129,
+    "b": 0.00475851,
+    "g": 0.0274369,
+    "r": 9.19388
   },
   "sht_fractal_v4": {
-    "a": 0.178463,
-    "b": 0.728789,
-    "g": 0.643652,
-    "r": 32.8556
+    "a": 0.256193,
+    "b": 0.781639,
+    "g": 0.278006,
+    "r": 45.4347
   },
   "sht_fractal_v5": {
-    "a": 0.201243,
-    "b": 0.110752,
-    "g": 0.109144,
-    "r": 0.205467
+    "a": 0.2701,
+    "b": 0.29147,
+    "g": 0.0835023,
+    "r": 0.147706
   },
   "sht_fractal_v6": {
-    "a": 0.985375,
-    "b": 0.69412,
-    "g": 0.711226,
-    "r": 0.729378
+    "a": 0.717785,
+    "b": 0.468486,
+    "g": 0.61997,
+    "r": 0.503976
   },
   "sht_fractal_v7": {
-    "a": 0.843381,
-    "b": 1.04202,
-    "g": 1.29554,
-    "r": 1.24027
+    "a": 0.720437,
+    "b": 1.09398,
+    "g": 1.25896,
+    "r": 1.15125
   },
   "sht_fractal_v8": {
     "a": 1,
@@ -417,10 +417,10 @@
     "r": 0
   },
   "sht_fractal_v9": {
-    "a": 0.629452,
-    "b": 0.346936,
-    "g": 0.783736,
-    "r": 0.736632
+    "a": 0.61643,
+    "b": 0.382649,
+    "g": 0.691589,
+    "r": 0.773613
   },
   "sht_fractal_variation": 0.77,
   "sht_hit_lag": 0.12,
@@ -467,7 +467,7 @@
   "sht_place_twist_warning": 1.62,
   "sht_quality_hud": false,
   "sht_quality_preset": 0,
-  "sht_render_scale": 2,
+  "sht_render_scale": 0.9,
   "sht_shader_index": 0,
   "sht_shader_name": "mandelbrot",
   "sht_shader_pan_response": 0.38,
@@ -501,8 +501,8 @@
 "panlayout_current_layout": "(default)",
 "panlayout_last_session": "",
 "window": {
-  "h": 1032,
-  "w": 1920,
+  "h": 10,
+  "w": 120,
   "x": 0,
   "y": 0
 }

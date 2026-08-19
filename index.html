@@ -1,297 +1,924 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Spinview</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>SpinView — Waking the view</title>
+  <meta name="description" content="SpinView creates living visual experiences, parallax worlds and the SpinMind collection.">
+  <meta name="theme-color" content="#050403">
 
-<script defer src="version.js"></script>
-<script defer src="keys.js"></script>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 
-<style>
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    background: #000;
-    overflow: hidden;
-}
+  <script src="/version.js"></script>
 
-body {
-    position: fixed;
-    inset: 0;
-    touch-action: none;
-    overscroll-behavior: none;
-    -webkit-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-    font-family: Arial, Helvetica, sans-serif;
-}
+  <style>
+    :root {
+      --bg: #050403;
+      --bg2: #090705;
+      --text: #f3ede5;
+      --muted: #9d9387;
+      --line: rgba(255,255,255,.09);
+      --gold: #d8a55b;
+      --gold2: #ffca72;
+      --blue: #8bd8ff;
+      --max: 1480px;
+    }
 
-#canvas {
-    position: fixed;
-    inset: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    background: #000;
-    z-index: 0;
-    outline: none;
-}
+    * { box-sizing: border-box; }
 
-.game-title {
-    position: fixed;
-    left: 12px;
-    bottom: 12px;
-    color: #fff;
-    font-size: 24px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(0,0,0,0.25);
-    user-select: none;
-    -webkit-user-select: none;
-    cursor: pointer;
-    z-index: 20;
-}
+    html {
+      background: var(--bg);
+      scroll-behavior: smooth;
+    }
 
-#loader {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    background: #0a0a0a;
-    color: #fff;
-    z-index: 50;
-}
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 50% -10%, rgba(144,95,35,.10), transparent 34rem),
+        var(--bg);
+      font-family: "Inter", sans-serif;
+      overflow-x: hidden;
+    }
 
-.spinner {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 4px solid rgba(255,255,255,0.15);
-    border-top-color: #fff;
-    animation: spin 1s linear infinite;
-    margin-bottom: 12px;
-}
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+    button {
+      font: inherit;
+    }
 
-#debugConsole {
-    position: fixed;
-    left: 10px;
-    right: 10px;
-    bottom: 60px;
-    max-height: 45vh;
-    overflow: auto;
-    padding: 10px;
-    font: 12px monospace;
-    background: rgba(0,0,0,0.90);
-    color: #9fef9f;
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.15);
-    white-space: pre-wrap;
-    word-break: break-word;
-    display: none;
-    z-index: 100;
-}
+    .topbar {
+      position: fixed;
+      z-index: 50;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      background: linear-gradient(to bottom, rgba(5,4,3,.92), rgba(5,4,3,.56), transparent);
+      pointer-events: none;
+    }
 
-#debugConsole.visible {
-    display: block;
-}
-</style>
+    .topbar-inner {
+      width: min(calc(100% - 40px), var(--max));
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand,
+    .toplinks {
+      pointer-events: auto;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1rem;
+      letter-spacing: .01em;
+    }
+
+    .mini-orbit {
+      width: 31px;
+      height: 31px;
+      position: relative;
+      border: 1px solid rgba(255,218,160,.26);
+      border-radius: 50%;
+      box-shadow: 0 0 19px rgba(224,165,81,.12);
+    }
+
+    .mini-orbit::before {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 32%, #ffdd9d, #8f5725 45%, #1b120c 75%);
+      box-shadow: 0 0 10px rgba(255,192,95,.25);
+    }
+
+    .mini-orbit::after {
+      content: "";
+      position: absolute;
+      width: 35px;
+      height: 10px;
+      border: 1px solid rgba(255,206,122,.46);
+      border-radius: 50%;
+      left: -3px;
+      top: 10px;
+      transform: rotate(-16deg);
+    }
+
+    .toplinks {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      color: #a69d92;
+      font-size: .87rem;
+    }
+
+    .toplinks a:hover {
+      color: white;
+    }
+
+    .youtube {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.11);
+      background: rgba(255,255,255,.025);
+    }
+
+    .youtube-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff4545;
+      box-shadow: 0 0 10px rgba(255,69,69,.55);
+    }
+
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 44%;
+      opacity: .84;
+      filter: saturate(.95) contrast(1.04);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background:
+        linear-gradient(to bottom, rgba(5,4,3,.17), rgba(5,4,3,.06) 44%, rgba(5,4,3,.74) 83%, #050403 100%),
+        linear-gradient(to right, rgba(5,4,3,.36), transparent 26%, transparent 74%, rgba(5,4,3,.36));
+    }
+
+    .hero-overlay {
+      position: relative;
+      z-index: 2;
+      width: min(calc(100% - 40px), var(--max));
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 0 0 52px;
+    }
+
+    .hero-foot {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 30px;
+    }
+
+    .hero-copy {
+      max-width: 600px;
+    }
+
+    .hero-kicker {
+      color: #c7a675;
+      font-size: .73rem;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .hero-copy h1 {
+      margin: 0;
+      font-weight: 300;
+      font-size: clamp(2.4rem,5vw,5.2rem);
+      letter-spacing: -.045em;
+      line-height: .98;
+    }
+
+    .hero-copy p {
+      margin: 15px 0 0;
+      max-width: 520px;
+      color: #aaa096;
+      font-size: 1rem;
+      line-height: 1.55;
+    }
+
+    .scroll-hint {
+      color: #776f66;
+      font-size: .77rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .orbit-section {
+      min-height: 100vh;
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 50% 50%, rgba(96,57,25,.12), transparent 28rem),
+        #050403;
+    }
+
+    .orbit-title {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      z-index: 4;
+      width: min(calc(100% - 30px), 780px);
+    }
+
+    .orbit-title small {
+      display: block;
+      color: #867a6d;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      font-size: .68rem;
+      margin-bottom: 12px;
+    }
+
+    .orbit-title h2 {
+      margin: 0;
+      font-weight: 300;
+      font-size: clamp(2rem,4vw,4rem);
+      letter-spacing: -.045em;
+    }
+
+    .system {
+      position: relative;
+      width: min(85vw, 930px);
+      aspect-ratio: 1;
+      margin-top: 70px;
+    }
+
+    .system::before,
+    .system::after {
+      content: "";
+      position: absolute;
+      inset: 7%;
+      border: 1px solid rgba(221,175,108,.10);
+      border-radius: 50%;
+      transform: scaleY(.43) rotate(8deg);
+    }
+
+    .system::after {
+      inset: 21%;
+      transform: scaleY(.46) rotate(-14deg);
+      border-color: rgba(221,175,108,.16);
+    }
+
+    .orbit-line {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(223,174,102,.11);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%) scaleY(.42) rotate(var(--r));
+    }
+
+    .orbit-line.o1 { width: 46%; height: 46%; --r: 18deg; }
+    .orbit-line.o2 { width: 67%; height: 67%; --r: -10deg; }
+    .orbit-line.o3 { width: 86%; height: 86%; --r: 7deg; }
+
+    .sun {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 150px;
+      height: 150px;
+      transform: translate(-50%,-50%);
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 38% 34%, #ffe3aa 0 3%, #cf8e42 12%, #5b3519 40%, #160e08 72%);
+      box-shadow:
+        0 0 20px rgba(255,181,84,.28),
+        0 0 80px rgba(176,99,38,.19),
+        inset -18px -18px 35px rgba(0,0,0,.64);
+    }
+
+    .sun::after {
+      content: "SpinView";
+      position: absolute;
+      left: 50%;
+      top: calc(100% + 17px);
+      transform: translateX(-50%);
+      color: #d8cbb8;
+      font-weight: 300;
+      letter-spacing: .06em;
+      font-size: .95rem;
+    }
+
+    .planet {
+      position: absolute;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+
+    .planet:hover {
+      transform: scale(1.035);
+    }
+
+    .planet-ball {
+      flex: 0 0 auto;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.14);
+      background: radial-gradient(circle at 34% 31%, #f0d19c 0 4%, #704721 35%, #17100b 72%);
+      box-shadow: 0 0 18px rgba(204,133,60,.18);
+      position: relative;
+    }
+
+    .planet-ball::after {
+      content: "";
+      position: absolute;
+      left: -18%;
+      right: -18%;
+      top: 42%;
+      height: 22%;
+      border: 1px solid rgba(255,210,137,.25);
+      border-radius: 50%;
+      transform: rotate(-14deg);
+    }
+
+    .planet-copy strong {
+      display: block;
+      font-size: .92rem;
+      font-weight: 500;
+      color: #e7ded2;
+    }
+
+    .planet-copy span {
+      display: block;
+      margin-top: 3px;
+      color: #786f66;
+      font-size: .74rem;
+    }
+
+    .planet.active .planet-ball {
+      background: radial-gradient(circle at 34% 31%, #d6f4ff 0 4%, #487ca0 31%, #152231 70%);
+      box-shadow: 0 0 24px rgba(110,200,255,.24);
+    }
+
+    .planet.active .planet-copy strong {
+      color: #dff5ff;
+    }
+
+    .planet.disabled {
+      opacity: .34;
+      filter: grayscale(.6);
+      cursor: default;
+    }
+
+    .planet.disabled:hover {
+      transform: none;
+    }
+
+    .p-spinmind {
+      left: 12%;
+      top: 35%;
+    }
+
+    .p-spinmind .planet-ball { width: 66px; height: 66px; }
+
+    .p-spinfx {
+      right: 10%;
+      top: 32%;
+    }
+
+    .p-spinfx .planet-ball { width: 54px; height: 54px; }
+
+    .p-deitouch {
+      left: 20%;
+      bottom: 18%;
+    }
+
+    .p-deitouch .planet-ball { width: 42px; height: 42px; }
+
+    .p-holophone {
+      right: 16%;
+      bottom: 17%;
+    }
+
+    .p-holophone .planet-ball { width: 38px; height: 38px; }
+
+    .featured {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0,.82fr) minmax(0,1.18fr);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .featured-copy {
+      padding: clamp(70px,8vw,130px) clamp(30px,5vw,76px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-right: 1px solid var(--line);
+    }
+
+    .featured-label {
+      color: #8c7c6a;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      font-size: .68rem;
+      margin-bottom: 18px;
+    }
+
+    .featured-copy h2 {
+      margin: 0;
+      font-weight: 300;
+      font-size: clamp(3.2rem,7vw,7rem);
+      line-height: .9;
+      letter-spacing: -.065em;
+    }
+
+    .featured-copy h2 span {
+      display: block;
+      color: #79726a;
+      font-size: .38em;
+      letter-spacing: .03em;
+      margin-top: 16px;
+    }
+
+    .featured-copy p {
+      max-width: 500px;
+      color: #948b80;
+      line-height: 1.62;
+      margin: 26px 0 0;
+      font-size: 1rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .btn {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 999px;
+      color: #ddd5ca;
+      background: rgba(255,255,255,.025);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,.21);
+      background: rgba(255,255,255,.05);
+    }
+
+    .btn.primary {
+      color: #17100a;
+      background: linear-gradient(90deg,#b97b35,#f0c477);
+      border-color: transparent;
+      font-weight: 500;
+    }
+
+    .numeris-stage {
+      position: relative;
+      min-height: 720px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(78,54,120,.24), transparent 27rem),
+        #08070a;
+    }
+
+    .numeris-stage::before {
+      content: "";
+      position: absolute;
+      width: 80%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+      background:
+        repeating-radial-gradient(circle, rgba(121,90,255,.16) 0 2px, transparent 2px 14px),
+        conic-gradient(from 60deg, rgba(74,220,255,.10), rgba(140,80,255,.27), rgba(239,70,192,.06), rgba(66,164,255,.18));
+      animation: rotate 40s linear infinite;
+    }
+
+    @keyframes rotate {
+      to { transform: translate(-50%,-50%) rotate(360deg); }
+    }
+
+    .numeris-poster {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 2;
+    }
+
+    .numeris-poster[hidden] { display:none; }
+
+    .numeris-overlay {
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(to top, rgba(5,4,3,.75), transparent 33%),
+        linear-gradient(to left, transparent 70%, rgba(5,4,3,.22));
+    }
+
+    .numeris-note {
+      position: absolute;
+      z-index: 4;
+      left: 28px;
+      bottom: 26px;
+      color: rgba(255,255,255,.68);
+      font-size: .75rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .soon {
+      padding: 100px clamp(26px,5vw,70px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .soon-head {
+      max-width: 650px;
+      margin-bottom: 42px;
+    }
+
+    .soon-head small {
+      color: #746a5e;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      font-size: .68rem;
+    }
+
+    .soon-head h2 {
+      margin: 10px 0 0;
+      font-weight: 300;
+      font-size: clamp(2.2rem,4vw,4rem);
+      letter-spacing: -.045em;
+    }
+
+    .soon-grid {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+
+    .soon-card {
+      min-height: 210px;
+      padding: 30px;
+      background: #070604;
+      opacity: .48;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .soon-card strong {
+      font-size: 1.25rem;
+      font-weight: 400;
+    }
+
+    .soon-card span {
+      color: #746d64;
+      font-size: .82rem;
+    }
+
+    .soon-card em {
+      font-style: normal;
+      color: #5d564f;
+      font-size: .7rem;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    footer {
+      padding: 36px max(20px, calc((100vw - var(--max))/2));
+      color: #6a6259;
+      font-size: .78rem;
+    }
+
+    .footer-inner {
+      width: min(calc(100% - 40px), var(--max));
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 25px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a:hover { color: white; }
+
+    @media (max-width: 900px) {
+      .toplinks a:not(.youtube) { display:none; }
+
+      .featured {
+        grid-template-columns: 1fr;
+      }
+
+      .featured-copy {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .system {
+        width: 110vw;
+      }
+
+      .planet-copy span {
+        display:none;
+      }
+    }
+
+    @media (max-width: 650px) {
+      .topbar-inner,
+      .hero-overlay,
+      .footer-inner {
+        width: min(calc(100% - 28px), var(--max));
+      }
+
+      .hero {
+        min-height: 88vh;
+      }
+
+      .hero-image {
+        object-position: 50% 43%;
+      }
+
+      .hero-foot {
+        display:block;
+      }
+
+      .scroll-hint {
+        margin-top: 24px;
+      }
+
+      .orbit-section {
+        min-height: 760px;
+      }
+
+      .orbit-title {
+        top: 86px;
+      }
+
+      .system {
+        width: 720px;
+        margin-top: 110px;
+      }
+
+      .sun {
+        width: 110px;
+        height: 110px;
+      }
+
+      .p-spinmind { left: 23%; top: 34%; }
+      .p-spinfx { right: 21%; top: 32%; }
+      .p-deitouch { left: 28%; bottom: 20%; }
+      .p-holophone { right: 25%; bottom: 19%; }
+
+      .planet-copy strong {
+        font-size: .78rem;
+      }
+
+      .soon-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
 </head>
 
 <body>
 
-<div id="loader">
-    <div class="spinner"></div>
-    <div id="loaderText">Loading engine...</div>
-</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">
+      <span class="mini-orbit" aria-hidden="true"></span>
+      <span>SpinView</span>
+    </a>
 
-<div id="gameTitle" class="game-title">Spinview</div>
-<div id="debugConsole"></div>
+    <nav class="toplinks">
+      <a href="#universe">Explore</a>
+      <a href="#numeris">SpinMind</a>
+      <a class="youtube" href="https://www.youtube.com/@SpinViewFx" target="_blank" rel="noopener">
+        <span class="youtube-dot"></span>
+        YouTube
+      </a>
+    </nav>
+  </div>
+</header>
 
-<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+<main>
 
-<script>
-function getCurrentVersion() {
-    try {
-        var url = new URL(window.location.href);
-        var v = url.searchParams.get("_v");
-        if (v) return v;
+  <section class="hero" id="top">
+    <img
+      class="hero-image"
+      data-version-src="/assets/spinview-hero.webp"
+      alt="SpinView visual universe"
+    >
 
-        v = localStorage.getItem("siteVersion");
-        if (v) return v;
-    }
-    catch (e) {
-    }
-    return "dev";
-}
+    <div class="hero-overlay">
+      <div class="hero-foot">
+        <div class="hero-copy">
+          <div class="hero-kicker">SpinView</div>
+          <h1>Waking the view.</h1>
+          <p>
+            Living images, parallax depth and interactive worlds built around movement.
+            SpinView is where the view stops being flat.
+          </p>
+        </div>
 
-function updateVersionLabels() {
-    var version = getCurrentVersion();
-    var t = document.getElementById("gameTitle");
-    var l = document.getElementById("loaderText");
+        <a class="scroll-hint" href="#universe">Explore the system ↓</a>
+      </div>
+    </div>
+  </section>
 
-    document.title = "Spinview " + version;
+  <section class="orbit-section" id="universe">
+    <div class="orbit-title">
+      <small>The SpinView system</small>
+      <h2>Everything revolves around the view.</h2>
+    </div>
 
-    if (t) t.textContent = "Spinview " + version;
-    if (l) l.textContent = "Loading engine... " + version;
-}
+    <div class="system" aria-label="SpinView collections">
+      <div class="orbit-line o1"></div>
+      <div class="orbit-line o2"></div>
+      <div class="orbit-line o3"></div>
 
-var debugConsole = document.getElementById("debugConsole");
-var consoleVisible = false;
+      <div class="sun"></div>
 
-function consoleShow() {
-    consoleVisible = true;
-    debugConsole.classList.add("visible");
-}
+      <a class="planet active p-spinmind" href="#numeris">
+        <span class="planet-ball"></span>
+        <span class="planet-copy">
+          <strong>SpinMind</strong>
+          <span>Interactive mind experiences</span>
+        </span>
+      </a>
 
-function consoleHide() {
-    consoleVisible = false;
-    debugConsole.classList.remove("visible");
-}
+      <a class="planet active p-spinfx" href="https://www.youtube.com/@SpinViewFx" target="_blank" rel="noopener">
+        <span class="planet-ball"></span>
+        <span class="planet-copy">
+          <strong>SpinFX</strong>
+          <span>Parallax & living visuals</span>
+        </span>
+      </a>
 
-function consoleToggle() {
-    if (consoleVisible) consoleHide();
-    else consoleShow();
-}
+      <div class="planet disabled p-deitouch" aria-disabled="true">
+        <span class="planet-ball"></span>
+        <span class="planet-copy">
+          <strong>DeiTouch</strong>
+          <span>Forming</span>
+        </span>
+      </div>
 
-function consoleLine() {
-    var parts = [];
-    var i;
-    var v;
-    var line;
+      <div class="planet disabled p-holophone" aria-disabled="true">
+        <span class="planet-ball"></span>
+        <span class="planet-copy">
+          <strong>Holophone</strong>
+          <span>Forming</span>
+        </span>
+      </div>
+    </div>
+  </section>
 
-    for (i = 0; i < arguments.length; i++) {
-        v = arguments[i];
-        if (typeof v === "object") {
-            try {
-                parts.push(JSON.stringify(v));
-            }
-            catch (e) {
-                parts.push(String(v));
-            }
-        }
-        else {
-            parts.push(String(v));
-        }
-    }
+  <section class="featured" id="numeris">
+    <div class="featured-copy">
+      <div class="featured-label">SpinMind / First experience</div>
 
-    line = parts.join(" ");
-    console.log(line);
+      <h2>
+        Numeris
+        <span>Follow your branch.</span>
+      </h2>
 
-    if (debugConsole) {
-        debugConsole.textContent += line + "\n";
-        debugConsole.scrollTop = debugConsole.scrollHeight;
-    }
-}
+      <p>
+        A mathematical puzzle experience shaped by progression, procedural worlds
+        and branches that can travel from one player to another.
+      </p>
 
-function resizeCanvasCssOnly() {
-    var canvas = document.getElementById("canvas");
-    var w = window.innerWidth;
-    var h = window.innerHeight;
+      <div class="actions">
+        <a class="btn primary" href="/numeris/">Play Numeris</a>
+        <a class="btn" href="/numeris/">Open experience ↗</a>
+      </div>
+    </div>
 
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
+    <div class="numeris-stage">
+      <!--
+        When available, export a REAL Numeris screenshot/video frame here:
+        /assets/numeris/numeris-cover.webp
 
-    consoleLine(
-        "window", w, h,
-        "canvas client", canvas.clientWidth, canvas.clientHeight,
-        "canvas buffer", canvas.width, canvas.height,
-        "dpr", window.devicePixelRatio || 1
-    );
-}
+        version.js will append the current site version automatically.
+      -->
+      <img
+        id="numerisPoster"
+        class="numeris-poster"
+        data-version-src="/assets/numeris/numeris-cover.webp"
+        alt="Numeris gameplay"
+        onerror="this.hidden=true;"
+      >
 
-updateVersionLabels();
+      <div class="numeris-overlay"></div>
+      <div class="numeris-note">Live experience available</div>
+    </div>
+  </section>
 
-var title = document.getElementById("gameTitle");
-var canvas = document.getElementById("canvas");
+  <section class="soon">
+    <div class="soon-head">
+      <small>Still forming</small>
+      <h2>Not everything needs a page yet.</h2>
+    </div>
 
-title.addEventListener("pointerdown", function(e) {
-    e.preventDefault();
-    e.stopPropagation();
+    <div class="soon-grid">
+      <div class="soon-card">
+        <div>
+          <em>Future interface</em>
+          <strong>DeiTouch</strong>
+        </div>
+        <span>Experimental touch interface and virtual keyboard.</span>
+      </div>
 
-    if (window.spinviewDeactivateKeyboard) {
-        window.spinviewDeactivateKeyboard();
-    }
+      <div class="soon-card">
+        <div>
+          <em>Future sound</em>
+          <strong>Holophone</strong>
+        </div>
+        <span>A musical touch experience currently taking shape.</span>
+      </div>
+    </div>
+  </section>
 
-    if (document.activeElement === canvas) {
-        canvas.blur();
-    }
+</main>
 
-    consoleToggle();
-});
+<footer>
+  <div class="footer-inner">
+    <div>
+      © <span id="year"></span> Majify Technologies Inc.
+    </div>
 
-document.addEventListener("pointerdown", function(e) {
-    if (!consoleVisible) return;
-    if (debugConsole.contains(e.target)) return;
-    if (e.target === title) return;
-    consoleHide();
-});
-
-window.addEventListener("load", function() {
-    resizeCanvasCssOnly();
-});
-
-window.addEventListener("resize", resizeCanvasCssOnly);
-
-window.addEventListener("orientationchange", function() {
-    setTimeout(resizeCanvasCssOnly, 50);
-    setTimeout(resizeCanvasCssOnly, 250);
-    setTimeout(resizeCanvasCssOnly, 500);
-});
-
-window.onerror = function(message, source, lineno, colno, error) {
-    consoleLine("[onerror]", message, source, lineno, colno, error ? (error.stack || error) : "");
-};
-
-var Module = {
-    canvas: canvas,
-
-    locateFile: function(path) {
-        var version = getCurrentVersion();
-        var sep = path.indexOf("?") >= 0 ? "&" : "?";
-        return path + sep + "_v=" + encodeURIComponent(version);
-    },
-
-    print: function() {
-        consoleLine("[stdout]", Array.prototype.slice.call(arguments).join(" "));
-    },
-
-    printErr: function() {
-        consoleLine("[stderr]", Array.prototype.slice.call(arguments).join(" "));
-    },
-
-    onRuntimeInitialized: function() {
-        resizeCanvasCssOnly();
-        consoleLine("runtime ready");
-
-        if (window.spinviewActivateKeyboard) {
-            window.spinviewActivateKeyboard();
-        }
-
-        var loader = document.getElementById("loader");
-        if (loader) {
-            loader.style.display = "none";
-        }
-    }
-};
-</script>
+    <div class="footer-links">
+      <a href="https://www.youtube.com/@SpinViewFx" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://majify.tech" target="_blank" rel="noopener">Majify</a>
+      <a href="https://wake.tools" target="_blank" rel="noopener">Wake</a>
+      <a href="/terms.html">Terms</a>
+      <a href="/privacy.html">Privacy</a>
+      <a href="mailto:contact@majify.tech">Contact</a>
+    </div>
+  </div>
+</footer>
 
 <script>
-(function() {
-    var version = getCurrentVersion();
-    var s = document.createElement("script");
-    s.async = true;
-    s.src = "App.js?_v=" + encodeURIComponent(version);
-    document.body.appendChild(s);
-})();
+(function () {
+  document.getElementById("year").textContent = new Date().getFullYear();
+}());
 </script>
 
 </body>

@@ -17,27 +17,63 @@
     try { sessionStorage.setItem('lastReloadVersion', v); } catch(_) {}
   }
 
+  function appendVersion(url, version) {
+    if (!url) return url;
+
+    try {
+      var u = new URL(url, location.href);
+      u.searchParams.set('_v', version);
+
+      if (u.origin === location.origin) {
+        return u.pathname + u.search + u.hash;
+      }
+
+      return u.toString();
+    } catch (_) {
+      var sep = url.indexOf('?') >= 0 ? '&' : '?';
+      return url + sep + '_v=' + encodeURIComponent(version);
+    }
+  }
+
+  function versionAssets(version) {
+    var nodes = document.querySelectorAll('[data-version-src]');
+    var i;
+
+    for (i = 0; i < nodes.length; i++) {
+      var source = nodes[i].getAttribute('data-version-src');
+      if (!source) continue;
+      nodes[i].setAttribute('src', appendVersion(source, version));
+    }
+  }
+
   var storedVersion = getStoredVersion();
 
-  fetch("version.txt?_=" + Date.now(), { cache: "no-store" })
-    .then(r => r.text())
-    .then(remoteVersion => {
+  fetch("/version.txt?_=" + Date.now(), { cache: "no-store" })
+    .then(function(r) { return r.text(); })
+    .then(function(remoteVersion) {
       remoteVersion = remoteVersion.trim();
       if (!remoteVersion) return;
 
-      // If the fetched version is different from stored one
+      window.SPINVIEW_VERSION = remoteVersion;
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          versionAssets(remoteVersion);
+        }, { once: true });
+      } else {
+        versionAssets(remoteVersion);
+      }
+
       if (remoteVersion !== storedVersion) {
         setStoredVersion(remoteVersion);
 
-        // Avoid reload loop if already reloaded for this version
         if (getLastReloadVersion() === remoteVersion) return;
         setLastReloadVersion(remoteVersion);
 
-        // Force reload with cache-busting based on version
         var url = new URL(location.href);
         url.searchParams.set('_v', remoteVersion);
         location.replace(url.toString());
       }
     })
-    .catch(() => { /* optional: ignore errors silently */ });
+    .catch(function() {});
 })();
