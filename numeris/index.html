@@ -2,11 +2,54 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Numeris</title>
+<title>Numeris - Number Puzzle Game | SpinView</title>
+<meta name="description" content="Play Numeris, a procedural number puzzle game by SpinView. Solve interconnected equations, progress through evolving challenges and share your branch with friends.">
+<meta name="robots" content="index, follow">
+<meta name="googlebot" content="index, follow">
+
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<link rel="icon" type="image/png" href="numeris_favicon_512.jpg">
+
+<link rel="canonical" href="https://spinview.app/numeris">
+
+<link rel="icon" type="image/jpeg" href="numeris_favicon_512.jpg">
 <link rel="apple-touch-icon" href="numeris_favicon_512.jpg">
+
+<meta property="og:title" content="Numeris - Number Puzzle Game">
+<meta property="og:description" content="Solve evolving number puzzles, progress through procedural challenges and share your branch with friends.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://spinview.app/numeris">
+<meta property="og:site_name" content="SpinView">
+<meta property="og:image" content="https://spinview.app/numeris/numeris_favicon_512.jpg">
+<meta property="og:image:alt" content="Numeris">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Numeris - Number Puzzle Game">
+<meta name="twitter:description" content="Solve evolving number puzzles, progress through procedural challenges and share your branch with friends.">
+<meta name="twitter:image" content="https://spinview.app/numeris/numeris_favicon_512.jpg">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Numeris",
+  "url": "https://spinview.app/numeris",
+  "description": "A procedural number puzzle game where players solve interconnected equations and progress through evolving challenges.",
+  "genre": [
+    "Puzzle",
+    "Math",
+    "Logic"
+  ],
+  "playMode": "SinglePlayer",
+  "applicationCategory": "Game",
+  "operatingSystem": "Web Browser",
+  "publisher": {
+    "@type": "Organization",
+    "name": "SpinView",
+    "url": "https://spinview.app"
+  }
+}
+</script>
 <script src="version.js"></script>
 <style>
 html, body {
@@ -106,9 +149,42 @@ body {
   background: rgba(120, 0, 0, 0.84);
   border-color: rgba(255, 100, 100, 0.85);
 }
+
+/*
+ * Search-engine and accessibility content.
+ * It remains in the document flow for crawlers and assistive technologies
+ * without interfering with the fullscreen WebGL canvas.
+ */
+.seo-content {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: normal;
+  border: 0;
+}
 </style>
 </head>
 <body>
+<main class="seo-content" id="about-numeris">
+  <h1>Numeris</h1>
+  <p>
+    Numeris is a procedural number puzzle game by SpinView.
+    Solve interconnected equations, progress through evolving challenges
+    and build your own branch.
+  </p>
+  <p>
+    Play instantly in your browser on desktop, tablet or mobile.
+  </p>
+  <p>
+    Challenge your logic and mental math through continuously evolving puzzles.
+  </p>
+  <a href="https://spinview.app/">Visit SpinView</a>
+</main>
+
 <div class="app-loader" id="loader">
   <div class="app-spinner"></div>
   <div id="loaderText">Loading engine...</div>
@@ -168,7 +244,6 @@ body {
 
   function updateVersionLabel() {
     var version = getCurrentVersion();
-    document.title = "Numeris " + version;
     if (debugButton) debugButton.textContent = version;
     if (loaderText) loaderText.textContent = "Loading engine... " + version;
   }
