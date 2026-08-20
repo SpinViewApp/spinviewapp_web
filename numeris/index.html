@@ -268,10 +268,10 @@ body {
   });
   canvas.addEventListener("webglcontextlost", function (e) {
     e.preventDefault();
-    console.error("[webgl] Context lost.");
+    console.error("[webgl] Context lost");
   }, false);
   canvas.addEventListener("webglcontextrestored", function () {
-    console.warn("[webgl] Context restored.");
+    console.warn("[webgl] Context restored");
   }, false);
 
   window.addEventListener("load", resizeCanvas);
@@ -282,15 +282,28 @@ body {
     setTimeout(resizeCanvas, 500);
   });
 
-  var loaderHidden = false;
-  function hideLoader() {
-    if (loaderHidden) return;
-    loaderHidden = true;
-    if (loader) loader.style.display = "none";
-  }
-  window.numerisHideLoader = hideLoader;
-  /* If C never signals first ink (old wasm, abort-before-draw), don't stick. */
-  setTimeout(function () { hideLoader(); }, 8000);
+   var loaderHidden = false;
+   var engineAborted = false;
+
+   function hideLoader() {
+     if (loaderHidden)
+       return;
+
+     if (engineAborted)
+       return;
+
+     loaderHidden = true;
+
+     if (loader)
+       loader.style.display = "none";
+   }
+
+   window.numerisHideLoader = hideLoader;
+
+   /* Safety fallback only if engine did not abort */
+   setTimeout(function () {
+     if (!engineAborted)
+       hideLoader(); }, 8000);
 
   updateVersionLabel();
 
@@ -310,10 +323,10 @@ body {
         failIfMajorPerformanceCaveat: false
       });
     } catch (e) {
-      console.error("[webgl] WebGL2 probe failed.", e);
+      console.error("[webgl] WebGL2 probe failed", e);
     }
     if (!gl) {
-      console.error("[webgl] WebGL2 is required.");
+      console.error("[webgl] WebGL2 is required");
       return;
     }
     if (debugOn) {
@@ -351,10 +364,25 @@ body {
       if (debugOn && msg) console.info("[status]", msg);
     },
     monitorRunDependencies: function () {},
-    onAbort: function (reason) {
-      console.error("[abort]", reason);
-      if (loaderText) loaderText.textContent = "Engine aborted.";
-    },
+      onAbort: function (reason) {
+        engineAborted = true;
+
+        console.error("[abort]", reason);
+
+        if (loader) {
+          loader.style.display = "flex";
+        }
+
+        if (loaderText) {
+          if (debugOn && reason) {
+            loaderText.textContent =
+              "Engine aborted\n" + String(reason);
+            loaderText.style.whiteSpace = "pre-wrap";
+          } else {
+            loaderText.textContent = "Engine aborted";
+          }
+        }
+      },
     onRuntimeInitialized: function () {
       resizeCanvas();
       if (window.spinviewActivateKeyboard) window.spinviewActivateKeyboard();
