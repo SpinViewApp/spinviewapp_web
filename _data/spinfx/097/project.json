@@ -1,0 +1,15 @@
+{
+  "id": "spinfx-097",
+  "number": 97,
+  "title": "Light Study",
+  "type": "spinfx",
+
+  "description": "Small exploration around light, depth and motion.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-05"
+}

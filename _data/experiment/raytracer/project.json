@@ -1,0 +1,17 @@
+{
+  "id": "raytracer",
+  "title": "Raytracer Study",
+  "type": "experiment",
+  "status": "prototype",
+
+  "description": "A procedural raytracing study exploring reflections, soft shadows and evolving geometry.",
+  "iconText": "R",
+
+  "tags": [
+    "Shader",
+    "Raytracing"
+  ],
+
+  "visible": true,
+  "featured": false
+}

@@ -1,0 +1,15 @@
+{
+  "id": "spinfx-098",
+  "number": 98,
+  "title": "Motion Study",
+  "type": "spinfx",
+
+  "description": "Compact visual experiment from the SpinFX series.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-12"
+}

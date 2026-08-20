@@ -1,0 +1,174 @@
+{"generated":"2026-08-20T17:20:26","projects":[{"id": "numeris",
+  "title": "Numeris",
+  "type": "game",
+  "collection": "spinmind",
+  "status": "live",
+
+  "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
+  "short": "Cross-math puzzles inside an evolving visual world.",
+
+  "icon": "icon.webp",
+  "cover": "cover.webp",
+
+  "screens": [
+    "screen/image.webp",
+    "screen/image2.webp",
+    "screen/image3.webp"
+  ],
+
+  "tags": [
+    "Puzzle",
+    "SpinMind"
+  ],
+
+  "url": "/projects/numeris.html",
+  "play": "/numeris/",
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 1,
+  "featured_kicker": "SpinMind · Live","_base":"./_data/game/numeris/"},{"id": "deitouch",
+  "title": "DeiTouch",
+  "type": "app",
+  "status": "forming",
+
+  "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.",
+  "short": "Experimental touch interfaces and virtual keyboard concepts.",
+  "iconText": "D",
+
+  "tags": [
+    "Touch",
+    "Interface"
+  ],
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 2,
+  "featured_kicker": "App · Forming","_base":"./_data/app/deitouch/"},{"id": "holophone",
+  "title": "Holophone",
+  "type": "app",
+  "status": "forming",
+
+  "description": "A tactile music experiment where gestures become the instrument.",
+  "short": "A tactile musical interface shaped directly through touch.",
+  "iconText": "H",
+
+  "tags": [
+    "Music",
+    "Touch"
+  ],
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 3,
+  "featured_kicker": "Music · Forming","_base":"./_data/app/holophone/"},{"id": "mandelbrot",
+  "title": "Mandelbrot Study",
+  "type": "experiment",
+  "status": "prototype",
+
+  "description": "Procedural shader studies around evolving Mandelbrot worlds.",
+  "iconText": "M",
+
+  "tags": [
+    "Shader",
+    "Fractal"
+  ],
+
+  "visible": true,
+  "featured": false,"_base":"./_data/experiment/mandelbrot/"},{"id": "raytracer",
+  "title": "Raytracer Study",
+  "type": "experiment",
+  "status": "prototype",
+
+  "description": "A procedural raytracing study exploring reflections, soft shadows and evolving geometry.",
+  "iconText": "R",
+
+  "tags": [
+    "Shader",
+    "Raytracing"
+  ],
+
+  "visible": true,
+  "featured": false,"_base":"./_data/experiment/raytracer/"}],"spinfx":[{"id": "spinfx-099",
+  "number": 99,
+  "title": "Depth Study",
+  "type": "spinfx",
+
+  "description": "Living-image experiment exploring movement and visual parallax.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-19","_base":"./_data/spinfx/099/"},{"id": "spinfx-098",
+  "number": 98,
+  "title": "Motion Study",
+  "type": "spinfx",
+
+  "description": "Compact visual experiment from the SpinFX series.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-12","_base":"./_data/spinfx/098/"},{"id": "spinfx-097",
+  "number": 97,
+  "title": "Light Study",
+  "type": "spinfx",
+
+  "description": "Small exploration around light, depth and motion.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-05","_base":"./_data/spinfx/097/"},{"id": "spinfx-096",
+  "number": 96,
+  "title": "Shader Study",
+  "type": "spinfx",
+
+  "description": "A procedural visual experiment from SpinView.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-07-29","_base":"./_data/spinfx/096/"},{"id": "spinfx-001",
+  "number": 1,
+  "title": "Wire Study",
+  "type": "spinfx",
+
+  "description": "An early flow study from the SpinFX series.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-07-01","_base":"./_data/spinfx/001/"}],"notes":[
+    {
+      "date": "08/19",
+      "title": "Numeris sharing branches",
+      "text": "Refining how a branch is shared, continued and challenged.",
+      "url": "/projects/numeris.html"
+    },
+    {
+      "date": "08/18",
+      "title": "Dynamic boss levels",
+      "text": "Testing bosses that build the board while the player solves it.",
+      "url": "/projects/numeris.html"
+    },
+    {
+      "date": "08/17",
+      "title": "Mandelbrot as identity",
+      "text": "The fractal background is becoming one of Numeris' strongest visual signatures.",
+      "url": "/projects/numeris.html"
+    }
+  ]}

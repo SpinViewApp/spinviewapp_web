@@ -1,0 +1,15 @@
+{
+  "id": "spinfx-096",
+  "number": 96,
+  "title": "Shader Study",
+  "type": "spinfx",
+
+  "description": "A procedural visual experiment from SpinView.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-07-29"
+}

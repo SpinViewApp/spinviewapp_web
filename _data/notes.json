@@ -1,0 +1,22 @@
+{
+  "notes": [
+    {
+      "date": "08/19",
+      "title": "Numeris sharing branches",
+      "text": "Refining how a branch is shared, continued and challenged.",
+      "url": "/projects/numeris.html"
+    },
+    {
+      "date": "08/18",
+      "title": "Dynamic boss levels",
+      "text": "Testing bosses that build the board while the player solves it.",
+      "url": "/projects/numeris.html"
+    },
+    {
+      "date": "08/17",
+      "title": "Mandelbrot as identity",
+      "text": "The fractal background is becoming one of Numeris' strongest visual signatures.",
+      "url": "/projects/numeris.html"
+    }
+  ]
+}

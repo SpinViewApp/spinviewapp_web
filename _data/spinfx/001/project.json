@@ -1,0 +1,15 @@
+{
+  "id": "spinfx-001",
+  "number": 1,
+  "title": "Wire Study",
+  "type": "spinfx",
+
+  "description": "An early flow study from the SpinFX series.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-07-01"
+}

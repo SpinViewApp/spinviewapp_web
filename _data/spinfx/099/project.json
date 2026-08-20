@@ -1,0 +1,15 @@
+{
+  "id": "spinfx-099",
+  "number": 99,
+  "title": "Depth Study",
+  "type": "spinfx",
+
+  "description": "Living-image experiment exploring movement and visual parallax.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-19"
+}

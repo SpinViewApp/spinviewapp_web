@@ -1,0 +1,33 @@
+{
+  "id": "numeris",
+  "title": "Numeris",
+  "type": "game",
+  "collection": "spinmind",
+  "status": "live",
+
+  "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
+  "short": "Cross-math puzzles inside an evolving visual world.",
+
+  "icon": "icon.webp",
+  "cover": "cover.webp",
+
+  "screens": [
+    "screen/image.webp",
+    "screen/image2.webp",
+    "screen/image3.webp"
+  ],
+
+  "tags": [
+    "Puzzle",
+    "SpinMind"
+  ],
+
+  "url": "/projects/numeris.html",
+  "play": "/numeris/",
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 1,
+  "featured_kicker": "SpinMind · Live"
+}

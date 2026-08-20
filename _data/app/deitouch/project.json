@@ -1,0 +1,21 @@
+{
+  "id": "deitouch",
+  "title": "DeiTouch",
+  "type": "app",
+  "status": "forming",
+
+  "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.",
+  "short": "Experimental touch interfaces and virtual keyboard concepts.",
+  "iconText": "D",
+
+  "tags": [
+    "Touch",
+    "Interface"
+  ],
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 2,
+  "featured_kicker": "App · Forming"
+}

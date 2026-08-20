@@ -1,0 +1,17 @@
+{
+  "id": "mandelbrot",
+  "title": "Mandelbrot Study",
+  "type": "experiment",
+  "status": "prototype",
+
+  "description": "Procedural shader studies around evolving Mandelbrot worlds.",
+  "iconText": "M",
+
+  "tags": [
+    "Shader",
+    "Fractal"
+  ],
+
+  "visible": true,
+  "featured": false
+}
