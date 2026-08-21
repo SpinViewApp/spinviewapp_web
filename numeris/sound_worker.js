@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu34
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu35
  */
 (function (root) {
   "use strict";
@@ -169,9 +169,9 @@
     }
   }
 
-  /* One 60 Hz slice at the 48 kHz engine rate. The worker asks ssound for
-   * exactly what the sink needs; it never renders a hidden 2048-frame cache. */
-  var GPU_RENDER_MAX = 800;
+  /* SIZE_X is the technical maximum of one ssound GPU pass. It is unrelated
+   * to graphical FPS: 800 is merely 48000/60, not an audio render limit. */
+  var GPU_RENDER_LIMIT = 2048;
   var gpuBlockSerial = 0;
 
   function clampPcm(buf, n) {
@@ -199,7 +199,7 @@
     var chunk, chunkFrames;
     while (resampleFrames < want) {
       chunkFrames = want - resampleFrames;
-      if (chunkFrames > GPU_RENDER_MAX) chunkFrames = GPU_RENDER_MAX;
+      if (chunkFrames > GPU_RENDER_LIMIT) chunkFrames = GPU_RENDER_LIMIT;
       chunk = generateSourceBlock(chunkFrames);
       chunkFrames = chunk.length >> 1;
       if (resampleHead + resampleFrames + chunkFrames > RESAMPLE_CAP) {
@@ -551,7 +551,7 @@
   var blockFrames = 256;
   var targetFrames = 2048;
   var needFrames = 1024;
-  var gpuRenderMaxFrames = 800;
+  var gpuRenderLimitFrames = 2048;
   var gpuRequestLastFrames = 0;
   var gpuRequestMaxFrames = 0;
   var fillBusy = 0;
@@ -692,7 +692,7 @@
   function sendPcmBlock(requestFrames) {
     if (!audioPort) return false;
     var frames = requestFrames > 0 ? requestFrames | 0 : blockFrames;
-    if (frames > gpuRenderMaxFrames) frames = gpuRenderMaxFrames;
+    if (frames > gpuRenderLimitFrames) frames = gpuRenderLimitFrames;
     if (frames < 1) return false;
     gpuRequestLastFrames = frames;
     if (frames > gpuRequestMaxFrames) gpuRequestMaxFrames = frames;
@@ -821,7 +821,7 @@
     queued = estimatedQueued();
     deficit = want - queued;
     if (deficit >= 128) {
-      requestFrames = deficit > gpuRenderMaxFrames ? gpuRenderMaxFrames : deficit;
+      requestFrames = deficit > gpuRenderLimitFrames ? gpuRenderLimitFrames : deficit;
       sendPcmBlock(requestFrames);
     }
     fillBusy = 0;
@@ -998,9 +998,9 @@
           SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : (
           SoundWorkerSsound.getConfigRate ? SoundWorkerSsound.getConfigRate() : 48000);
-        gpuRenderMaxFrames = Math.ceil((msg.synthRate > 0 ? msg.synthRate : 48000) / 60);
-        if (gpuRenderMaxFrames < 256) gpuRenderMaxFrames = 256;
-        if (gpuRenderMaxFrames > 800) gpuRenderMaxFrames = 800;
+        /* Must match ssound SIZE_X. This is only the per-pass capacity; the
+         * actual request remains min(FIFO deficit, 2048). */
+        gpuRenderLimitFrames = 2048;
         preferCpu = !!msg.preferCpu;
         synthReady = false;
         pumpPaused = false;
@@ -1042,7 +1042,7 @@
         workerPhase = "init-load-wasm";
         console.log("[sound_worker] init rate=" + sampleRate +
           " block=" + blockFrames + " target=" + targetFrames +
-          " need=" + needFrames + " gpuMax=" + gpuRenderMaxFrames +
+          " need=" + needFrames + " gpuLimit=" + gpuRenderLimitFrames +
           " voices=" + maxVoices);
         SoundWorkerSsound.load({ preferCpu: preferCpu, maxVoices: maxVoices })
           .then(postReady)

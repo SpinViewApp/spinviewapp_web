@@ -391,8 +391,8 @@
       vendor: "",
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
-      /* PCM messages are dynamically sized by the worker up to one 60 Hz
-       * audio slice (800 at 48 kHz); this remains the minimum refill quantum. */
+      /* PCM messages are dynamically sized from the FIFO deficit. They are
+       * independent of graphical FPS and may reach ssound SIZE_X (2048). */
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 512,
       /* FIFO depth absorbs scheduling hitches; it no longer controls the GPU
        * render size, which follows the exact queue deficit. */
@@ -517,8 +517,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu34";
-      else url += "&v=gpu34";
+      if (url.indexOf("?") < 0) url += "?v=gpu35";
+      else url += "&v=gpu35";
       var worker;
       try {
         worker = new Worker(url);
