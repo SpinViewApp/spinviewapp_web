@@ -1,8 +1,7 @@
 /* Proto bus - worker PCM @48k â†’ optional resample â†’ AudioWorklet (desktop + Android).
  *
- * Android note: AudioWorklet needs HTTPS/localhost. On plain HTTP the sink falls
- * back to ScriptProcessor but still consumes the SAME worker PCM (script-pcm),
- * not a separate inline synth. Prefer HTTPS so FPS cannot starve the sink.
+ * Production uses App.wasm's Sokol GPU and creates no Worker or second WebGL
+ * context. When AudioWorklet is unavailable Numeris selects Sokol WebAudio.
  */
 (function (global) {
   "use strict";
@@ -216,6 +215,24 @@
       "      if (msg.type === \"set-mode\") {"
     )
     .replace(
+      "      if (msg.type === \"set-mode\") {",
+      "      if (msg.type === \"pcm\" && msg.samples) {\n" +
+      "        var direct = msg.samples instanceof Float32Array ? msg.samples : new Float32Array(msg.samples);\n" +
+      "        var directFrames = msg.frames | 0;\n" +
+      "        if (directFrames > 0) {\n" +
+      "          this.blocks.push({ samples: direct, frames: directFrames });\n" +
+      "          this.queuedFrames += directFrames;\n" +
+      "          this.primed = true;\n" +
+      "          if (!this.fifoReadyNotified && this.queuedFrames >= this.needThreshold) {\n" +
+      "            this.fifoReadyNotified = true;\n" +
+      "            this.port.postMessage({ type: \"fifo-ready\", queuedFrames: this.queuedFrames | 0 });\n" +
+      "          }\n" +
+      "        }\n" +
+      "        return;\n" +
+      "      }\n" +
+      "      if (msg.type === \"set-mode\") {"
+    )
+    .replace(
       "              this.queuedFrames += frames;\n              if (this._needSent) {",
       "              this.queuedFrames += frames;\n" +
       "              if (!this.fifoReadyNotified && this.queuedFrames >= this.needThreshold) {\n" +
@@ -303,6 +320,7 @@
     /* Normal path: faithful GPU-worker PCM. Inline synthesis remains a
      * diagnostic path only; it cannot reproduce every generated .sound. */
     var inlineSynth = !!opts.forceInlineSynth;
+    var mainThreadPcm = !!opts.mainThreadPcm;
     /* AudioWorklet is the low-latency sink. ScriptProcessor remains available
      * for old or insecure WebViews where the Worklet cannot be installed. */
     var preferWorklet = !!opts.preferWorklet;
@@ -373,6 +391,7 @@
       preferCpu: !!opts.preferCpu,
       preferWorklet: preferWorklet,
       inlineSynth: inlineSynth,
+      mainThreadPcm: mainThreadPcm,
       mobile: mobile,
       _diagLastMs: 0,
       _diagWarnMs: 0,
@@ -469,7 +488,7 @@
     }
 
     /* ---- optional GPU worker (PCM proto only) ---- */
-    if (!inlineSynth) {
+    if (!inlineSynth && !mainThreadPcm) {
       /* OffscreenCanvas is only needed by the GPU module inside the worker,
        * which degrades to the JS synth on its own — do not fail the bus here. */
       if (!workerSupported(false)) {
@@ -691,10 +710,11 @@
       }
       state.worker = worker;
     } else {
-      /* Inline: ready immediately - no WASM/GL worker cold start. */
+      /* Main Sokol PCM and inline modes need no Worker or second GL context. */
       state.ready = true;
       state.ok = true;
-      state.renderer = "worklet-inline";
+      state.renderer = mainThreadPcm ? "sokol-main" : "worklet-inline";
+      state.stats.backend = state.renderer;
       if (typeof opts.onReady === "function") {
         try {
           opts.onReady(state, { renderer: state.renderer });
@@ -1540,6 +1560,18 @@
         fadeOutputIn("inline");
         return;
       }
+      if (state.mainThreadPcm) {
+        node.port.postMessage({
+          type: "set-thresholds",
+          needFrames: state.needFrames,
+          targetFrames: state.targetFrames
+        });
+        connectAudioOut(node, ctx);
+        state.worklet = node;
+        state.audioPath = "worklet-pcm";
+        markAudioReadyIfRunning();
+        return;
+      }
       var channel = new MessageChannel();
       state.audioPort = null; /* source port is owned by the AudioWorkletNode */
       attachWorkerAudioPort(channel.port1);
@@ -1649,6 +1681,27 @@
       state.captureState = "requested";
       state.worker.postMessage({ type: "capture_pcm", seconds: seconds || 5 });
       return 1;
+    };
+
+    /* App.wasm drives this bridge from the main Sokol GPU context. */
+    state.expectFrames = function () {
+      if (!state.mainThreadPcm || !state.audioReady || !state.worklet) return 0;
+      var want = (state.targetFrames | 0) - (state.stats.queuedFrames | 0);
+      if (want < 0) want = 0;
+      if (want > 2048) want = 2048;
+      return want | 0;
+    };
+    state.pushPcm = function (samples, frames) {
+      if (!state.mainThreadPcm || !state.worklet || !state.worklet.port) return 0;
+      frames = frames | 0;
+      if (frames <= 0) return 0;
+      state.worklet.port.postMessage(
+        { type: "pcm", samples: samples, frames: frames },
+        [samples.buffer]
+      );
+      state.stats.queuedFrames = (state.stats.queuedFrames | 0) + frames;
+      state.stats.pcm_blocks = (state.stats.pcm_blocks | 0) + 1;
+      return frames;
     };
 
     state._pendingPlays = [];
@@ -2226,7 +2279,7 @@
     state.startAudio = function () {
       var resumePromise;
       var ctx;
-      if (state._retired || !state.worker) {
+      if (state._retired || (!state.worker && !state.mainThreadPcm)) {
         /* Sokol / main-thread GPU owns the device. Do not open a second
          * AudioContext — Chrome glitches when two graphs run at once. */
         return Promise.resolve(state);
@@ -2313,6 +2366,15 @@
           " ctx.audioWorklet=" + (ctx.audioWorklet ? 1 : 0) +
           " workerOk=" + (state.ok ? 1 : 0) +
           " workerReady=" + (state.ready ? 1 : 0));
+        /* Numeris main-thread PCM has exactly two explicit choices in Settings:
+         * AudioWorklet here, or Sokol WebAudio outside this bus. Never hide a
+         * third ScriptProcessor path behind the AudioWorklet button. */
+        if (state.mainThreadPcm &&
+            (!workletSupported(ctx) || !isSecureEnough())) {
+          state.audioStage = "error";
+          state.error = "audio-worklet-unavailable";
+          throw new Error(state.error);
+        }
         if (preferWorklet && workletSupported(ctx) && isSecureEnough()) {
           state.audioStage = "worklet-module";
           /* Loading a worklet while AudioContext is suspended can hang on
@@ -2328,10 +2390,21 @@
               attachWorkletNodeSync(ctx);
               return;
             }
+            if (state.mainThreadPcm) {
+              state.audioStage = "error";
+              state.error = "audio-worklet-timeout";
+              throw new Error(state.error);
+            }
             console.warn("[sound_bus] Worklet timeout; using ScriptProcessor PCM");
             state.audioStage = "script-pcm";
             startScriptProcessorFallback(ctx);
           }, function (err) {
+            if (state.mainThreadPcm) {
+              state.audioStage = "error";
+              state.error = "audio-worklet-init:" +
+                String(err && err.message ? err.message : err);
+              throw new Error(state.error);
+            }
             console.warn("[sound_bus] Worklet unavailable; using ScriptProcessor PCM", err);
             state.audioStage = "script-pcm";
             startScriptProcessorFallback(ctx);
