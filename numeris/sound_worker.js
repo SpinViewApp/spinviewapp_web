@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu30
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu34
  */
 (function (root) {
   "use strict";
@@ -17,6 +17,7 @@
   var ECHO_FB = 0.4;
   var gpuVariants = null;
   var loadError = "";
+  var maxVoices = 32;
   var preferCpu = false;
   var srcScratch = null;
   var srcScratchFrames = 0;
@@ -75,8 +76,6 @@
     resampleHead = 0;
     resampleFrames = 0;
     resamplePos = 0.0;
-    gpuHoldOff = 0;
-    gpuHoldLen = 0;
   }
 
   function silentBlock(frames) {
@@ -132,21 +131,6 @@
     var fz = desc.freqZ != null ? +desc.freqZ : 0.0;
     var fw = desc.freqW != null ? +desc.freqW : 1.0;
     var toff = desc.timeOffset != null ? +desc.timeOffset : 0.0;
-    /* A new note must never discard audible samples already rendered in
-     * gpuHold. Doing so skips up to GPU_RENDER frames and creates a hard edge
-     * at the next 256-frame PCM block (very audible for continuous music).
-     * Idle look-ahead is all zero, so only discard a genuinely silent tail to
-     * keep the fast first-note response without breaking continuity. */
-    if (gpuHold && gpuHoldOff < gpuHoldLen) {
-      var holdPeak = 0;
-      var hi, ha;
-      for (hi = gpuHoldOff * 2; hi < gpuHoldLen * 2; hi++) {
-        ha = Math.abs(gpuHold[hi]);
-        if (ha > holdPeak) holdPeak = ha;
-        if (holdPeak >= 0.00001) break;
-      }
-      if (holdPeak < 0.00001) gpuHoldOff = gpuHoldLen;
-    }
     return (
       wasm._sound_worker_play(
         variant, vol, dur, fadein, envelop, fx, fy, fz, fw, toff
@@ -185,10 +169,9 @@
     }
   }
 
-  var GPU_RENDER = 2048;
-  var gpuHold = new Float32Array(GPU_RENDER * 2);
-  var gpuHoldOff = 0;
-  var gpuHoldLen = 0;
+  /* One 60 Hz slice at the 48 kHz engine rate. The worker asks ssound for
+   * exactly what the sink needs; it never renders a hidden 2048-frame cache. */
+  var GPU_RENDER_MAX = 800;
   var gpuBlockSerial = 0;
 
   function clampPcm(buf, n) {
@@ -206,34 +189,18 @@
     if (frames < 1) frames = 256;
     if (!((backend.indexOf("wasm") === 0) && wasm))
       return silentBlock(frames);
-    var out = acquireSrcScratch(frames);
-    var filled = 0;
-    var take, chunk;
-    while (filled < frames) {
-      if (gpuHoldOff >= gpuHoldLen) {
-        chunk = wasmGenerateBlock(GPU_RENDER);
-        gpuBlockSerial++;
-        gpuHold.set(chunk.subarray(0, GPU_RENDER * 2));
-        clampPcm(gpuHold, GPU_RENDER * 2);
-        gpuHoldOff = 0;
-        gpuHoldLen = GPU_RENDER;
-      }
-      take = frames - filled;
-      if (take > gpuHoldLen - gpuHoldOff) take = gpuHoldLen - gpuHoldOff;
-      out.set(
-        gpuHold.subarray(gpuHoldOff * 2, (gpuHoldOff + take) * 2),
-        filled * 2
-      );
-      gpuHoldOff += take;
-      filled += take;
-    }
-    return out.subarray(0, frames * 2);
+    var out = wasmGenerateBlock(frames);
+    gpuBlockSerial++;
+    clampPcm(out, frames * 2);
+    return out;
   }
 
   function ensureSourceFrames(want) {
     var chunk, chunkFrames;
     while (resampleFrames < want) {
-      chunk = generateSourceBlock(2048);
+      chunkFrames = want - resampleFrames;
+      if (chunkFrames > GPU_RENDER_MAX) chunkFrames = GPU_RENDER_MAX;
+      chunk = generateSourceBlock(chunkFrames);
       chunkFrames = chunk.length >> 1;
       if (resampleHead + resampleFrames + chunkFrames > RESAMPLE_CAP) {
         resampleSamples.copyWithin(
@@ -304,7 +271,7 @@
     try {
       if (typeof importScripts === "function") {
         var loaded = false;
-        var names = ["SoundWorker.js?v=gpu16", "./SoundWorker.js?v=gpu16"];
+        var names = ["SoundWorker.js?v=gpu17", "./SoundWorker.js?v=gpu17"];
         var ni;
         for (ni = 0; ni < names.length; ni++) {
           try {
@@ -372,7 +339,7 @@
           if (p === "App.wasm") p = "SoundWorker.wasm";
           try {
             var u = new URL(p, self.location.href);
-            u.searchParams.set("v", "gpu25");
+            u.searchParams.set("v", "gpu26");
             return u.href;
           } catch (e) {
             return p;
@@ -386,9 +353,9 @@
           try {
             if (
               typeof wasm._sound_worker_version !== "function" ||
-              (wasm._sound_worker_version() | 0) < 22
+              (wasm._sound_worker_version() | 0) < 24
             ) {
-              loadError = "SoundWorker.wasm predates Numeris GPU worker v22";
+              loadError = "SoundWorker.wasm predates Numeris GPU worker v24";
               wasm = null;
               backend = "gpu-unavailable";
               return false;
@@ -401,6 +368,8 @@
           }
           try {
             if (typeof wasm._sound_worker_init === "function") wasm._sound_worker_init();
+            if (typeof wasm._sound_worker_set_max_voices === "function")
+              wasm._sound_worker_set_max_voices(maxVoices);
           } catch (eInit) {
             loadError = "init: " + (eInit && eInit.message ? eInit.message : eInit);
             console.warn("[SoundWorkerSsound] init error", eInit);
@@ -451,6 +420,7 @@
 
   function load(opts) {
     if (opts && opts.preferCpu) preferCpu = true;
+    if (opts && opts.maxVoices > 0) maxVoices = opts.maxVoices | 0;
     if (loadPromise) return loadPromise;
     if (preferCpu) {
       backend = "gpu-unavailable";
@@ -502,8 +472,7 @@
     getGpuBlockSerial: function () { return gpuBlockSerial; },
     /* Samples already synthesized but not yet consumed by the PCM pump. */
     getProducerHoldFrames: function () {
-      var hold = gpuHoldLen - gpuHoldOff;
-      return hold > 0 ? hold | 0 : 0;
+      return 0;
     },
     lastPeak: function () {
       return wasmAlive() && wasm._sound_worker_last_peak
@@ -571,6 +540,9 @@
 (function () {
   "use strict";
 
+  /* This pump is a separate strict-mode closure from SoundWorkerSsound.
+   * Keep diagnostics in the closure that reads and writes them. */
+  var workerPhase = "boot";
   var running = false;
   var pumpPaused = false;
   var tickDelayMs = 16;
@@ -579,6 +551,9 @@
   var blockFrames = 256;
   var targetFrames = 2048;
   var needFrames = 1024;
+  var gpuRenderMaxFrames = 800;
+  var gpuRequestLastFrames = 0;
+  var gpuRequestMaxFrames = 0;
   var fillBusy = 0;
   var sampleRate = 48000;
   var queuedEstimate = 0;
@@ -587,6 +562,7 @@
   var audioPumpTimer = 0;
   var silentPumpTimer = 0;
   var preferCpu = false;
+  var maxVoices = 32;
   var synthBlocks = 0;
   var synthLastMs = 0;
   var synthSumMs = 0;
@@ -618,34 +594,22 @@
   var captureTargetFrames = 0;
   var synthReady = false;
   var pendingPlays = [];
-  var pcmPool = [];
-  var pcmPoolBytes = 0;
   var stats = { n: 0, last_ms: 0, avg_ms: 0, max_ms: 0, sum_ms: 0 };
 
   function acquirePcmBuffer(bytes) {
-    var ab;
-    if (pcmPoolBytes !== bytes) {
-      pcmPool.length = 0;
-      pcmPoolBytes = bytes;
-    }
-    ab = pcmPool.pop();
-    if (!ab || ab.byteLength !== bytes) ab = new ArrayBuffer(bytes);
-    return ab;
-  }
-
-  function recycleHint(bytes) {
-    if (pcmPoolBytes !== bytes) {
-      pcmPool.length = 0;
-      pcmPoolBytes = bytes;
-    }
-    while (pcmPool.length < 4) pcmPool.push(new ArrayBuffer(bytes));
+    /* The buffer is transferred to the Worklet and becomes detached here;
+     * preallocating replacements only multiplies allocation for dynamic sizes. */
+    return new ArrayBuffer(bytes);
   }
 
   function fail(reason, detail) {
+    var fullDetail = "phase=" + workerPhase +
+      (detail ? " | " + String(detail) : "");
+    console.error("[sound_worker] " + (reason || "unknown") + " " + fullDetail);
     postMessage({
       type: "error",
       reason: reason || "unknown",
-      detail: detail ? String(detail) : ""
+      detail: fullDetail
     });
   }
 
@@ -659,6 +623,8 @@
       max_ms: stats.max_ms,
       pcm_blocks: pcmBlocksSent,
       queued_est: estimatedQueued(),
+      gpu_request_frames: gpuRequestLastFrames,
+      gpu_request_max_frames: gpuRequestMaxFrames,
       synth_rate:
         typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getSynthesisRate
           ? SoundWorkerSsound.getSynthesisRate() : 48000,
@@ -723,9 +689,13 @@
     return q > 0 ? q : 0;
   }
 
-  function sendPcmBlock() {
+  function sendPcmBlock(requestFrames) {
     if (!audioPort) return false;
-    var frames = blockFrames;
+    var frames = requestFrames > 0 ? requestFrames | 0 : blockFrames;
+    if (frames > gpuRenderMaxFrames) frames = gpuRenderMaxFrames;
+    if (frames < 1) return false;
+    gpuRequestLastFrames = frames;
+    if (frames > gpuRequestMaxFrames) gpuRequestMaxFrames = frames;
     var bytes = frames * 2 * 4;
     var synthT0 = performance.now();
     var samples = SoundWorkerSsound.generateBlock(frames, sampleRate);
@@ -809,7 +779,6 @@
       pcmHaveTail = true;
       pcmLastGpuSerial = sourceSerial;
     }
-    recycleHint(bytes);
     synthLastMs = performance.now() - synthT0;
     synthBlocks++;
     synthSumMs += synthLastMs;
@@ -836,17 +805,10 @@
     return true;
   }
 
-  function forcePushBlocks(n) {
-    var i;
-    if (!audioPort || !running) return;
-    n = n > 0 ? n | 0 : 2;
-    for (i = 0; i < n; i++) sendPcmBlock();
-  }
-
   function fillToTarget(target) {
     if (!audioPort || !running || !synthReady || fillBusy) return;
     var want = target > 0 ? target : targetFrames;
-    var guard = 0;
+    var queued, deficit, requestFrames;
     var fillT0 = performance.now();
     var blocksBefore = pcmBlocksSent;
     fillBusy = 1;
@@ -854,9 +816,13 @@
     /* Android starts at 4096, so the old 4096 clamp silently cancelled every
      * adaptive boost requested by the realtime sink after an underrun. */
     if (want > 12288) want = 12288;
-    while (running && audioPort && estimatedQueued() < want && guard < 24) {
-      sendPcmBlock();
-      guard++;
+    /* Exactly one bounded GPU pass per worker turn. The timer then yields so
+     * MessagePort can deliver this PCM before another readback is attempted. */
+    queued = estimatedQueued();
+    deficit = want - queued;
+    if (deficit >= 128) {
+      requestFrames = deficit > gpuRenderMaxFrames ? gpuRenderMaxFrames : deficit;
+      sendPcmBlock(requestFrames);
     }
     fillBusy = 0;
     fillLastMs = performance.now() - fillT0;
@@ -989,8 +955,8 @@
       noteQueued(keep);
     }
     /* timeOffset is relative to what the listener hears now. The GPU producer
-     * is already ahead by the Worklet FIFO plus its unread 2048-frame block;
-     * subtract that lead or adaptive buffering delays every musical note. */
+     * is already ahead by the Worklet FIFO; subtract that lead or adaptive
+     * buffering delays every musical note. */
     var scheduled = msg;
     if (msg && msg.timeOffset > 0 && sampleRate > 0) {
       var holdFrames = SoundWorkerSsound.getProducerHoldFrames
@@ -1006,7 +972,6 @@
       scheduleSilentPump();
       return;
     }
-    forcePushBlocks(1);
     fillToTarget(needFrames);
     scheduleAudioPump();
   }
@@ -1021,8 +986,10 @@
   onmessage = function (ev) {
     var msg = ev.data || {};
     var type = msg.type;
+    workerPhase = "message:" + (type || "unknown");
     try {
       if (type === "init") {
+        workerPhase = "init-config";
         tickDelayMs = msg.tick_ms > 0 ? msg.tick_ms | 0 : 16;
         blockFrames = msg.blockFrames > 0 ? msg.blockFrames | 0 : 256;
         targetFrames = msg.targetFrames > 0 ? msg.targetFrames | 0 : 2048;
@@ -1031,10 +998,16 @@
           SoundWorkerSsound.setConfigRate(msg.synthRate | 0);
         sampleRate = msg.sampleRate > 0 ? +msg.sampleRate : (
           SoundWorkerSsound.getConfigRate ? SoundWorkerSsound.getConfigRate() : 48000);
+        gpuRenderMaxFrames = Math.ceil((msg.synthRate > 0 ? msg.synthRate : 48000) / 60);
+        if (gpuRenderMaxFrames < 256) gpuRenderMaxFrames = 256;
+        if (gpuRenderMaxFrames > 800) gpuRenderMaxFrames = 800;
         preferCpu = !!msg.preferCpu;
         synthReady = false;
         pumpPaused = false;
         pendingPlays.length = 0;
+        maxVoices = msg.maxVoices > 0 ? msg.maxVoices | 0 : 32;
+        if (maxVoices < 4) maxVoices = 4;
+        if (maxVoices > 64) maxVoices = 64;
         if (blockFrames < 128) blockFrames = 128;
         if (blockFrames > 512) blockFrames = 512;
         if (targetFrames < 1024) targetFrames = 1024;
@@ -1044,6 +1017,7 @@
         function postReady(backend) {
           var err = SoundWorkerSsound.getLoadError ? SoundWorkerSsound.getLoadError() : "";
           synthReady = true;
+          console.log("[sound_worker] voice budget=" + maxVoices);
           postMessage({
             type: "ready",
             audio: !!audioPort,
@@ -1065,9 +1039,18 @@
              finishWarmupBarrier(barrier);
            }
         }
-        SoundWorkerSsound.load({ preferCpu: preferCpu })
+        workerPhase = "init-load-wasm";
+        console.log("[sound_worker] init rate=" + sampleRate +
+          " block=" + blockFrames + " target=" + targetFrames +
+          " need=" + needFrames + " gpuMax=" + gpuRenderMaxFrames +
+          " voices=" + maxVoices);
+        SoundWorkerSsound.load({ preferCpu: preferCpu, maxVoices: maxVoices })
           .then(postReady)
-          .catch(function () { postReady("gpu-unavailable"); });
+          .catch(function (loadErr) {
+            console.error("[sound_worker] load rejected phase=" + workerPhase,
+              loadErr && loadErr.stack ? loadErr.stack : loadErr);
+            postReady("gpu-unavailable");
+          });
          return;
        }
        if (type === "warmup_barrier") {
@@ -1124,7 +1107,7 @@
         if (audioPort) {
           noteQueued(0);
           audioPort.postMessage({ type: "flush" });
-          if (synthReady) forcePushBlocks(4);
+          if (synthReady) fillToTarget(targetFrames);
         }
         postMessage({ type: "stopped_all" });
         return;
@@ -1205,7 +1188,9 @@
         return;
       }
     } catch (err) {
-      fail("worker-exception", err && err.message ? err.message : err);
+      fail("worker-exception",
+        (err && err.message ? err.message : err) +
+        (err && err.stack ? " | " + err.stack : ""));
       running = false;
       clearTick();
       clearAudioPump();

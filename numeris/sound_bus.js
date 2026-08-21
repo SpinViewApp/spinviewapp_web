@@ -391,11 +391,11 @@
       vendor: "",
       width: opts.width > 0 ? opts.width | 0 : 1024,
       height: opts.height > 0 ? opts.height | 0 : 1,
-      /* 512 frames halves MessageChannel traffic versus 256 (94 vs 188
-       * transfers/s at 48 kHz) without increasing the first-note cushion. */
+      /* PCM messages are dynamically sized by the worker up to one 60 Hz
+       * audio slice (800 at 48 kHz); this remains the minimum refill quantum. */
       blockFrames: opts.blockFrames > 0 ? opts.blockFrames | 0 : 512,
-      /* A GPU pass renders 2048 frames at once. Refill before less than one
-       * pass remains, otherwise a readback hitch drains the Worklet FIFO. */
+      /* FIFO depth absorbs scheduling hitches; it no longer controls the GPU
+       * render size, which follows the exact queue deficit. */
       targetFrames: opts.targetFrames > 0 ? opts.targetFrames | 0 : (mobile ? 4096 : 3072),
       needFrames: opts.needFrames > 0 ? opts.needFrames | 0 : (mobile ? 2048 : 1536),
       /* Engine clock (SSOUND_SAMPLE_RATE). Device rate filled after AudioContext. */
@@ -437,6 +437,8 @@
         " q=" + (msg.queuedFrames | 0) + "/" + state.targetFrames +
         " min=" + (msg.minQueuedFrames | 0) +
         " workerQ~" + (s.queued_est | 0) +
+        " gpuReq=" + (s.gpuRequestFrames | 0) +
+        "/" + (s.gpuRequestMaxFrames | 0) +
         " wait=" + audioDiagNumber(msg.fillWaitMs) +
         "/" + audioDiagNumber(msg.fillWaitMaxMs) + "ms" +
         " gpu=" + audioDiagNumber(s.synthLastMs) +
@@ -515,8 +517,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu30";
-      else url += "&v=gpu30";
+      if (url.indexOf("?") < 0) url += "?v=gpu34";
+      else url += "&v=gpu34";
       var worker;
       try {
         worker = new Worker(url);
@@ -620,6 +622,8 @@
           state.stats.sample0 = msg.sample0 | 0;
           state.stats.pcm_blocks = msg.pcm_blocks | 0;
           state.stats.queued_est = msg.queued_est | 0;
+          state.stats.gpuRequestFrames = msg.gpu_request_frames | 0;
+          state.stats.gpuRequestMaxFrames = msg.gpu_request_max_frames | 0;
           state.stats.voices = msg.voices | 0;
           state.stats.ssound = msg.ssound | 0;
           state.stats.wasm = msg.wasm | 0;
@@ -663,6 +667,7 @@
           state.ok = false;
           state.ready = false;
           state.error = (msg.reason || "error") + (msg.detail ? ":" + msg.detail : "");
+          console.error("[sound_bus] worker message error", state.error, msg);
           if (typeof opts.onError === "function") opts.onError(state, msg);
           return;
         }
@@ -674,8 +679,23 @@
       };
       worker.onerror = function (err) {
         state.ok = false;
-        state.error = "worker-onerror:" + (err && err.message ? err.message : "unknown");
-        if (typeof opts.onError === "function") opts.onError(state, { reason: state.error });
+        var detail =
+          "message=" + (err && err.message ? err.message : "unknown") +
+          " file=" + (err && err.filename ? err.filename : url) +
+          " line=" + (err && err.lineno ? err.lineno : 0) +
+          ":" + (err && err.colno ? err.colno : 0) +
+          (err && err.error && err.error.stack ? " stack=" + err.error.stack : "");
+        state.error = "worker-onerror:" + detail;
+        console.error("[sound_bus] " + state.error, err);
+        if (typeof opts.onError === "function")
+          opts.onError(state, { reason: "worker-onerror", detail: detail });
+      };
+      worker.onmessageerror = function (err) {
+        state.ok = false;
+        state.error = "worker-messageerror:data-clone";
+        console.error("[sound_bus] " + state.error, err);
+        if (typeof opts.onError === "function")
+          opts.onError(state, { reason: "worker-messageerror", detail: "data-clone" });
       };
 
       try {
@@ -692,11 +712,16 @@
           /* Engine clock until device rate is known via set-audio-port. */
           sampleRate: state.sampleRate || state.synthRate,
           synthRate: state.synthRate,
+          maxVoices: state.mobile ? 16 : 32,
           toneHz: state.toneHz,
           preferCpu: state.preferCpu
         };
         if (canvas) worker.postMessage(initMsg, [canvas]);
         else worker.postMessage(initMsg);
+        console.log("[sound_bus] worker init url=" + url +
+          " rate=" + initMsg.sampleRate + " block=" + initMsg.blockFrames +
+          " target=" + initMsg.targetFrames + " need=" + initMsg.needFrames +
+          " voices=" + initMsg.maxVoices + " canvas=" + (canvas ? 1 : 0));
       } catch (err) {
         state.error = "postMessage:" + (err && err.message ? err.message : err);
         try {
@@ -1517,9 +1542,11 @@
           lightSynth: false,
           legacyTimeScale: state.legacyTimeScale,
           unlockFadeSec: state.unlockFadeSec,
-          bufferBoostMax: state.mobile ? 8192 : 3072,
-          bufferBoostStep: state.mobile ? 1024 : 512,
-          healthyQuantaTarget: state.mobile ? 1600 : 1200
+          /* A deeper FIFO hid overload by adding audible beat latency. Keep
+           * only a short temporary cushion. */
+          bufferBoostMax: state.mobile ? 1024 : 1536,
+          bufferBoostStep: 512,
+          healthyQuantaTarget: state.mobile ? 600 : 800
         }
       });
       node.port.onmessage = function (ev) {
@@ -1817,8 +1844,8 @@
       state.audioPort = audioPort;
       /* Cap cold-start boost — unbounded growth made first Android unlock lag
        * hundreds of ms until background recreate reset the graph. */
-      var BUFFER_BOOST_MAX = state.mobile ? 8192 : 3072;
-      var BUFFER_BOOST_STEP = state.mobile ? 1024 : 512;
+      var BUFFER_BOOST_MAX = state.mobile ? 1024 : 1536;
+      var BUFFER_BOOST_STEP = 512;
       var srOut = ctx.sampleRate || 48000;
       /* Pad just enough to bridge one refill round-trip; 14 ms used to be pure
        * added latency on every trim. */
@@ -2319,6 +2346,13 @@
 
       function attachSinkIfNeeded() {
         if (state.worklet || state.scriptNode) return Promise.resolve();
+        console.log("[sound_bus] sink probe preferWorklet=" + (preferWorklet ? 1 : 0) +
+          " supported=" + (workletSupported(ctx) ? 1 : 0) +
+          " secure=" + (isSecureEnough() ? 1 : 0) +
+          " AudioWorkletNode=" + (typeof global.AudioWorkletNode) +
+          " ctx.audioWorklet=" + (ctx.audioWorklet ? 1 : 0) +
+          " workerOk=" + (state.ok ? 1 : 0) +
+          " workerReady=" + (state.ready ? 1 : 0));
         if (preferWorklet && workletSupported(ctx) && isSecureEnough()) {
           state.audioStage = "worklet-module";
           /* Loading a worklet while AudioContext is suspended can hang on
