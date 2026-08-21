@@ -1,5 +1,5 @@
 {
-"config_defaults_rev": 202,
+"config_defaults_rev": 209,
 "mainpan": {
   "1": {
     "1": {
@@ -22,54 +22,78 @@
     },
     "2": {
       "1": {
-        "active_tab": 0,
-        "app": {
-          "cmd": "Waveform",
-          "func": "soundui_fmap",
-          "pane_uid": 5
+        "1": {
+          "active_tab": 0,
+          "type": "empty"
         },
+        "2": {
+          "active_tab": 0,
+          "s0": {
+            "app": {
+              "cmd": "Waveform",
+              "func": "soundui_fmap",
+              "pane_uid": 5
+            }
+          },
+          "type": "T"
+        },
+        "ratio": 0.5,
+        "type": "V"
+      },
+      "2": {
+        "active_tab": 0,
         "ratio": 0,
-        "type": ""
+        "type": "empty"
+      },
+      "ratio": 0.540048,
+      "type": "V"
+    },
+    "ratio": 0.335084,
+    "type": "V"
+  },
+  "2": {
+    "1": {
+      "1": {
+        "active_tab": 1,
+        "s0": {
+          "app": {
+            "cmd": "view",
+            "func": "numeris_render_fmap",
+            "pane_uid": 8
+          },
+          "tabs": {
+          }
+        },
+        "s1": {
+          "app": {
+            "cmd": "render",
+            "func": "numeris_sokol_render_fmap",
+            "pane_uid": 9
+          },
+          "tabs": {
+          }
+        },
+        "type": "T"
       },
       "2": {
         "app": {
           "cmd": "Prefs",
           "func": "soundui_fmap",
           "pane_uid": 6
-        },
-        "ratio": 0,
-        "type": ""
+        }
       },
-      "ratio": 0.55,
+      "ratio": 0.5,
       "type": "V"
-    },
-    "ratio": 0.38,
-    "type": "V"
-  },
-  "2": {
-    "1": {
-      "app": {
-        "cmd": "view",
-        "func": "numeris_render_fmap",
-        "pane_uid": 8
-      },
-      "ratio": 0,
-      "type": ""
     },
     "2": {
       "active_tab": 0,
-      "app": {
-        "cmd": "render",
-        "func": "numeris_sokol_render_fmap",
-        "pane_uid": 9
-      },
       "ratio": 0,
-      "type": ""
+      "type": "empty"
     },
     "ratio": 0.756322,
     "type": "V"
   },
-  "ratio": 0.858569,
+  "ratio": 0.421264,
   "type": "H"
 },
 "numeris": {

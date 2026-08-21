@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu35
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu41
  */
 (function (root) {
   "use strict";
@@ -559,7 +559,6 @@
   var queuedEstimate = 0;
   var queuedWallMs = 0;
   var pcmBlocksSent = 0;
-  var audioPumpTimer = 0;
   var silentPumpTimer = 0;
   var preferCpu = false;
   var maxVoices = 32;
@@ -567,14 +566,23 @@
   var synthLastMs = 0;
   var synthSumMs = 0;
   var synthMaxMs = 0;
+  var perfWindowT0 = 0;
+  var perfWindowBlocks = 0;
+  var perfWindowFrames = 0;
+  var perfWindowWorkMs = 0;
+  var perfWindowMaxMs = 0;
+  var perfWindowRequestMin = 0x7fffffff;
+  var perfWindowRequestMax = 0;
+  var perfWindowVoicesMax = 0;
+  var perfDiagFailed = false;
   var fillLastMs = 0;
   var fillMaxMs = 0;
   var pumpLateLastMs = 0;
   var pumpLateMaxMs = 0;
   var pumpLateCount = 0;
-  var audioPumpDueMs = 0;
   var slowRenderLogMs = 0;
-  var needCoalesceUntilMs = 0;
+  /* Kept in stats for protocol compatibility. No request from the realtime
+   * sink is ignored: its queuedFrames value is authoritative. */
   var ignoredStaleNeeds = 0;
   var pendingWarmupBarrier = 0;
   var pcmHaveTail = false;
@@ -689,6 +697,48 @@
     return q > 0 ? q : 0;
   }
 
+  function noteAudioPerfWindow(frames, workMs) {
+    var now = performance.now();
+    var voices = SoundWorkerSsound.liveVoices
+      ? SoundWorkerSsound.liveVoices() | 0 : 0;
+    if (!(perfWindowT0 > 0)) perfWindowT0 = now;
+    perfWindowBlocks++;
+    perfWindowFrames += frames;
+    perfWindowWorkMs += workMs;
+    if (workMs > perfWindowMaxMs) perfWindowMaxMs = workMs;
+    if (frames < perfWindowRequestMin) perfWindowRequestMin = frames;
+    if (frames > perfWindowRequestMax) perfWindowRequestMax = frames;
+    if (voices > perfWindowVoicesMax) perfWindowVoicesMax = voices;
+    var elapsed = now - perfWindowT0;
+    if (elapsed < 10000) return;
+    var avg = perfWindowBlocks > 0
+      ? perfWindowWorkMs / perfWindowBlocks : 0;
+    var load = elapsed > 0 ? perfWindowWorkMs * 100 / elapsed : 0;
+    var realtime = elapsed > 0 && sampleRate > 0
+      ? perfWindowFrames * 100000 / (sampleRate * elapsed) : 0;
+    console.log(
+      "[audio-perf-10s] window=" + (elapsed / 1000).toFixed(1) +
+      "s blocks=" + perfWindowBlocks +
+      " frames=" + perfWindowFrames +
+      " produced=" + realtime.toFixed(1) + "% realtime" +
+      " worker=" + load.toFixed(1) + "%" +
+      " synth=" + avg.toFixed(2) + "avg/" + perfWindowMaxMs.toFixed(1) + "max ms" +
+      " request=" + (perfWindowRequestMin === 0x7fffffff ? 0 : perfWindowRequestMin) +
+      ".." + perfWindowRequestMax +
+      " voicesMax=" + perfWindowVoicesMax +
+      " q~" + estimatedQueued() +
+      " staleNeeds=" + ignoredStaleNeeds
+    );
+    perfWindowT0 = now;
+    perfWindowBlocks = 0;
+    perfWindowFrames = 0;
+    perfWindowWorkMs = 0;
+    perfWindowMaxMs = 0;
+    perfWindowRequestMin = 0x7fffffff;
+    perfWindowRequestMax = 0;
+    perfWindowVoicesMax = 0;
+  }
+
   function sendPcmBlock(requestFrames) {
     if (!audioPort) return false;
     var frames = requestFrames > 0 ? requestFrames | 0 : blockFrames;
@@ -783,6 +833,17 @@
     synthBlocks++;
     synthSumMs += synthLastMs;
     if (synthLastMs > synthMaxMs) synthMaxMs = synthLastMs;
+    /* Diagnostics must never stop the realtime pump. A profiler bug may
+     * disable its own report, but audio production must keep running. */
+    if (!perfDiagFailed) {
+      try {
+        noteAudioPerfWindow(frames, synthLastMs);
+      } catch (perfErr) {
+        perfDiagFailed = true;
+        console.error("[sound_worker] audio perf diagnostic disabled",
+          perfErr && perfErr.stack ? perfErr.stack : perfErr);
+      }
+    }
     if (synthLastMs >= 12) {
       var slowNow = performance.now();
       if (slowNow - slowRenderLogMs >= 2000) {
@@ -810,7 +871,6 @@
     var want = target > 0 ? target : targetFrames;
     var queued, deficit, requestFrames;
     var fillT0 = performance.now();
-    var blocksBefore = pcmBlocksSent;
     fillBusy = 1;
     if (want < blockFrames) want = blockFrames;
     /* Android starts at 4096, so the old 4096 clamp silently cancelled every
@@ -827,8 +887,6 @@
     fillBusy = 0;
     fillLastMs = performance.now() - fillT0;
     if (fillLastMs > fillMaxMs) fillMaxMs = fillLastMs;
-    if (pcmBlocksSent > blocksBefore)
-      needCoalesceUntilMs = performance.now() + 18;
   }
 
   function finishWarmupBarrier(token) {
@@ -841,13 +899,6 @@
       queued_est: estimatedQueued() | 0,
       pcm_blocks: pcmBlocksSent | 0
     });
-  }
-
-  function clearAudioPump() {
-    if (audioPumpTimer) {
-      clearTimeout(audioPumpTimer);
-      audioPumpTimer = 0;
-    }
   }
 
   function clearSilentPump() {
@@ -873,51 +924,22 @@
     }, tickDelayMs > 0 ? tickDelayMs : 16);
   }
 
-  function scheduleAudioPump() {
-    clearAudioPump();
-    if (!running || !audioPort) return;
-    var q = estimatedQueued();
-    var delay = q >= targetFrames ? 12 : q >= needFrames ? 4 : 2;
-    audioPumpDueMs = performance.now() + delay;
-    audioPumpTimer = setTimeout(function () {
-      audioPumpTimer = 0;
-      if (!running || !audioPort || !synthReady) return;
-      pumpLateLastMs = performance.now() - audioPumpDueMs;
-      if (pumpLateLastMs < 0) pumpLateLastMs = 0;
-      if (pumpLateLastMs > 8) pumpLateCount++;
-      if (pumpLateLastMs > pumpLateMaxMs) pumpLateMaxMs = pumpLateLastMs;
-      if (estimatedQueued() < targetFrames) fillToTarget(targetFrames);
-      scheduleAudioPump();
-    }, delay);
-  }
-
   function onAudioMessage(ev) {
     var msg = ev.data || {};
     if (msg.type === "need") {
       if (!running || pumpPaused) return;
-      var needNow = performance.now();
       var reportedQueued = msg.queuedFrames | 0;
-      var localQueued = estimatedQueued();
       if (msg.needFrames > 0) needFrames = msg.needFrames | 0;
       if (msg.targetFrames > 0) targetFrames = msg.targetFrames | 0;
       if (targetFrames < 1024) targetFrames = 1024;
       if (targetFrames > 12288) targetFrames = 12288;
       if (needFrames < 256) needFrames = 256;
       if (needFrames > targetFrames) needFrames = targetFrames;
-      /* A fill is delivered as several transferred PCM messages. The Worklet
-       * can ask again after receiving only the first one; that queue snapshot
-       * is then older than the worker's just-produced batch. Do not overwrite
-       * the newer local estimate with that stale low value. */
-      if (
-        needNow < needCoalesceUntilMs &&
-        reportedQueued + blockFrames < localQueued
-      ) {
-        ignoredStaleNeeds++;
-      } else {
-        noteQueued(reportedQueued);
-        fillToTarget(targetFrames);
-      }
-      scheduleAudioPump();
+      /* The AudioWorklet is the only consumer and therefore the only source
+       * of truth for queued PCM. Resynchronizing here is cheap and prevents a
+       * producer estimate from starving a genuinely empty realtime FIFO. */
+      noteQueued(reportedQueued);
+      fillToTarget(targetFrames);
     }
   }
 
@@ -936,27 +958,14 @@
     noteQueued(0);
     console.log("[sound_worker] audio port attached synthReady=" + (synthReady ? 1 : 0));
     if (synthReady) fillToTarget(targetFrames);
-    scheduleAudioPump();
     postMessage({ type: "audio-attached", blockFrames: blockFrames, targetFrames: targetFrames });
   }
 
   function playSound(msg) {
-    var wasLive = SoundWorkerSsound.liveVoices();
-    if (audioPort && wasLive <= 0) {
-      /* Idle look-ahead is stale silence, but an empty FIFO clicks while the
-       * next GPU readback is produced. Keep only a short safety cushion: low
-       * onset latency without starving the realtime Worklet. */
-      var keep = estimatedQueued();
-      var keepMax = Math.max(blockFrames, needFrames >> 1);
-      if (keep > keepMax) keep = keepMax;
-      if (keep < 0) keep = 0;
-      if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
-      audioPort.postMessage({ type: "trim", keepFrames: keep | 0 });
-      noteQueued(keep);
-    }
-    /* timeOffset is relative to what the listener hears now. The GPU producer
-     * is already ahead by the Worklet FIFO; subtract that lead or adaptive
-     * buffering delays every musical note. */
+    /* Keep the FIFO continuous between notes. Emptying buffered silence here
+     * traded a small, stable latency for real underruns on every new beat.
+     * timeOffset is relative to what the listener hears now, so compensate
+     * for the producer lead when scheduling future notes. */
     var scheduled = msg;
     if (msg && msg.timeOffset > 0 && sampleRate > 0) {
       var holdFrames = SoundWorkerSsound.getProducerHoldFrames
@@ -970,10 +979,7 @@
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });
     if (!audioPort) {
       scheduleSilentPump();
-      return;
     }
-    fillToTarget(needFrames);
-    scheduleAudioPump();
   }
 
   function clearTick() {
@@ -1085,7 +1091,6 @@
           if (pumpPaused) return;
           if (!running) {
             running = true;
-            if (synthReady && audioPort) scheduleAudioPump();
           }
           if (!synthReady) {
             if (pendingPlays.length >= 64) pendingPlays.shift();
@@ -1116,7 +1121,6 @@
         pendingPlays.length = 0;
         pumpPaused = true;
         running = false;
-        clearAudioPump();
         clearSilentPump();
         SoundWorkerSsound.stopAll();
         if (SoundWorkerSsound.resetOutput) SoundWorkerSsound.resetOutput();
@@ -1127,7 +1131,6 @@
         pumpPaused = false;
         if (!running) running = true;
         if (synthReady && audioPort) {
-          scheduleAudioPump();
           fillToTarget(needFrames > 0 ? needFrames : 768);
         }
         postMessage({ type: "resume_soft" });
@@ -1183,7 +1186,6 @@
         pumpPaused = true;
         audioPort = null;
         clearTick();
-        clearAudioPump();
         postMessage({ type: "stopped", n: stats.n, pcm_blocks: pcmBlocksSent });
         return;
       }
@@ -1193,7 +1195,6 @@
         (err && err.stack ? " | " + err.stack : ""));
       running = false;
       clearTick();
-      clearAudioPump();
     }
   };
 })();
