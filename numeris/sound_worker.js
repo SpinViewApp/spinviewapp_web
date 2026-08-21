@@ -1,6 +1,6 @@
 /* sound_worker.js — GPU SoundWorker.wasm + PCM pump.
  * No CPU instrument transcription: if worker WebGL2 fails, C falls back
- * to the main-thread ssound GPU pump (Safari). Cache: gpu27
+ * to the main-thread ssound GPU pump (Safari). Cache: gpu28
  */
 (function (root) {
   "use strict";
@@ -583,6 +583,10 @@
   var sampleRate = 48000;
   var queuedEstimate = 0;
   var queuedWallMs = 0;
+  var audioClockFrame = -1;
+  var audioClockWallMs = 0;
+  var scheduledLateDrops = 0;
+  var scheduledLateMaxFrames = 0;
   var pcmBlocksSent = 0;
   var audioPumpTimer = 0;
   var silentPumpTimer = 0;
@@ -659,6 +663,9 @@
       max_ms: stats.max_ms,
       pcm_blocks: pcmBlocksSent,
       queued_est: estimatedQueued(),
+      audio_clock_frame: audioClockFrame,
+      scheduled_late_drops: scheduledLateDrops,
+      scheduled_late_max_frames: scheduledLateMaxFrames,
       synth_rate:
         typeof SoundWorkerSsound !== "undefined" && SoundWorkerSsound.getSynthesisRate
           ? SoundWorkerSsound.getSynthesisRate() : 48000,
@@ -721,6 +728,24 @@
     var consumed = Math.floor(elapsed * sampleRate);
     var q = queuedEstimate - consumed;
     return q > 0 ? q : 0;
+  }
+
+  function noteAudioClock(msg) {
+    var frame = +msg.audibleFrame;
+    if (!(frame >= 0) || !isFinite(frame)) return;
+    audioClockFrame = frame;
+    audioClockWallMs = performance.now();
+  }
+
+  function estimatedAudioFrame() {
+    var elapsed;
+    if (!(audioClockFrame >= 0) || !(sampleRate > 0)) return -1;
+    elapsed = (performance.now() - audioClockWallMs) * sampleRate / 1000;
+    if (elapsed < 0) elapsed = 0;
+    /* A suspended/background context does not advance. Refuse to extrapolate
+     * far beyond a Worklet snapshot; the next quantum refreshes the clock. */
+    if (elapsed > sampleRate * .25) elapsed = sampleRate * .25;
+    return audioClockFrame + elapsed;
   }
 
   function sendPcmBlock() {
@@ -927,8 +952,14 @@
 
   function onAudioMessage(ev) {
     var msg = ev.data || {};
+    if (msg.type === "clock") {
+      noteAudioClock(msg);
+      noteQueued(msg.queuedFrames | 0);
+      return;
+    }
     if (msg.type === "need") {
       if (!running || pumpPaused) return;
+      noteAudioClock(msg);
       var needNow = performance.now();
       var reportedQueued = msg.queuedFrames | 0;
       var localQueued = estimatedQueued();
@@ -988,17 +1019,34 @@
       audioPort.postMessage({ type: "trim", keepFrames: keep | 0 });
       noteQueued(keep);
     }
-    /* timeOffset is relative to what the listener hears now. The GPU producer
-     * is already ahead by the Worklet FIFO plus its unread 2048-frame block;
-     * subtract that lead or adaptive buffering delays every musical note. */
+    /* Scheduled music uses an absolute AudioContext frame shared with the
+     * Worklet. This keeps the beat fixed when postMessage or rendering stalls.
+     * Immediate SFX keep the relative low-latency path. */
     var scheduled = msg;
     if (msg && msg.timeOffset > 0 && sampleRate > 0) {
       var holdFrames = SoundWorkerSsound.getProducerHoldFrames
         ? SoundWorkerSsound.getProducerHoldFrames()
         : 0;
-      var producerLead = (estimatedQueued() + holdFrames) / sampleRate;
+      var producerLeadFrames = estimatedQueued() + holdFrames;
+      var producerLead = producerLeadFrames / sampleRate;
       scheduled = Object.assign({}, msg);
-      scheduled.timeOffset = Math.max(0, (+msg.timeOffset || 0) - producerLead);
+      if (msg.targetAudioFrame >= 0 && audioClockFrame >= 0) {
+        var producerFrame = estimatedAudioFrame() + producerLeadFrames;
+        var remainingFrames = +msg.targetAudioFrame - producerFrame;
+        /* Allow one transport block of clock/message jitter. Beyond that the
+         * already-rendered frontier cannot contain this note anymore. */
+        if (remainingFrames < -Math.max(128, blockFrames)) {
+          var lateFrames = Math.ceil(-remainingFrames);
+          scheduledLateDrops++;
+          if (lateFrames > scheduledLateMaxFrames)
+            scheduledLateMaxFrames = lateFrames;
+          emitStats(true);
+          return;
+        }
+        scheduled.timeOffset = Math.max(0, remainingFrames / sampleRate);
+      } else {
+        scheduled.timeOffset = Math.max(0, (+msg.timeOffset || 0) - producerLead);
+      }
     }
     var id = SoundWorkerSsound.play(scheduled);
     postMessage({ type: "played", id: id, voices: SoundWorkerSsound.liveVoices() });

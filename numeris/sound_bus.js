@@ -239,10 +239,10 @@
     .replace(
       "              }\n              this._needSent = false;\n              /* First PCM block",
       "              }\n" +
-      "              /* A refill that consumed the whole low-water reserve is\n" +
+      "              /* A refill that consumed half the low-water reserve is\n" +
       "               * an underrun warning even if it arrived a few samples in\n" +
       "               * time. Buy one temporary step before the audible gap. */\n" +
-      "              if (this.fillWaitLastFrames >= this.needThreshold &&\n" +
+      "              if (this.fillWaitLastFrames >= (this.needThreshold >> 1) &&\n" +
       "                  this.queuedFrames < this.needThreshold &&\n" +
       "                  this.riskBoostCooldown <= 0) {\n" +
       "                this.bufferBoostFrames += this.bufferBoostStep;\n" +
@@ -256,9 +256,34 @@
     )
     .replace(
       "    this.renderFrames += n;\n    if (this.mode === \"pcm\") {",
+      "    this.audibleFrame = Math.floor(typeof currentFrame === \"number\" ? currentFrame + n : this.renderFrames + n);\n" +
       "    this.renderFrames += n;\n" +
       "    if (this.riskBoostCooldown > 0) this.riskBoostCooldown--;\n" +
       "    if (this.mode === \"pcm\") {"
+    )
+    .replace(
+      "      type: \"need\",\n      queuedFrames: this.queuedFrames | 0,",
+      "      type: \"need\",\n" +
+      "      audibleFrame: Math.floor(this.audibleFrame > 0 ? this.audibleFrame : (typeof currentFrame === \"number\" ? currentFrame : this.renderFrames)),\n" +
+      "      queuedFrames: this.queuedFrames | 0,"
+    )
+    .replace(
+      "    if ((this._tick & 15) === 0) {\n      this.port.postMessage({",
+      "    if ((this._tick & 15) === 0) {\n" +
+      "      var audibleFrame = this.audibleFrame;\n" +
+      "      if (this.mode === \"pcm\" && this.sourcePort)\n" +
+      "        this.sourcePort.postMessage({\n" +
+      "          type: \"clock\",\n" +
+      "          audibleFrame: audibleFrame,\n" +
+      "          queuedFrames: this.queuedFrames | 0\n" +
+      "        });\n" +
+      "      this.port.postMessage({"
+    )
+    .replace(
+      "        type: \"stats\",\n        underruns: this.underruns,",
+      "        type: \"stats\",\n" +
+      "        audibleFrame: audibleFrame,\n" +
+      "        underruns: this.underruns,"
     );
 
   function locate(name, explicit) {
@@ -336,7 +361,10 @@
         ssound: 0,
         wasm: 0,
         gpu: 0,
-        droppedStarts: 0
+        droppedStarts: 0,
+        audioClockFrame: 0,
+        scheduledLateDrops: 0,
+        scheduledLateMaxFrames: 0
       },
       renderer: "",
       vendor: "",
@@ -410,6 +438,11 @@
         " master=" + audioDiagNumber(s.masterSmooth, 3) +
         " zeroRun=" + (s.zeroRunMax | 0) +
         " staleNeed=" + (s.staleNeeds | 0) +
+        " lateDrop=" + (s.scheduledLateDrops | 0) +
+        " lateMax=" + audioDiagNumber(
+          (s.scheduledLateMaxFrames | 0) * 1000 /
+          ((s.outputRate | 0) || state.sampleRate || 48000)
+        ) + "ms" +
         " voices=" + (s.workerVoices | 0) +
         " boost=" + (msg.bufferBoostFrames | 0);
 
@@ -463,8 +496,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu27";
-      else url += "&v=gpu27";
+      if (url.indexOf("?") < 0) url += "?v=gpu28";
+      else url += "&v=gpu28";
       var worker;
       try {
         worker = new Worker(url);
@@ -568,6 +601,9 @@
           state.stats.sample0 = msg.sample0 | 0;
           state.stats.pcm_blocks = msg.pcm_blocks | 0;
           state.stats.queued_est = msg.queued_est | 0;
+          state.stats.audioClockFrame = +msg.audio_clock_frame || 0;
+          state.stats.scheduledLateDrops = msg.scheduled_late_drops | 0;
+          state.stats.scheduledLateMaxFrames = msg.scheduled_late_max_frames | 0;
           state.stats.voices = msg.voices | 0;
           state.stats.ssound = msg.ssound | 0;
           state.stats.wasm = msg.wasm | 0;
@@ -1616,10 +1652,19 @@
 
     function sendPlayReady(desc) {
       var msg = { type: "play" };
-      var k;
+      var k, ctx, sr, offset;
       if (desc)
         for (k in desc)
           if (Object.prototype.hasOwnProperty.call(desc, k)) msg[k] = desc[k];
+      /* Freeze scheduled music against the AudioContext/Worklet timeline.
+       * A relative delay becomes wrong if the main thread or worker stalls
+       * between this postMessage and synthesis. Immediate SFX intentionally
+       * keep their old low-latency behavior. */
+      offset = +msg.timeOffset || 0;
+      ctx = state.audioCtx;
+      sr = state.sampleRate > 0 ? state.sampleRate : ctx && ctx.sampleRate;
+      if (offset > 0 && ctx && ctx.state === "running" && sr > 0)
+        msg.targetAudioFrame = Math.floor((ctx.currentTime + offset) * sr);
       if (state.inlineSynth && state.worklet && state.worklet.port) {
         /* The emergency inline worklet intentionally stays tiny.  Preserve
          * Numeris pitch/voice roles with a clean sine fallback; the normal
