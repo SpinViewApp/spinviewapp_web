@@ -153,7 +153,7 @@ body {
 /*
  * Search-engine and accessibility content.
  * It remains in the document flow for crawlers and assistive technologies
- * without interfering with the fullscreen WebGL canvas.
+ * without interfering with the fullscreen graphics canvas.
  */
 .seo-content {
   position: absolute;
@@ -350,14 +350,6 @@ body {
   window.addEventListener("unhandledrejection", function (e) {
     console.error("[unhandledrejection]", e.reason);
   });
-  canvas.addEventListener("webglcontextlost", function (e) {
-    e.preventDefault();
-    console.error("[webgl] Context lost");
-  }, false);
-  canvas.addEventListener("webglcontextrestored", function () {
-    console.warn("[webgl] Context restored");
-  }, false);
-
   window.addEventListener("load", resizeCanvas);
   window.addEventListener("resize", resizeCanvas);
   window.addEventListener("orientationchange", function () {
@@ -391,48 +383,31 @@ body {
 
   updateVersionLabel();
 
-  (function probeWebGL2() {
-    var probe = document.createElement("canvas");
-    var gl = null;
-    probe.width = 16;
-    probe.height = 16;
-    try {
-      gl = probe.getContext("webgl2", {
-        alpha: false,
-        antialias: false,
-        depth: true,
-        stencil: true,
-        preserveDrawingBuffer: false,
-        powerPreference: "high-performance",
-        failIfMajorPerformanceCaveat: false
-      });
-    } catch (e) {
-      console.error("[webgl] WebGL2 probe failed", e);
-    }
-    if (!gl) {
-      console.error("[webgl] WebGL2 is required");
-      return;
-    }
-    if (debugOn) {
-      console.info("[webgl]",
-        "MAX_FRAGMENT_UNIFORM_VECTORS=", gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
-        "MAX_VERTEX_UNIFORM_VECTORS=", gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS),
-        "MAX_TEXTURE_SIZE=", gl.getParameter(gl.MAX_TEXTURE_SIZE));
-    }
-  })();
+  /* Do not pre-create a graphics context here. Sokol owns the selected backend
+   * (WebGL2 or WebGPU); probing WebGL in the shared launcher is misleading and
+   * can interfere with WebGPU initialization on some browsers. */
+  console.info("[gpu-bootstrap]",
+    "secure=", window.isSecureContext === true,
+    "protocol=", location.protocol,
+    "navigator.gpu=", !!navigator.gpu,
+    "crossOriginIsolated=", window.crossOriginIsolated === true);
+  if (navigator.gpu && typeof navigator.gpu.requestAdapter === "function") {
+    navigator.gpu.requestAdapter({ powerPreference: "high-performance" }).then(function (adapter) {
+      if (!adapter) {
+        console.error("[gpu-bootstrap] WebGPU requestAdapter returned null");
+        return;
+      }
+      console.info("[gpu-bootstrap] WebGPU adapter acquired",
+        "features=", adapter.features ? adapter.features.size : "?",
+        "maxTexture2D=", adapter.limits ? adapter.limits.maxTextureDimension2D : "?");
+    }).catch(function (e) {
+      console.error("[gpu-bootstrap] WebGPU requestAdapter failed", e);
+    });
+  }
 
   /* Module MUST exist before App.js — same contract as blobcone_fast / spinviewapp_web/test. */
   window.Module = {
     canvas: canvas,
-    webglContextAttributes: {
-      alpha: false,
-      antialias: false,
-      depth: true,
-      stencil: true,
-      preserveDrawingBuffer: false,
-      powerPreference: "high-performance",
-      failIfMajorPerformanceCaveat: false
-    },
     preRun: [],
     postRun: [],
     locateFile: function (path) {
@@ -468,10 +443,11 @@ body {
         }
       },
     onRuntimeInitialized: function () {
+      window.numerisRuntimeInitialized = true;
       resizeCanvas();
       if (window.spinviewActivateKeyboard) window.spinviewActivateKeyboard();
       if (typeof window.Shell_OnLoad === "function") window.Shell_OnLoad();
-      /* Stay over the canvas until a dark WebGL frame is committed
+      /* Stay over the canvas until the first dark graphics frame is committed
        * (numerisHideLoader). Then the blit lifts and the title writes. */
       if (loaderText) loaderText.textContent = "Preparing... " + getCurrentVersion();
       console.info("[runtime] Ready.");
@@ -486,7 +462,20 @@ body {
   var s = document.createElement("script");
   s.src = cacheBust("App.js");
   s.async = true;
+  s.onload = function () {
+    console.info("[gpu-bootstrap] App.js loaded", s.src);
+  };
+  s.onerror = function (e) {
+    console.error("[gpu-bootstrap] App.js load failed", s.src, e);
+  };
+  console.info("[gpu-bootstrap] loading App.js", s.src);
   document.body.appendChild(s);
+  setTimeout(function () {
+    console.info("[gpu-bootstrap] 5s state",
+      "runtimeInitialized=", window.numerisRuntimeInitialized === true,
+      "canvas=", canvas.width + "x" + canvas.height,
+      "css=", canvas.clientWidth + "x" + canvas.clientHeight);
+  }, 5000);
 })();
 </script>
 </body>
