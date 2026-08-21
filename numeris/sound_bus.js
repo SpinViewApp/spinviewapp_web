@@ -192,6 +192,55 @@
       "    this.needThreshold = 4096;"
     )
     .replace(
+      "    this.gapFrames = 0;\n    this.gapStartL = 0;",
+      "    this.gapFrames = 0;\n" +
+      "    /* A realtime gap advances AudioContext while queued PCM does not.\n" +
+      "     * Drop the same number of stale producer frames on refill so each\n" +
+      "     * underrun cannot permanently push the beat behind the visuals. */\n" +
+      "    this.catchupDebtFrames = 0;\n" +
+      "    this.catchupFrames = 0;\n" +
+      "    this.gapStartL = 0;"
+    )
+    .replace(
+      "            if (frames > 0) {\n              this.blocks.push({ samples: samples, frames: frames });\n              this.queuedFrames += frames;",
+      "            if (frames > 0) {\n" +
+      "              var catchup = Math.min(frames, this.catchupDebtFrames);\n" +
+      "              if (catchup > 0) {\n" +
+      "                this.catchupDebtFrames -= catchup;\n" +
+      "                this.catchupFrames += catchup;\n" +
+      "                frames -= catchup;\n" +
+      "                if (frames > 0) samples = samples.subarray(catchup * 2);\n" +
+      "              }\n" +
+      "              if (frames <= 0) return;\n" +
+      "              this.blocks.push({ samples: samples, frames: frames });\n" +
+      "              this.queuedFrames += frames;"
+    )
+    .replace(
+      "          this.gapFrames++;\n          this.underrunFrames++;",
+      "          this.gapFrames++;\n" +
+      "          this.underrunFrames++;\n" +
+      "          this.catchupDebtFrames++;"
+    )
+    .replace(
+      "            this.bufferBoostFrames = 0;\n            /* An idle queue ends at zero",
+      "            this.bufferBoostFrames = 0;\n" +
+      "            this.catchupDebtFrames = 0;\n" +
+      "            /* An idle queue ends at zero"
+    )
+    .replace(
+      "        this.healthyQuanta = 0;\n        this.gapFrames = 0;",
+      "        this.healthyQuanta = 0;\n" +
+      "        this.gapFrames = 0;\n" +
+      "        this.catchupDebtFrames = 0;"
+    )
+    .replace(
+      "        underrunFrames: this.underrunFrames,\n        maxGapMs:",
+      "        underrunFrames: this.underrunFrames,\n" +
+      "        catchupFrames: this.catchupFrames,\n" +
+      "        catchupDebtFrames: this.catchupDebtFrames,\n" +
+      "        maxGapMs:"
+    )
+    .replace(
       "            this.bufferBoostFrames += 256;\n            if (this.bufferBoostFrames > 1024) this.bufferBoostFrames = 1024;",
       "            this.bufferBoostFrames += this.bufferBoostStep;\n" +
       "            if (this.bufferBoostFrames > this.bufferBoostMax)\n" +
@@ -410,6 +459,9 @@
         " master=" + audioDiagNumber(s.masterSmooth, 3) +
         " zeroRun=" + (s.zeroRunMax | 0) +
         " staleNeed=" + (s.staleNeeds | 0) +
+        " catchup=" + audioDiagNumber((msg.catchupFrames | 0) * 1000 /
+          (state.sampleRate || 48000)) + "ms" +
+        " debt=" + (msg.catchupDebtFrames | 0) +
         " voices=" + (s.workerVoices | 0) +
         " boost=" + (msg.bufferBoostFrames | 0);
 
@@ -463,8 +515,8 @@
         return state;
       }
       var url = locate("sound_worker.js", opts.workerUrl);
-      if (url.indexOf("?") < 0) url += "?v=gpu29";
-      else url += "&v=gpu29";
+      if (url.indexOf("?") < 0) url += "?v=gpu30";
+      else url += "&v=gpu30";
       var worker;
       try {
         worker = new Worker(url);
