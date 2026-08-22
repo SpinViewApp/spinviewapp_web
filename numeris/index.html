@@ -103,6 +103,41 @@ body {
   animation: spin 1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.gpu-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #07070a;
+  padding: 24px;
+  overflow-y: auto;
+  -webkit-font-smoothing: antialiased;
+}
+.gpu-notice-card {
+  max-width: 30rem;
+  width: 100%;
+  color: #e6e6ea;
+  font: 400 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.gpu-notice h1 {
+  margin: 0 0 12px; font-size: 20px; font-weight: 600; letter-spacing: -.01em;
+}
+.gpu-notice p { margin: 0 0 14px; color: #a9a9b4; }
+.gpu-notice ul { margin: 0 0 18px; padding-left: 1.15em; color: #a9a9b4; }
+.gpu-notice li { margin: 4px 0; }
+.gpu-notice code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; color: #cfcfd8;
+  background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px;
+}
+.gpu-notice-detail {
+  margin-top: 22px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,.09);
+  font: 400 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #6d6d78; word-break: break-word;
+}
 .debug-console {
   position: fixed;
   left: 10px;
@@ -215,6 +250,15 @@ body {
      combien de contextes existent et qui les cree. Pose ici, avant App.js,
      donc rien ne peut passer dessous. */
   (function () {
+    /* Traceur derriere le meme interrupteur que les diagnostics du bus :
+         ...?audiodiag=1   ou   localStorage.spinAudioDiag = 1              */
+    var on = false;
+    try {
+      on = /[?&]audiodiag=1/.test(location.search || "") ||
+           (typeof localStorage !== "undefined" &&
+            localStorage.getItem("spinAudioDiag") === "1");
+    } catch (eD) {}
+    if (!on) return;
     var slots = ["AudioContext", "webkitAudioContext"], k, i;
     var nb = 0;
     function frames() {
@@ -356,7 +400,10 @@ body {
     if (kind === "error") {
       debugConsole.classList.add("has-error");
       debugButton.classList.add("visible", "has-error");
-      if (debugOn) consoleShow();
+      /* Le panneau WebGPU est deja une explication complete : ouvrir la
+         console d erreurs par-dessus ne fait que la cacher. Le bouton reste
+         la, en rouge, pour qui veut le detail. */
+      if (debugOn && !window.__spinNoticeShown) consoleShow();
     }
   }
 
@@ -450,18 +497,144 @@ body {
     "protocol=", location.protocol,
     "navigator.gpu=", !!navigator.gpu,
     "crossOriginIsolated=", window.crossOriginIsolated === true);
-  if (navigator.gpu && typeof navigator.gpu.requestAdapter === "function") {
-    navigator.gpu.requestAdapter({ powerPreference: "high-performance" }).then(function (adapter) {
-      if (!adapter) {
-        console.error("[gpu-bootstrap] WebGPU requestAdapter returned null");
-        return;
-      }
-      console.info("[gpu-bootstrap] WebGPU adapter acquired",
-        "features=", adapter.features ? adapter.features.size : "?",
-        "maxTexture2D=", adapter.limits ? adapter.limits.maxTextureDimension2D : "?");
-    }).catch(function (e) {
-      console.error("[gpu-bootstrap] WebGPU requestAdapter failed", e);
-    });
+  /* ===================== CONTROLE WEBGPU AVANT DEMARRAGE =====================
+     Le moteur est compile pour WebGPU. Sans lui, sokol_app panique en pleine
+     initialisation et l ecran reste noir avec une pile d appels dans la
+     console — illisible pour un joueur. On verifie donc AVANT de charger le
+     moteur, et on explique proprement ce qui manque.
+     Les trois causes possibles sont distinguees, parce qu elles n appellent
+     pas la meme action : pas de WebGPU du tout, aucun adaptateur (pilote ou
+     GPU refuse), ou un adaptateur trop limite. */
+  var FR = (navigator.language || "en").toLowerCase().indexOf("fr") === 0;
+  var T = FR ? {
+    title: "WebGPU est requis",
+    none: "Ce navigateur n'expose pas WebGPU. Cette application s'appuie dessus pour son rendu et sa synthese sonore.",
+    noadapter: "WebGPU est present, mais aucun adaptateur graphique n'a pu etre obtenu. C'est souvent le pilote graphique ou l'acceleration materielle desactivee.",
+    missing: "L'adaptateur graphique de cet appareil refuse une fonction dont le moteur a besoin.",
+    nodevice: "L'adaptateur graphique a ete trouve, mais il refuse de creer un peripherique de rendu. C'est generalement le pilote graphique.",
+    insecure: "WebGPU exige une connexion securisee. Ouvre la page en HTTPS (ou depuis localhost).",
+    how: "Pour ouvrir cette page :",
+    b1: "Chrome ou Edge 113 et plus, sur ordinateur ou Android",
+    b2: "Safari 18 et plus (macOS et iOS 18)",
+    b3: "Firefox : activer WebGPU dans " ,
+    b4: "verifier que l'acceleration materielle est active dans les reglages du navigateur",
+    detail: "Detail technique"
+  } : {
+    title: "WebGPU is required",
+    none: "This browser does not expose WebGPU. This application relies on it for rendering and sound synthesis.",
+    noadapter: "WebGPU is present but no graphics adapter could be acquired. This usually means the graphics driver or hardware acceleration is unavailable.",
+    missing: "This device's graphics adapter refuses a feature the engine requires.",
+    nodevice: "A graphics adapter was found but it refuses to create a rendering device. This usually points at the graphics driver.",
+    insecure: "WebGPU requires a secure context. Open this page over HTTPS (or from localhost).",
+    how: "To open this page:",
+    b1: "Chrome or Edge 113+, on desktop or Android",
+    b2: "Safari 18+ (macOS and iOS 18)",
+    b3: "Firefox: enable WebGPU in ",
+    b4: "check that hardware acceleration is enabled in your browser settings",
+    detail: "Technical detail"
+  };
+
+  function gpuNotice(reason, detail) {
+    try { if (loader) loader.style.display = "none"; } catch (eL) {}
+    var d = document.createElement("div");
+    d.className = "gpu-notice";
+    var card = document.createElement("div");
+    card.className = "gpu-notice-card";
+    var h = document.createElement("h1");
+    h.textContent = T.title;
+    var p = document.createElement("p");
+    p.textContent = reason;
+    var how = document.createElement("p");
+    how.textContent = T.how;
+    var ul = document.createElement("ul");
+    var items = [T.b1, T.b2, null, T.b4];
+    var i, li;
+    for (i = 0; i < items.length; i++) {
+      li = document.createElement("li");
+      if (items[i] === null) {
+        li.appendChild(document.createTextNode(T.b3));
+        var c = document.createElement("code");
+        c.textContent = "about:config -> dom.webgpu.enabled";
+        li.appendChild(c);
+      } else li.textContent = items[i];
+      ul.appendChild(li);
+    }
+    var dt = document.createElement("div");
+    dt.className = "gpu-notice-detail";
+    dt.textContent = T.detail + " : " + detail;
+    card.appendChild(h); card.appendChild(p);
+    card.appendChild(how); card.appendChild(ul); card.appendChild(dt);
+    d.appendChild(card);
+    document.body.appendChild(d);
+    window.__spinNoticeShown = true;
+    try { consoleHide(); } catch (eC) {}
+    console.error("[gpu-bootstrap] demarrage refuse : " + detail);
+  }
+
+  function gpuPreflight(onReady) {
+    if (!navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
+      gpuNotice(window.isSecureContext === false ? T.insecure : T.none,
+        "navigator.gpu absent | secure=" + (window.isSecureContext === true) +
+        " | " + navigator.userAgent);
+      return;
+    }
+    var settled = false;
+    /* Un requestAdapter qui ne repond jamais ne doit pas laisser un ecran
+       noir : au bout de 8 s on affiche le panneau. */
+    var guard = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      gpuNotice(T.noadapter, "requestAdapter sans reponse apres 8 s");
+    }, 8000);
+    navigator.gpu.requestAdapter({ powerPreference: "high-performance" })
+      .then(function (adapter) {
+        if (settled) return;
+        settled = true; clearTimeout(guard);
+        if (!adapter) {
+          gpuNotice(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
+          return;
+        }
+        var nb = adapter.features ? adapter.features.size : 0;
+        console.info("[gpu-bootstrap] WebGPU adapter acquired",
+          "features=", nb,
+          "maxTexture2D=", adapter.limits ? adapter.limits.maxTextureDimension2D : "?");
+        /* ON NE DEVINE PLUS, ON ESSAIE POUR DE VRAI.
+           Premiere version : je verifiais la presence de depth32float-stencil8
+           dans la liste de l adaptateur. C etait faux — sur Firefox la
+           fonction EST annoncee, et c est pourtant la creation du peripherique
+           qui echoue. sokol jette le message d erreur (_SOKOL_UNUSED(msg)),
+           donc personne ne sait pourquoi.
+           On refait donc ici exactement ce que le moteur va faire, en deux
+           temps, et on affiche le message reel du navigateur :
+             1. un peripherique nu   -> echoue = probleme de pilote
+             2. avec la fonction exigee par sokol -> echoue = fonction refusee
+           Le peripherique de test est detruit aussitot. */
+        var need = "depth32float-stencil8";
+        adapter.requestDevice().then(function (dev0) {
+          try { if (dev0 && dev0.destroy) dev0.destroy(); } catch (eD0) {}
+          return adapter.requestDevice({ requiredFeatures: [need] })
+            .then(function (dev1) {
+              try { if (dev1 && dev1.destroy) dev1.destroy(); } catch (eD1) {}
+              console.info("[gpu-bootstrap] peripherique de test OK (" + need + ")");
+              onReady();
+            }, function (e1) {
+              gpuNotice(T.missing,
+                need + " refuse : " +
+                (e1 && e1.message ? e1.message : String(e1)) +
+                " | " + nb + " fonctions | " + navigator.userAgent);
+            });
+        }, function (e0) {
+          gpuNotice(T.nodevice,
+            "requestDevice : " + (e0 && e0.message ? e0.message : String(e0)) +
+            " | " + nb + " fonctions | " + navigator.userAgent);
+        });
+      })
+      .catch(function (e) {
+        if (settled) return;
+        settled = true; clearTimeout(guard);
+        gpuNotice(T.noadapter,
+          "requestAdapter : " + (e && e.message ? e.message : String(e)));
+      });
   }
 
   /* Module MUST exist before App.js — same contract as blobcone_fast / spinviewapp_web/test. */
@@ -478,6 +651,9 @@ body {
     printErr: function () {
       var _m = Array.prototype.slice.call(arguments).join(" ");
       console.error("[stderr]", _m);
+      /* Le dernier [sapp][panic] est la vraie cause d un abort : on le garde
+         pour l afficher au joueur au lieu d un "Engine aborted" nu. */
+      if (/\[panic\]|\[sapp\]/.test(_m)) window.__spinLastPanic = _m;
       /* cdx TEMPORAIRE : SAFE_HEAP appelle err() sans pile. On la reconstruit
          ici : les frames wasm de l acces fautif y sont encore. */
       if (window.__cdx_traceStderr !== false && /alignment fault|segmentation fault/.test(_m)) {
@@ -493,21 +669,23 @@ body {
     monitorRunDependencies: function () {},
       onAbort: function (reason) {
         engineAborted = true;
-
         console.error("[abort]", reason);
-
-        if (loader) {
-          loader.style.display = "flex";
+        /* Un abort apres un controle WebGPU reussi vient presque toujours de
+           l initialisation graphique. On montre le meme panneau propre, avec
+           le dernier message de panique du moteur — celui que sokol jette. */
+        var why = window.__spinLastPanic || String(reason || "");
+        if (typeof gpuNotice === "function" &&
+            !document.querySelector(".gpu-notice") &&
+            /wgpu|WGPU|webgpu|device|adapter|surface|swapchain/i.test(why)) {
+          gpuNotice(T.nodevice, why);
+          return;
         }
-
+        if (loader) loader.style.display = "flex";
         if (loaderText) {
-          if (debugOn && reason) {
-            loaderText.textContent =
-              "Engine aborted\n" + String(reason);
-            loaderText.style.whiteSpace = "pre-wrap";
-          } else {
-            loaderText.textContent = "Engine aborted";
-          }
+          loaderText.style.whiteSpace = "pre-wrap";
+          loaderText.textContent = debugOn && why
+            ? "Engine aborted\n" + why
+            : (FR ? "Le moteur n a pas pu demarrer." : "The engine failed to start.");
         }
       },
     onRuntimeInitialized: function () {
@@ -553,17 +731,19 @@ body {
     }
   })();
 
-  var s = document.createElement("script");
-  s.src = cacheBust("App.js");
-  s.async = true;
-  s.onload = function () {
-    console.info("[gpu-bootstrap] App.js loaded", s.src);
-  };
-  s.onerror = function (e) {
-    console.error("[gpu-bootstrap] App.js load failed", s.src, e);
-  };
-  console.info("[gpu-bootstrap] loading App.js", s.src);
-  document.body.appendChild(s);
+  gpuPreflight(function () {
+    var s = document.createElement("script");
+    s.src = cacheBust("App.js");
+    s.async = true;
+    s.onload = function () {
+      console.info("[gpu-bootstrap] App.js loaded", s.src);
+    };
+    s.onerror = function (e) {
+      console.error("[gpu-bootstrap] App.js load failed", s.src, e);
+    };
+    console.info("[gpu-bootstrap] loading App.js", s.src);
+    document.body.appendChild(s);
+  });
   setTimeout(function () {
     console.info("[gpu-bootstrap] 5s state",
       "runtimeInitialized=", window.numerisRuntimeInitialized === true,

@@ -415,6 +415,7 @@
     }
 
     function maybeLogAudioHealth(msg) {
+      if (!SOUND_DIAG) return;
       var s = state.stats || {};
       var now = typeof performance !== "undefined" && performance.now
         ? performance.now() : Date.now();
@@ -483,7 +484,7 @@
         now - state._diagWarnMs >= 750
       ) {
         state._diagWarnMs = now;
-        console.warn(
+        dwarn(
           "[audio-health] " +
           (deltaEvents > 0 || deltaFrames >= 128
             ? "UNDERRUN +" + Math.max(0, deltaEvents) +
@@ -496,7 +497,7 @@
       state._diagAnomalies = anom;
       if (state.audioReady && active && now - state._diagLastMs >= 5000) {
         state._diagLastMs = now;
-        console.log(
+        dlog(
           "[audio-health] " + (deltaFrames > 0 ? "STARVED " : "stable ") + detail
         );
       }
@@ -616,7 +617,7 @@
               if (state.worklet && state.worklet.port)
                 state.worklet.port.postMessage({ type: "arm-fifo-ready" });
             } catch (eArm) {}
-            console.log(
+            dlog(
               "[sound_bus] first-unlock barrier ready q=" +
                 (msg.queued_est | 0) +
                 " blocks=" +
@@ -732,7 +733,7 @@
         };
         if (canvas) worker.postMessage(initMsg, [canvas]);
         else worker.postMessage(initMsg);
-        console.log("[sound_bus] worker init url=" + url +
+        dlog("[sound_bus] worker init url=" + url +
           " rate=" + initMsg.sampleRate + " block=" + initMsg.blockFrames +
           " target=" + initMsg.targetFrames + " need=" + initMsg.needFrames +
           " voices=" + initMsg.maxVoices + " canvas=" + (canvas ? 1 : 0));
@@ -831,7 +832,7 @@
         if (ctx) {
           var bl = ctx.baseLatency > 0 ? ctx.baseLatency : 0;
           var ol = ctx.outputLatency > 0 ? ctx.outputLatency : 0;
-          console.log(
+          dlog(
             "[sound_bus] trim latency (" +
               why +
               (soft ? ", soft" : ", hard") +
@@ -844,7 +845,7 @@
               "ms"
           );
         } else {
-          console.log("[sound_bus] trim latency (" + why + ")");
+          dlog("[sound_bus] trim latency (" + why + ")");
         }
       } catch (e3) {}
     }
@@ -869,6 +870,36 @@
        tapait en permanence contre le limiteur doux, ce qui durcit tout le mix.
        0.70 = -3.1 dB : la crete retombe vers 0.65-0.70 et le limiteur ne sert
        plus que d exception. */
+    /* ===================== DIAGNOSTICS AUDIO =====================
+       0 = silence complet dans la console, et le moniteur de sortie n est
+           meme pas construit (un AudioWorkletNode et une analyse par bloc en
+           moins sur le fil audio — ce n est pas que du journal, c est du
+           travail en moins).
+       1 = tout le journal d instrumentation : enveloppes, coutures, horloge
+           du peripherique, sante de la file, verificateur de sinus.
+       Les vraies erreurs (console.error) ne sont JAMAIS masquees.
+       Peut aussi s activer sans reconstruire, depuis la console ou l URL :
+           localStorage.spinAudioDiag = 1      (persistant)
+           ...?audiodiag=1                     (une session)                */
+    var SOUND_DIAG = 0;
+    try {
+      if (typeof location !== "undefined" &&
+          /[?&]audiodiag=1/.test(location.search || "")) SOUND_DIAG = 1;
+      else if (typeof localStorage !== "undefined" &&
+               localStorage.getItem("spinAudioDiag") === "1") SOUND_DIAG = 1;
+    } catch (eDg) {}
+    function dlog() {
+      if (!SOUND_DIAG) return;
+      try { console.log.apply(console, arguments); } catch (e) {}
+    }
+    function dwarn() {
+      if (!SOUND_DIAG) return;
+      try { console.warn.apply(console, arguments); } catch (e) {}
+    }
+    if (SOUND_DIAG) {
+      try { console.log("[sound_bus] diagnostics audio ACTIFS"); } catch (e) {}
+    }
+
     var SOUND_BARE_OSC_TEST = 0;
     var SOUND_OUTPUT_LEVEL = SOUND_BARE_OSC_TEST ? 0.0 : 0.70;
 
@@ -1127,7 +1158,7 @@
             } catch (eSus) {}
          }
          try {
-            console.log("[sound_bus] paused for background (" + (reason || "?") + ")"
+            dlog("[sound_bus] paused for background (" + (reason || "?") + ")"
                + (hardStop ? " ctx=suspendu" : " ctx=maintenu")
                + " t=+" + Math.round(((typeof performance !== "undefined" && performance.now)
                     ? performance.now() : Date.now()) - (state._silenceSinceMs || 0)) + "ms");
@@ -1295,13 +1326,13 @@
         })
         .then(function () {
           try {
-            console.log("[sound_bus] reprise : ctx " +
+            dlog("[sound_bus] reprise : ctx " +
               (state._resumeWasRunning ? "deja actif" : "resume() " + Math.round(_now() - _t0) + "ms") +
               " | depuis fade-out=" +
               Math.round(_now() - (state._silenceSinceMs || _now())) + "ms");
           } catch (eR) {}
           if (ctx.state !== "running") {
-            console.warn(
+            dwarn(
               "[sound_bus] foreground: still " + ctx.state + " — nuke for next gesture"
             );
             nukeAudioGraph();
@@ -1340,6 +1371,7 @@
                de nouveau la file, retient la crete, et ouvre sur une crete. */
             state._firstOpenAt = 0;
             state._firstPeak = 0;
+            state._peakAt = 0;
             trimAudioLatency(reason || "foreground", true);
             state._warmupBarrierToken = ((state._warmupBarrierToken | 0) + 1) | 0;
             if (state.worker)
@@ -1519,10 +1551,10 @@
           ? performance.now() : Date.now();
         if (state._unlockAtMs && !state._openMarkDone) {
           state._openMarkDone = 1;
-          console.log("[sound_bus] >>>>>> LE SON COMMENCE ICI : " +
+          dlog("[sound_bus] >>>>>> LE SON COMMENCE ICI : " +
             Math.round(_nw - state._unlockAtMs) + " ms apres le toucher <<<<<<");
         }
-        console.log("[sound_bus] output fade-in (" + (reason || "primed") + ")" +
+        dlog("[sound_bus] output fade-in (" + (reason || "primed") + ")" +
           (state._silenceSinceMs
             ? " | SILENCE " + Math.round(_nw - state._silenceSinceMs) + "ms" +
               " file=" + (state.stats ? (state.stats.queuedFrames | 0) : -1) +
@@ -1561,18 +1593,19 @@
           state._scriptTrimLatency();
       } catch (e2) {}
       try {
-        console.log("[sound_bus] flatten latency (" + (reason || "?") + ")");
+        dlog("[sound_bus] flatten latency (" + (reason || "?") + ")");
       } catch (e3) {}
     }
 
     /* Pourquoi la sortie reste fermee, au plus une ligne par 400 ms. */
     function warmupWaitLog(why) {
+      if (!SOUND_DIAG) return;
       var now = (typeof performance !== "undefined" && performance.now)
         ? performance.now() : Date.now();
       if (now - (state._warmupLogMs || 0) < 400) return;
       state._warmupLogMs = now;
       try {
-        console.log("[sound_bus] attente reprise : " + why +
+        dlog("[sound_bus] attente reprise : " + why +
           " | rapports=" + (state._warmupReadyCount | 0) +
           " ticks=" + (state._warmupWaitTicks | 0) +
           " depuis=" + Math.round(now - (state._silenceSinceMs || now)) + "ms");
@@ -1693,9 +1726,29 @@
       if (state._unlockFadePending) {
          var nowP = (typeof performance !== "undefined" && performance.now)
            ? performance.now() : Date.now();
-         if (!state._firstOpenAt) { state._firstOpenAt = nowP; state._firstPeak = 0; }
+         if (!state._firstOpenAt) {
+            state._firstOpenAt = nowP; state._firstPeak = 0; state._peakAt = nowP;
+         }
          var q0 = queued | 0;
-         if (q0 > (state._firstPeak | 0)) state._firstPeak = q0;
+         if (q0 > (state._firstPeak | 0)) { state._firstPeak = q0; state._peakAt = nowP; }
+         /* ATTENDRE LE PLATEAU, PAS UN CHIFFRE.
+            La crete seule ne vaut rien juste apres un vidage de file : elle
+            n est que "la ou la file en est arrivee", pas "la file est pleine".
+            Les journaux le montrent — on rouvrait a file=3468/6144, soit 56 %,
+            parce que la crete du moment valait 3468.
+            Le vrai signe qu une file est pleine, c est qu elle ARRETE DE
+            MONTER. On attend donc que la crete ne progresse plus pendant
+            150 ms. Aucun seuil absolu, aucune hypothese sur le producteur :
+            ca marche a 40 ms de reserve comme a 300 ms. */
+         var flat = nowP - (state._peakAt || nowP);
+         var waitedP = nowP - state._firstOpenAt;
+         if (flat < 150 && waitedP < 700) {
+            state._warmupReadyCount = 0;
+            warmupWaitLog("remplissage " + q0 + " (crete " + (state._firstPeak | 0) +
+              ", stable depuis " + Math.round(flat) + "ms, " +
+              Math.round(waitedP) + "/700ms)");
+            return;
+         }
          /* La crete seule ne suffit pas : au demarrage targetFrames descend
             de 9280 a 6144, donc une crete relevee tot (9916) devient
             inatteignable et on tombait dans le secours — 1,2 s d attente pour
@@ -1721,7 +1774,7 @@
          if (!state._unlockAtMs) {
             state._unlockAtMs = nowU;
             try {
-              console.log("[sound_bus] TEST PERIPHERIQUE : le peripherique tourne" +
+              dlog("[sound_bus] TEST PERIPHERIQUE : le peripherique tourne" +
                 " des maintenant, mais la sortie reste a zero numerique pendant " +
                 SOUND_OPEN_SILENCE_MS + " ms. Ecoute OU tombe le clac.");
             } catch (e) {}
@@ -1801,7 +1854,7 @@
           ? performance.now() : Date.now();
       } catch (eTS) {}
       try {
-        console.log("[sound_bus] output fade-out (" + (reason || "shutdown") + ")");
+        dlog("[sound_bus] output fade-out (" + (reason || "shutdown") + ")");
       } catch (eLog) {}
       if (done) setTimeout(done, (dur * 1000 + 40) | 0);
       return dur;
@@ -1860,7 +1913,7 @@
     function gracefulTeardownSync(reason) {
       if (SOUND_LEAVE_MODE === 0 && isTerminalLeaveReason(reason)) {
         try {
-          console.log("[sound_bus] depart de page (" + reason +
+          dlog("[sound_bus] depart de page (" + reason +
             ") : ON NE TOUCHE A RIEN (test du clac de fermeture)");
         } catch (eNT) {}
         return;
@@ -1908,7 +1961,7 @@
          qu on cherche a eviter. */
       if (waitMs > 260) waitMs = 260;
       try {
-        console.log("[sound_bus] depart (" + reason + ") : fondu " +
+        dlog("[sound_bus] depart (" + reason + ") : fondu " +
           Math.round((dur > 0 ? dur : fadeBase) * 1000) + "ms + latence " +
           Math.round(latMs) + "ms -> attente " + waitMs + "ms avant " +
           (isTerminalLeaveReason(reason) ? "close()" : "suspend()"));
@@ -2012,7 +2065,7 @@
       state.outputGain = null;
       state._outputFadedIn = 0;
       try {
-        console.log("[sound_bus] soft mute teardown (" + (reason || "?") + ")");
+        dlog("[sound_bus] soft mute teardown (" + (reason || "?") + ")");
       } catch (e6) {}
     }
     state.softMuteTeardown = softMuteTeardown;
@@ -2041,7 +2094,7 @@
       state.audioCtx = ctx;
       state.sampleRate = ctx.sampleRate | 0;
       try {
-        console.log("[sound_bus] latence peripherique : base=" +
+        dlog("[sound_bus] latence peripherique : base=" +
           Math.round((ctx.baseLatency || 0) * 1000) + "ms sortie=" +
           Math.round((ctx.outputLatency || 0) * 1000) + "ms (demande " +
           Math.round(SOUND_DEVICE_LATENCY * 1000) + "ms)");
@@ -2085,7 +2138,7 @@
       if (!SOUND_USE_HTML_MEDIA_PRIME) {
         if (!state._htmlPrimeLogged) {
           state._htmlPrimeLogged = 1;
-          try { console.log("[sound_bus] aide <audio> desactivee (test du pop)"); } catch (e) {}
+          try { dlog("[sound_bus] aide <audio> desactivee (test du pop)"); } catch (e) {}
         }
         return;
       }
@@ -2172,11 +2225,11 @@
         g.connect(ctx.destination);
         osc.start();
         state._bareOsc = osc;
-        console.warn("[sound_bus] TEST NU : oscillateur 330 Hz direct sur le DAC, " +
+        dwarn("[sound_bus] TEST NU : oscillateur 330 Hz direct sur le DAC, " +
           "notre sortie est coupee. Si le glitch de demarrage persiste, " +
           "il ne vient pas de notre code.");
       } catch (eO) {
-        try { console.log("[sound_bus] test nu impossible : " + eO); } catch (e2) {}
+        try { dlog("[sound_bus] test nu impossible : " + eO); } catch (e2) {}
       }
     }
 
@@ -2223,7 +2276,7 @@
         var def = state._clkSum, ppm = (def / state._clkWin) * 1e6;
         var grave = def > 0.030;
         try {
-          console.log("[audio-dev] " + (grave ? "PERTE " : "horloge ") +
+          dlog("[audio-dev] " + (grave ? "PERTE " : "horloge ") +
             Math.round(def * 1000) + "ms sur " + state._clkWin.toFixed(1) + "s (" +
             Math.round(ppm) + " ppm)" +
             (grave ? "   <<<< le peripherique n a pas joue ce son" :
@@ -2270,7 +2323,7 @@
         line += c;
       }
       try {
-        console.warn("[audio-env] " + (state._outEnvWhy || "?") +
+        dwarn("[audio-env] " + (state._outEnvWhy || "?") +
           " | 1 case = 5ms, 1.5s, la plus recente a DROITE\n" +
           line.slice(0, 100) + "\n" + line.slice(100, 200) + "\n" + line.slice(200, 300));
       } catch (eR) {}
@@ -2279,6 +2332,11 @@
     /* Sonde branchee APRES state.outputGain, donc sur le signal reel du DAC.
        Elle n emet rien (numberOfOutputs 0) et ne modifie pas la chaine. */
     function attachOutputMonitor(ctx) {
+      /* Sans diagnostics, on ne CONSTRUIT meme pas le moniteur : c est un
+         AudioWorkletNode de plus sur le fil audio, plus une analyse par bloc
+         (enveloppe, detection de marche, verificateur de sinus). Economie
+         reelle, pas seulement du journal en moins. */
+      if (!SOUND_DIAG) return;
       if (!ctx || state._outMon) return;
       var g, m;
       try {
@@ -2291,7 +2349,7 @@
           channelInterpretation: "speakers"
         });
       } catch (eM) {
-        try { console.log("[sound_bus] moniteur de sortie indisponible : " + eM); } catch (e0) {}
+        try { dlog("[sound_bus] moniteur de sortie indisponible : " + eM); } catch (e0) {}
         return;
       }
       m.port.onmessage = function (ev) {
@@ -2305,7 +2363,7 @@
           var gv2 = 0;
           try { gv2 = state.outputGain ? state.outputGain.gain.value : 0; } catch (e9) {}
           try {
-            console.warn("[audio-sin] " + d.hz + "Hz | ecart max=" + (+d.max).toFixed(5) +
+            dwarn("[audio-sin] " + d.hz + "Hz | ecart max=" + (+d.max).toFixed(5) +
               " frames>0.01=" + (d.bad | 0) + "/" + (d.win | 0) +
               " crete=" + (+d.peak).toFixed(3) +
               " gain=" + gv2.toFixed(3) +
@@ -2322,7 +2380,7 @@
           ? ((d.amp * 1000) / sr).toFixed(1) + "ms"
           : (+d.amp).toFixed(4);
         try {
-          console.warn(
+          dwarn(
             "[audio-out] " + what + " " + val +
             " =x" + (d.thr > 0 ? (d.amp / d.thr).toFixed(1) : "-") +
             " seuil=" + (+d.thr || 0).toFixed(4) +
@@ -2346,7 +2404,7 @@
         catch (eT) {}
       }
       try {
-        console.log("[sound_bus] moniteur de sortie actif (dernier etage avant le DAC)");
+        dlog("[sound_bus] moniteur de sortie actif (dernier etage avant le DAC)");
       } catch (eL) {}
     }
 
@@ -2372,13 +2430,13 @@
       try {
         if (SOUND_WORKLET_SELFTEST_HZ > 0) {
           node.port.postMessage({ type: "selftest", hz: SOUND_WORKLET_SELFTEST_HZ });
-          console.warn("[sound_bus] SINUS SUR LE FIL AUDIO : " +
+          dwarn("[sound_bus] SINUS SUR LE FIL AUDIO : " +
             SOUND_WORKLET_SELFTEST_HZ + " Hz genere dans le worklet. " +
             "Le fil principal n a plus rien a livrer.");
         }
         if (SOUND_SIMPLE_MODE) {
           node.port.postMessage({ type: "simple", on: 1 });
-          console.warn("[sound_bus] MODE SIMPLE : rampes, coutures, " +
+          dwarn("[sound_bus] MODE SIMPLE : rampes, coutures, " +
             "dissimulation, extinction et vidage DESACTIVES");
         }
       } catch (eSm) {}
@@ -2496,9 +2554,9 @@
         state.audioStage = "warming";
         await prefetchWorkletSource();
         if (!state._unlockStarted) state.audioStage = "waiting-gesture";
-        console.log("[sound_bus] worklet source cached (addModule deferred until after resume)");
+        dlog("[sound_bus] worklet source cached (addModule deferred until after resume)");
       } catch (eWarm) {
-        console.warn("[sound_bus] worklet prefetch failed (will retry on gesture)", eWarm);
+        dwarn("[sound_bus] worklet prefetch failed (will retry on gesture)", eWarm);
         if (!state._unlockStarted) state.audioStage = "waiting-gesture";
       }
     })();
@@ -2516,7 +2574,7 @@
           try { Module._saudio_context.close(); } catch (e1) {}
           Module._saudio_context = null;
         }
-        console.log("[sound_bus] one-shot: detached legacy Sokol saudio (rebuild App.wasm to skip)");
+        dlog("[sound_bus] one-shot: detached legacy Sokol saudio (rebuild App.wasm to skip)");
       }
     } catch (eDet) {}
 
@@ -2636,7 +2694,7 @@
       try {
         if (state.worker) state.worker.postMessage({ type: "set-thresholds", targetFrames: f });
       } catch (e1) {}
-      try { console.log("[sound_bus] target frames -> " + f); } catch (e2) {}
+      try { dlog("[sound_bus] target frames -> " + f); } catch (e2) {}
       return f;
     };
 
@@ -2785,7 +2843,7 @@
       /* HTTP Android often has no AudioWorklet. Keep the SAME desktop sound path:
        * worker synth @44.1k â†’ resample â†’ PCM FIFO â†’ this ScriptProcessor sink.
        * (Callback still runs on the render thread â€” prefer HTTPS for Worklet.) */
-      console.warn(
+      dwarn(
         "[sound_bus] ScriptProcessor PCM sink (config " +
           state.synthRate +
           " Hz â†’ device). HTTPS â†’ AudioWorklet recommended so FPS cannot starve audio."
@@ -3140,7 +3198,7 @@
             token: state._warmupBarrierToken
           });
         else state._warmupReleaseAllowed = 1;
-        console.log("[sound_bus] sink switched dynamically to " + state.audioPath);
+        dlog("[sound_bus] sink switched dynamically to " + state.audioPath);
         return state;
       }).catch(function (err) {
         state.sinkSwitchError = String(err && err.message ? err.message : err);
@@ -3155,7 +3213,7 @@
           markAudioReadyIfRunning();
           state._warmupReleaseAllowed = 1;
         }
-        console.warn("[sound_bus] dynamic sink switch failed", err);
+        dwarn("[sound_bus] dynamic sink switch failed", err);
         return state;
       }).then(function (result) {
         state._sinkSwitchPromise = null;
@@ -3200,13 +3258,13 @@
       try {
         if (SOUND_WORKLET_SELFTEST_HZ > 0) {
           node.port.postMessage({ type: "selftest", hz: SOUND_WORKLET_SELFTEST_HZ });
-          console.warn("[sound_bus] SINUS SUR LE FIL AUDIO : " +
+          dwarn("[sound_bus] SINUS SUR LE FIL AUDIO : " +
             SOUND_WORKLET_SELFTEST_HZ + " Hz genere dans le worklet. " +
             "Le fil principal n a plus rien a livrer.");
         }
         if (SOUND_SIMPLE_MODE) {
           node.port.postMessage({ type: "simple", on: 1 });
-          console.warn("[sound_bus] MODE SIMPLE : rampes, coutures, " +
+          dwarn("[sound_bus] MODE SIMPLE : rampes, coutures, " +
             "dissimulation, extinction et vidage DESACTIVES");
         }
       } catch (eSm) {}
@@ -3306,12 +3364,12 @@
       /* Only recreate a *dead* graph. pointerdown+click used to nuke the
        * ScriptProcessor on the still-suspended first context. */
       if (state.audioCtx && state.audioCtx.state === "closed") {
-         console.warn("[sound_bus] recreating AudioContext (was closed)");
+         dwarn("[sound_bus] recreating AudioContext (was closed)");
          nukeAudioGraph();
       }
       if (state._resumeTimedOut && state.audioCtx &&
           state.audioCtx.state === "suspended") {
-        console.warn("[sound_bus] recreating AudioContext after resume timeout");
+        dwarn("[sound_bus] recreating AudioContext after resume timeout");
         nukeAudioGraph();
         state._resumeTimedOut = 0;
       }
@@ -3320,7 +3378,7 @@
       primeAudioGesture(ctx);
       state.sampleRate = ctx.sampleRate | 0;
       refreshConvertPath();
-      console.log(
+      dlog(
         "[sound_bus] AudioContext device=" +
           state.sampleRate +
           " Hz | config=" +
@@ -3344,19 +3402,19 @@
           if (st === "ok") {
             try {
               attachWorkletNodeSync(ctx);
-              console.log("[sound_bus] graphe PRET avant ouverture du flux" +
+              dlog("[sound_bus] graphe PRET avant ouverture du flux" +
                 " (module compile sur contexte suspendu)");
             } catch (eAt) {
-              console.warn("[sound_bus] attache pre-resume impossible", eAt);
+              dwarn("[sound_bus] attache pre-resume impossible", eAt);
             }
           } else {
-            console.warn("[sound_bus] addModule sans reponse sur contexte suspendu" +
+            dwarn("[sound_bus] addModule sans reponse sur contexte suspendu" +
               " -> ancien ordre (resume puis compilation)");
           }
           state._startPromise = null;
           return state.startAudio();
         }, function (eM) {
-          console.warn("[sound_bus] addModule pre-resume en echec -> ancien ordre", eM);
+          dwarn("[sound_bus] addModule pre-resume en echec -> ancien ordre", eM);
           state._startPromise = null;
           return state.startAudio();
         });
@@ -3369,7 +3427,7 @@
            propre au tout premier demarrage, claquant apres un rechargement. */
         try {
           var nav = performance.getEntriesByType("navigation")[0];
-          console.log("[sound_bus] ouverture du flux | navigation=" +
+          dlog("[sound_bus] ouverture du flux | navigation=" +
             ((nav && nav.type) || "?") + " | " +
             Math.round((typeof performance !== "undefined" && performance.now)
               ? performance.now() : 0) + " ms apres le chargement de la page");
@@ -3398,7 +3456,7 @@
 
       function attachSinkIfNeeded() {
         if (state.worklet || state.scriptNode) return Promise.resolve();
-        console.log("[sound_bus] sink probe preferWorklet=" + (preferWorklet ? 1 : 0) +
+        dlog("[sound_bus] sink probe preferWorklet=" + (preferWorklet ? 1 : 0) +
           " supported=" + (workletSupported(ctx) ? 1 : 0) +
           " secure=" + (isSecureEnough() ? 1 : 0) +
           " AudioWorkletNode=" + (typeof global.AudioWorkletNode) +
@@ -3434,7 +3492,7 @@
               state.error = "audio-worklet-timeout";
               throw new Error(state.error);
             }
-            console.warn("[sound_bus] Worklet timeout; using ScriptProcessor PCM");
+            dwarn("[sound_bus] Worklet timeout; using ScriptProcessor PCM");
             state.audioStage = "script-pcm";
             startScriptProcessorFallback(ctx);
           }, function (err) {
@@ -3444,14 +3502,14 @@
                 String(err && err.message ? err.message : err);
               throw new Error(state.error);
             }
-            console.warn("[sound_bus] Worklet unavailable; using ScriptProcessor PCM", err);
+            dwarn("[sound_bus] Worklet unavailable; using ScriptProcessor PCM", err);
             state.audioStage = "script-pcm";
             startScriptProcessorFallback(ctx);
           });
         }
         state.audioStage = "script-pcm";
         startScriptProcessorFallback(ctx);
-        console.log("[sound_bus] PCM sink=script-pcm ctx=" + ctx.state);
+        dlog("[sound_bus] PCM sink=script-pcm ctx=" + ctx.state);
         return Promise.resolve();
       }
 
@@ -3464,14 +3522,14 @@
           state._resumeTimedOut = 0;
           primeAudioGesture(ctx);
           if (ctx.state !== "running")
-            console.warn("[sound_bus] resume resolved but ctx=" + ctx.state);
+            dwarn("[sound_bus] resume resolved but ctx=" + ctx.state);
           return attachSinkIfNeeded();
         }
       ).then(
         function () {
           markAudioReadyIfRunning();
           startBareOscTest();
-          console.log(
+          dlog(
             "[sound_bus] after resume ready=" +
               (state.audioReady ? 1 : 0) +
               " ctx=" +
