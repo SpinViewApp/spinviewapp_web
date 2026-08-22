@@ -1,0 +1,204 @@
+{
+  "language": "fr",
+  "name": "Francais",
+  "hud": {
+    "world": "w",
+    "tier": "t",
+    "level": "Niv",
+    "difficulty": "D",
+    "mind_level": "MIND",
+    "tiers": {
+      "t1": "Simple",
+      "t2": "Facile",
+      "t3": "Modere",
+      "t4": "Avance",
+      "t5": "Complexe",
+      "t6": "Exigeant",
+      "t7": "Difficile",
+      "t8": "Intense",
+      "t9": "Extreme",
+      "t10": "Legendaire",
+      "t11": "Mythique",
+      "t12": "Transcendant",
+      "t13": "Eternel"
+    }
+  },
+  "messages": {
+    "start": [
+      { "text": "Trouve la structure." },
+      { "text": "Lis les croisements." },
+      { "text": "Laisse parler le motif." },
+      { "text": "Niveau {level}. Fie-toi a la forme." },
+      { "text": "Une ligne peut tout ouvrir." },
+      { "text": "Difficulte {difficulty}. Reste fluide." },
+      { "text": "Commence par une certitude." },
+      { "text": "Chaque geste revele un indice." }
+    ],
+    "named_start": [
+      { "text": "Bon retour, {player}." },
+      { "text": "{player}, fie-toi a ton rythme." },
+      { "text": "Pret, {player}?" },
+      { "text": "Mind {mind_level}. Tu es pret." }
+    ],
+    "boss_warning": [
+      { "text": "Warning. Des lignes transitoires s'accrochent au plateau." },
+      { "text": "Alerte : le motif se propage. Stabilise le noyau." },
+      { "text": "Attention. Equations instables en approche." },
+      { "text": "Surtension. Isole les lignes permanentes." },
+      { "text": "Avertissement : croissance hors du coeur." },
+      { "text": "Vigilance. Le plateau refuse de rester ferme." },
+      { "text": "Alerte structurelle. Ne suis que le noyau." },
+      { "text": "Les branches parasites n'ont pas a durer." }
+    ],
+    "complete": [
+      { "text": "Magnifique. Ca tient." },
+      { "text": "Toutes les lignes concordent." },
+      { "text": "Raisonnement propre." },
+      { "text": "Structure stabilisee." },
+      { "text": "Plus rien n'est cache." },
+      { "text": "Un nouveau motif appris." },
+      { "text": "La reponse est devenue evidente." },
+      { "text": "Mind {mind_level}. Signal plus clair." }
+    ],
+    "named_complete": [
+      { "text": "Ta signature, {player}." },
+      { "text": "{player}, tu l'as rendu simple." },
+      { "text": "Clarte sous pression, {player}." },
+      { "text": "Garde cette sensation, {player}." }
+    ],
+    "fast": [
+      { "text": "Lecture rapide. Fin propre." },
+      { "text": "Motif saisi immediatement." },
+      { "text": "Deja en avance." },
+      { "text": "Pas de recherche. Reconnaissance." },
+      { "text": "Premier instinct. Le bon." },
+      { "text": "Le plateau n'a pas suivi." },
+      { "text": "Resolue en un souffle." },
+      { "text": "Pur reflexe." }
+    ],
+    "breakthrough": [
+      { "text": "Ton rythme vient d'accelerer." },
+      { "text": "Nouveau rythme personnel." },
+      { "text": "Le declic est venu tot." },
+      { "text": "Nouvelle vitesse detectee." },
+      { "text": "Ton approche a evolue." },
+      { "text": "Une vraie percee." }
+    ],
+    "precise": [
+      { "text": "Precis. Rien de perdu." },
+      { "text": "Chaque geste comptait." },
+      { "text": "La structure est restee propre." },
+      { "text": "Seulement l'essentiel." },
+      { "text": "Solution chirurgicale." },
+      { "text": "La precision devient instinct." }
+    ],
+    "experimental": [
+      { "text": "Exploration intelligente." },
+      { "text": "Chaque essai reduit l'inconnu." },
+      { "text": "Recherche audacieuse. Resultat solide." },
+      { "text": "L'incertitude devient donnee." },
+      { "text": "La curiosite a trouve le chemin." }
+    ],
+    "hesitant": [
+      { "text": "Une pause peut reveler le bond." },
+      { "text": "Ton modele se reorganise." },
+      { "text": "Laisse les croisements simplifier." },
+      { "text": "Trouve la ligne qui en lie deux." },
+      { "text": "Une certitude reste cachee." }
+    ],
+    "patient": [
+      { "text": "La patience cree la precision." },
+      { "text": "Tu as attendu, puis bien bouge." },
+      { "text": "Fluide devient rapide." },
+      { "text": "Tu as protege la structure." },
+      { "text": "Concentration profonde detectee." }
+    ],
+    "resilient": [
+      { "text": "Tu as ferme chaque ligne." },
+      { "text": "Reprise terminee." },
+      { "text": "La friction devient preuve." },
+      { "text": "Cette correction comptait." },
+      { "text": "Le plateau resiste. Tu apprends." }
+    ],
+    "returning": [
+      { "text": "Ton rythme est encore la." },
+      { "text": "Bon retour. Commence doucement." },
+      { "text": "Ta signature reste intacte." },
+      { "text": "La memoire des motifs se reveille." }
+    ],
+    "focus_return": [
+      { "text": "Attention restauree." },
+      { "text": "Utilise cet angle neuf." },
+      { "text": "Le motif attend encore." }
+    ],
+    "motion": [
+      { "text": "Bouge le plateau. Garde la ligne." },
+      { "text": "Mouvement detecte. Focus stable." },
+      { "text": "L'appareil bouge. Tu restes clair." }
+    ],
+    "short_session": [
+      { "text": "Un plateau aiguise un instinct." },
+      { "text": "Retour bref. Cible claire." },
+      { "text": "Petite session. Vrai progres." }
+    ],
+    "long_session": [
+      { "text": "Longue concentration detectee." },
+      { "text": "Relache les yeux. Lis l'ensemble." },
+      { "text": "Endurance active. Reste leger." }
+    ],
+    "mastery": [
+      { "text": "Difficulte {difficulty}. Toujours coherent." },
+      { "text": "Cette profondeur devient naturelle." },
+      { "text": "Decisions stables sous pression." }
+    ],
+    "forecast": [
+      { "text": "Palier {tier}. Apprends son accent." },
+      { "text": "La finale approche." },
+      { "text": "Nouvelle logique. Meme instinct." },
+      { "text": "Croisements plus denses devant." },
+      { "text": "Monde {world}. La pression monte." },
+      { "text": "Un nouvel operateur approche." },
+      { "text": "Derniere ligne droite. Reste precis." },
+      { "text": "L'inconnu va vite disparaitre." }
+    ],
+    "reward": [
+      { "text": "SUPERBE" },
+      { "text": "EXCELLENT" },
+      { "text": "MAGNIFIQUE" },
+      { "text": "RESOLU" }
+    ],
+    "reward_fast": [
+      { "text": "BRILLANT" },
+      { "text": "SI RAPIDE" },
+      { "text": "ECLAIR" },
+      { "text": "PUR REFLEXE" },
+      { "text": "INTOUCHABLE" }
+    ],
+    "reward_instant": [
+      { "text": "INSTANTANE" },
+      { "text": "UN SOUFFLE" },
+      { "text": "ZERO HESITATION" },
+      { "text": "PUR INSTINCT" }
+    ],
+    "reward_precise": [
+      { "text": "PRECIS" },
+      { "text": "IMPECCABLE" },
+      { "text": "PARFAIT" }
+    ],
+    "reward_recovery": [
+      { "text": "SOLIDE" },
+      { "text": "TU AS TENU" },
+      { "text": "REPRISE" }
+    ],
+    "random": [
+      { "text": "Mouvement interessant." },
+      { "text": "Tu as vu le croisement avant la ligne." },
+      { "text": "C'etait audacieux. Et juste." },
+      { "text": "Une contradiction peut devenir un indice." },
+      { "text": "Le plateau se souvient de chaque choix." },
+      { "text": "Tu commences a penser en intersections." },
+      { "text": "La confiance est plus calme que le hasard. Ce geste etait calme." },
+      { "text": "Ton attention devient une partie de l'interface." }
+    ]
+  }
+}

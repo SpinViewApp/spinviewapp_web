@@ -1,0 +1,6 @@
+{
+  "elements": [
+    { "type": "text_disabled", "text": "Same challenge code gives the same puzzle on every device." },
+    { "type": "numeris_challenge" }
+  ]
+}

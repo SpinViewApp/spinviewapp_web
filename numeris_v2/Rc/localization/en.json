@@ -1,0 +1,204 @@
+{
+  "language": "en",
+  "name": "English",
+  "hud": {
+    "world": "w",
+    "tier": "t",
+    "level": "Lvl",
+    "difficulty": "D",
+    "mind_level": "MIND",
+    "tiers": {
+      "t1": "Simple",
+      "t2": "Easy",
+      "t3": "Moderate",
+      "t4": "Advanced",
+      "t5": "Complex",
+      "t6": "Challenging",
+      "t7": "Hard",
+      "t8": "Intense",
+      "t9": "Extreme",
+      "t10": "Legendary",
+      "t11": "Mythic",
+      "t12": "Transcendent",
+      "t13": "Eternal"
+    }
+  },
+  "messages": {
+    "start": [
+      { "text": "Find the structure." },
+      { "text": "Read the crossings." },
+      { "text": "Let the pattern speak." },
+      { "text": "Level {level}. Trust the shape." },
+      { "text": "One line can unlock everything." },
+      { "text": "Difficulty {difficulty}. Stay fluid." },
+      { "text": "Start with certainty." },
+      { "text": "Every move reveals something." }
+    ],
+    "named_start": [
+      { "text": "Welcome back, {player}." },
+      { "text": "{player}, trust your rhythm." },
+      { "text": "Ready, {player}?" },
+      { "text": "Mind {mind_level}. You are ready." }
+    ],
+    "boss_warning": [
+      { "text": "Warning. Transient lines are latching onto the board." },
+      { "text": "Alert: the pattern is spreading. Hold the core." },
+      { "text": "Caution. Unstable equations incoming." },
+      { "text": "Overgrowth. Isolate the permanent lines." },
+      { "text": "Warning: growth beyond the core." },
+      { "text": "Stay sharp. The board will not stay still." },
+      { "text": "Structural alert. Trust only the core." },
+      { "text": "Stray branches are not meant to last." }
+    ],
+    "complete": [
+      { "text": "Beautiful. It holds." },
+      { "text": "Every line agrees." },
+      { "text": "Clean reasoning." },
+      { "text": "Pattern stabilized." },
+      { "text": "Nothing left hidden." },
+      { "text": "Another pattern learned." },
+      { "text": "The answer became inevitable." },
+      { "text": "Mind {mind_level}. Signal clearer." }
+    ],
+    "named_complete": [
+      { "text": "Your signature, {player}." },
+      { "text": "{player}, you made it simple." },
+      { "text": "Clarity under pressure, {player}." },
+      { "text": "Keep that feeling, {player}." }
+    ],
+    "fast": [
+      { "text": "Fast read. Clean finish." },
+      { "text": "Pattern caught instantly." },
+      { "text": "Already ahead." },
+      { "text": "No search. Recognition." },
+      { "text": "First instinct. Right instinct." },
+      { "text": "The board never caught up." },
+      { "text": "Solved in one breath." },
+      { "text": "Pure reflex." }
+    ],
+    "breakthrough": [
+      { "text": "Your rhythm just accelerated." },
+      { "text": "New personal pace." },
+      { "text": "That clicked early." },
+      { "text": "New speed detected." },
+      { "text": "Your approach evolved." },
+      { "text": "A real breakthrough." }
+    ],
+    "precise": [
+      { "text": "Precise. Nothing wasted." },
+      { "text": "Every move mattered." },
+      { "text": "The structure stayed clean." },
+      { "text": "Only what mattered." },
+      { "text": "Surgical solution." },
+      { "text": "Precision is becoming instinct." }
+    ],
+    "experimental": [
+      { "text": "Smart exploration." },
+      { "text": "Every test reduced the unknown." },
+      { "text": "Bold search. Solid result." },
+      { "text": "Uncertainty became data." },
+      { "text": "Curiosity found the route." }
+    ],
+    "hesitant": [
+      { "text": "A pause can reveal the jump." },
+      { "text": "Your model is reorganizing." },
+      { "text": "Let the crossings simplify it." },
+      { "text": "Find the line that binds two." },
+      { "text": "One certainty is still hidden." }
+    ],
+    "patient": [
+      { "text": "Patience creates precision." },
+      { "text": "You waited, then moved cleanly." },
+      { "text": "Smooth becomes fast." },
+      { "text": "You protected the structure." },
+      { "text": "Deep focus detected." }
+    ],
+    "resilient": [
+      { "text": "You closed every line." },
+      { "text": "Recovery complete." },
+      { "text": "Friction became evidence." },
+      { "text": "That correction mattered." },
+      { "text": "The board pushed. You learned." }
+    ],
+    "returning": [
+      { "text": "Your rhythm is still here." },
+      { "text": "Welcome back. Start gently." },
+      { "text": "Your signature remains." },
+      { "text": "Pattern memory wakes quickly." }
+    ],
+    "focus_return": [
+      { "text": "Attention restored." },
+      { "text": "Use the fresh angle." },
+      { "text": "The pattern is still waiting." }
+    ],
+    "motion": [
+      { "text": "Move the board. Hold the line." },
+      { "text": "Motion detected. Focus stable." },
+      { "text": "The device moves. You stay clear." }
+    ],
+    "short_session": [
+      { "text": "One board can sharpen an instinct." },
+      { "text": "Brief return. Clear target." },
+      { "text": "Small session. Real progress." }
+    ],
+    "long_session": [
+      { "text": "Long focus detected." },
+      { "text": "Relax your eyes. Read the whole." },
+      { "text": "Endurance active. Stay light." }
+    ],
+    "mastery": [
+      { "text": "Difficulty {difficulty}. Still coherent." },
+      { "text": "This depth feels natural now." },
+      { "text": "Stable choices under pressure." }
+    ],
+    "forecast": [
+      { "text": "Tier {tier}. Learn its accent." },
+      { "text": "The finale is approaching." },
+      { "text": "New logic. Same instinct." },
+      { "text": "Denser crossings ahead." },
+      { "text": "World {world}. Pressure rising." },
+      { "text": "A new operator approaches." },
+      { "text": "Final stretch. Stay precise." },
+      { "text": "The unfamiliar will fade." }
+    ],
+    "reward": [
+      { "text": "GREAT" },
+      { "text": "EXCELLENT" },
+      { "text": "BEAUTIFUL" },
+      { "text": "SOLVED" }
+    ],
+    "reward_fast": [
+      { "text": "BRILLIANT" },
+      { "text": "SO FAST" },
+      { "text": "LIGHTNING" },
+      { "text": "PURE REFLEX" },
+      { "text": "UNTOUCHABLE" }
+    ],
+    "reward_instant": [
+      { "text": "INSTANT" },
+      { "text": "ONE BREATH" },
+      { "text": "ZERO HESITATION" },
+      { "text": "PURE INSTINCT" }
+    ],
+    "reward_precise": [
+      { "text": "PRECISE" },
+      { "text": "FLAWLESS" },
+      { "text": "CLEAN" }
+    ],
+    "reward_recovery": [
+      { "text": "STRONG" },
+      { "text": "YOU HELD" },
+      { "text": "RECOVERED" }
+    ],
+    "random": [
+      { "text": "Interesting move." },
+      { "text": "You saw the crossing before the line." },
+      { "text": "That was bold. It worked." },
+      { "text": "A contradiction can be a useful clue." },
+      { "text": "The board remembers every choice." },
+      { "text": "You are beginning to think in intersections." },
+      { "text": "Confidence is quieter than guessing. That move was quiet." },
+      { "text": "Your attention is becoming part of the interface." }
+    ]
+  }
+}
