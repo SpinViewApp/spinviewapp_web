@@ -1,5 +1,4 @@
 arunangshubanerjee-g-clef-1600.glb 969280
-dezyne_3d-male-192.glb 2502852
 Dragon_Model.glb 364472
 gal-b-die-4221.glb 906060
 gal-b-lantern-4120.glb 220508
@@ -35,7 +34,6 @@ pixellabs-halloween-witch-hat-3d-model-2705 (1).glb 36949452
 pixellabs-halloween-witch-hat-3d-model-2705.glb 36949452
 pixellabs-haunted-house-2825.glb 42266952
 pixellabs-house-3623.glb 36744628
-pixellabs-industrial-robot-4975.glb 4851400
 pixellabs-magic-potion-3d-model-2688.glb 31245908
 pixellabs-orc-mug-3550.glb 44783924
 pixellabs-pickaxe-3560.glb 40693308
@@ -44,16 +42,11 @@ pixellabs-potion-bottle-3421.glb 35637004
 pixellabs-robot-3332.glb 44618608
 pixellabs-scroll-3468.glb 33542780
 pixellabs-skull-3331.glb 38797092
-pixellabs-spell-book-3508.glb 1900528
 pixellabs-stylized-snail-3d-model-4856.glb 37474276
-pixellabs-treasure-chest-4062.glb 4994012
-pixellabs-viking-shield-4228.glb 4579256
 pixellabs-vintage-bottle-4972.glb 47884464
 pixellabs-voodoo-3762.glb 44336648
 pixellabs-voodoo-doll-3469.glb 47842160
 pixellabs-voodoo-doll-3706.glb 43469544
-pixellabs-voodoo-doll-3767.glb 5579220
-pixellabs-witch-cauldron-3d-model-2417.glb 1727768
 pixellabs-zombie-3403.glb 42866448
 tiny_planet_friends_3d-animal-4055.glb 26403672
 tiny_planet_friends_3d-defective-product-4083.glb 24269912
