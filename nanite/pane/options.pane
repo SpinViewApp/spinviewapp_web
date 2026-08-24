@@ -119,7 +119,7 @@
       "label": "Animation",
       "default_open": false,
       "elements": [
-        { "type": "checkbox", "label": "Animate", "path": "vm_anim", "default": false },
+        { "type": "checkbox", "label": "Animate", "path": "vm_anim", "default": true },
         { "type": "vmesh_anim_clip" },
         { "type": "slider_float", "label": "Speed", "path": "vm_anim_speed", "min": 0.0, "max": 4.0, "default": 1.0 },
         { "type": "checkbox", "label": "Show skeleton", "path": "vm_bones_dbg", "default": false },
