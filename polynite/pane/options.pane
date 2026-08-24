@@ -1,0 +1,212 @@
+{
+  "title": "Meshopt options",
+  "elements": [
+    {
+      "type": "section",
+      "label": "Virtual mesh (LOD)",
+      "default_open": true,
+      "elements": [
+        { "type": "slider_float", "label": "Pixel error", "path": "vm_pixel_error", "min": 0.25, "max": 8.0, "default": 1.0 },
+        { "type": "combo", "label": "Debug view", "path": "vm_debug", "default": 0, "items": [
+            { "label": "Shaded" },
+            { "label": "Clusters" },
+            { "label": "LOD levels" },
+            { "label": "Error heat" },
+            { "label": "Normals" },
+            { "label": "Depth" },
+            { "label": "UVs" },
+            { "label": "Albedo / material" }
+        ]},
+        { "type": "checkbox", "label": "Frustum culling", "path": "vm_cull", "default": true },
+        { "type": "checkbox", "label": "Unlit", "path": "vm_unlit", "default": false },
+        { "type": "checkbox", "label": "Textures", "path": "vm_textures", "default": true },
+        { "type": "checkbox", "label": "Two-sided", "path": "vm_two_sided", "default": true },
+        { "type": "vmesh_freeze" },
+        { "type": "slider_int", "label": "Tris / cluster", "path": "vm_cluster_tris", "min": 64, "max": 256, "default": 128 },
+        { "type": "vmesh_open", "label": "Open model..." },
+        { "type": "same_line" },
+        { "type": "vmesh_rebuild", "label": "Rebuild clusters" },
+        { "type": "vmesh_load_demo", "label": "Load demo" },
+        { "type": "spacing", "height": 4.0 },
+        { "type": "vmesh_stats" }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Sun & ambient",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Sun", "path": "vm_sun_on", "default": true },
+        { "type": "slider_float", "label": "Sun yaw", "path": "vm_sun_yaw", "min": -3.14159, "max": 3.14159, "default": 0.9 },
+        { "type": "slider_float", "label": "Sun pitch", "path": "vm_sun_pitch", "min": -0.45, "max": 1.55, "default": 0.85 },
+        { "type": "color3", "label": "Sun color", "path": "vm_sun_color", "default_r": 1.0, "default_g": 0.96, "default_b": 0.9 },
+        { "type": "slider_float", "label": "Sun intensity", "path": "vm_sun_intensity", "min": 0.0, "max": 8.0, "default": 2.6 },
+        { "type": "slider_float", "label": "Specular intensity", "path": "vm_spec_intensity", "min": 0.0, "max": 4.0, "default": 0.9 },
+        { "type": "slider_float", "label": "Specular power", "path": "vm_spec_power", "min": 4.0, "max": 128.0, "default": 42.0 },
+        { "type": "slider_float", "label": "Rim light", "path": "vm_rim", "min": 0.0, "max": 2.0, "default": 0.35 },
+        { "type": "color3", "label": "Ambient sky", "path": "vm_amb_sky", "default_r": 0.46, "default_g": 0.56, "default_b": 0.72 },
+        { "type": "color3", "label": "Ambient ground", "path": "vm_amb_ground", "default_r": 0.22, "default_g": 0.19, "default_b": 0.17 },
+        { "type": "slider_float", "label": "Ambient intensity", "path": "vm_amb_intensity", "min": 0.0, "max": 3.0, "default": 0.85 },
+        { "type": "slider_float", "label": "Exposure", "path": "vm_exposure", "min": 0.1, "max": 4.0, "default": 1.0 },
+        { "type": "color3", "label": "Background", "path": "vm_bg_color", "default_r": 0.043, "default_g": 0.051, "default_b": 0.066 }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Effects",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Fast edge pass", "path": "vm_edge", "default": true },
+        { "type": "slider_float", "label": "Edge intensity", "path": "vm_edge_int", "min": 0.0, "max": 1.0, "default": 0.55 },
+        { "type": "slider_float", "label": "Edge width px", "path": "vm_edge_width", "min": 0.25, "max": 2.5, "default": 1.2 },
+        { "type": "color3", "label": "Edge color", "path": "vm_edge_color", "default_r": 0.42, "default_g": 0.38, "default_b": 0.62 },
+        { "type": "slider_float", "label": "Distance fade", "path": "vm_fog_density", "min": 0.0, "max": 1.5, "default": 0.22 },
+        { "type": "text_disabled", "text": "Silhouette tint + depth gradient toward the edge color (blobcone look)." },
+        { "type": "separator" },
+        { "type": "slider_int", "label": "Cel shading", "path": "vm_cel", "min": 0, "max": 8, "default": 0 },
+        { "type": "separator" },
+        { "type": "checkbox", "label": "Bloom", "path": "vm_bloom", "default": true },
+        { "type": "slider_float", "label": "Bloom threshold", "path": "vm_bloom_threshold", "min": 0.2, "max": 1.0, "default": 0.72 },
+        { "type": "slider_float", "label": "Bloom intensity", "path": "vm_bloom_int", "min": 0.0, "max": 2.5, "default": 0.55 },
+        { "type": "separator" },
+        { "type": "checkbox", "label": "Reflections", "path": "vm_refl", "default": true },
+        { "type": "slider_float", "label": "Metallic", "path": "vm_metallic", "min": 0.0, "max": 1.0, "default": 0.0 },
+        { "type": "slider_float", "label": "Roughness", "path": "vm_roughness", "min": 0.0, "max": 1.0, "default": 0.35 },
+        { "type": "slider_float", "label": "Normal map strength", "path": "vm_normal_strength", "min": 0.0, "max": 2.5, "default": 1.0 },
+        { "type": "separator" },
+        { "type": "slider_float", "label": "Vignette", "path": "vm_vignette", "min": 0.0, "max": 1.0, "default": 0.25 },
+        { "type": "text_disabled", "text": "Anti-aliasing: the scene renders with 4x MSAA (always on)." }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Lamps",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Show light gizmos", "path": "vm_gizmos", "default": true },
+        { "type": "slider_float", "label": "Lamp boost", "path": "vm_lamp_boost", "min": 0.0, "max": 5.0, "default": 1.8 },
+        { "type": "slider_float", "label": "Color saturation", "path": "vm_lamp_sat", "min": 0.0, "max": 3.0, "default": 1.35 },
+        { "type": "checkbox", "label": "Lamp shadows", "path": "vm_lamp_shadow", "default": true },
+        { "type": "slider_float", "label": "Lamp shadow strength", "path": "vm_lamp_shadow_strength", "min": 0.0, "max": 1.6, "default": 0.85 },
+        { "type": "slider_float", "label": "Lamp shadow tint", "path": "vm_lamp_shadow_tint", "min": 0.0, "max": 1.0, "default": 0.5 },
+        { "type": "checkbox", "label": "Debug shadow frustums", "path": "vm_lamp_frustum", "default": false },
+        { "type": "text_disabled", "text": "Drag the sun / L1..L3 gizmos in the viewport to place lights." },
+        { "type": "separator" },
+        { "type": "checkbox", "label": "Lamp 1", "path": "vm_lamp1_on", "default": true },
+        { "type": "color3", "label": "L1 color", "path": "vm_lamp1_color", "default_r": 1.0, "default_g": 0.72, "default_b": 0.45 },
+        { "type": "slider_float", "label": "L1 intensity", "path": "vm_lamp1_int", "min": 0.0, "max": 10.0, "default": 1.4 },
+        { "type": "slider_float", "label": "L1 range", "path": "vm_lamp1_range", "min": 0.5, "max": 12.0, "default": 4.5 },
+        { "type": "slider_float", "label": "L1 specular", "path": "vm_lamp1_spec", "min": 0.0, "max": 4.0, "default": 1.0 },
+        { "type": "slider_float", "label": "L1 shadow fade", "path": "vm_lamp1_sfade", "min": 0.25, "max": 8.0, "default": 2.5 },
+        { "type": "separator" },
+        { "type": "checkbox", "label": "Lamp 2", "path": "vm_lamp2_on", "default": false },
+        { "type": "color3", "label": "L2 color", "path": "vm_lamp2_color", "default_r": 0.45, "default_g": 0.65, "default_b": 1.0 },
+        { "type": "slider_float", "label": "L2 intensity", "path": "vm_lamp2_int", "min": 0.0, "max": 10.0, "default": 1.2 },
+        { "type": "slider_float", "label": "L2 range", "path": "vm_lamp2_range", "min": 0.5, "max": 12.0, "default": 4.5 },
+        { "type": "slider_float", "label": "L2 specular", "path": "vm_lamp2_spec", "min": 0.0, "max": 4.0, "default": 1.0 },
+        { "type": "slider_float", "label": "L2 shadow fade", "path": "vm_lamp2_sfade", "min": 0.25, "max": 8.0, "default": 2.5 },
+        { "type": "separator" },
+        { "type": "checkbox", "label": "Lamp 3", "path": "vm_lamp3_on", "default": false },
+        { "type": "color3", "label": "L3 color", "path": "vm_lamp3_color", "default_r": 0.9, "default_g": 0.3, "default_b": 0.8 },
+        { "type": "slider_float", "label": "L3 intensity", "path": "vm_lamp3_int", "min": 0.0, "max": 10.0, "default": 1.2 },
+        { "type": "slider_float", "label": "L3 range", "path": "vm_lamp3_range", "min": 0.5, "max": 12.0, "default": 4.5 },
+        { "type": "slider_float", "label": "L3 specular", "path": "vm_lamp3_spec", "min": 0.0, "max": 4.0, "default": 1.0 },
+        { "type": "slider_float", "label": "L3 shadow fade", "path": "vm_lamp3_sfade", "min": 0.25, "max": 8.0, "default": 2.5 }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Animation",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Animate", "path": "vm_anim", "default": true },
+        { "type": "vmesh_anim_clip" },
+        { "type": "slider_float", "label": "Speed", "path": "vm_anim_speed", "min": 0.0, "max": 4.0, "default": 1.0 },
+        { "type": "checkbox", "label": "Show skeleton", "path": "vm_bones_dbg", "default": false },
+        { "type": "text_disabled", "text": "Plays the model's glTF skeleton animations (baked to GPU palettes, storage-buffer skinning). Models without a rig fall back to a T-pose humanoid auto-rig." }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Companion",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Enable critter", "path": "vm_cr_enable", "default": false },
+        { "type": "vmesh_critter_version" },
+        { "type": "vmesh_critter_randomize" },
+        { "type": "slider_float", "label": "IK fold (v2)", "path": "vm_cr_ikbend", "min": 0.15, "max": 1.15, "default": 0.62 },
+        { "type": "slider_float", "label": "Step height (v2)", "path": "vm_cr_step", "min": 0.05, "max": 0.5, "default": 0.28 },
+        { "type": "slider_float", "label": "Heel length (v2)", "path": "vm_cr_heel", "min": 0.08, "max": 0.35, "default": 0.2 },
+        { "type": "slider_float", "label": "Toe length (v2)", "path": "vm_cr_toe", "min": 0.12, "max": 0.5, "default": 0.3 },
+        { "type": "slider_float", "label": "Size", "path": "vm_cr_size", "min": 0.1, "max": 1.5, "default": 0.45 },
+        { "type": "slider_float", "label": "Body length", "path": "vm_cr_body_len", "min": 0.6, "max": 1.8, "default": 1.0 },
+        { "type": "slider_float", "label": "Leg length", "path": "vm_cr_leg_len", "min": 0.5, "max": 1.6, "default": 1.0 },
+        { "type": "slider_float", "label": "Neck length", "path": "vm_cr_neck_len", "min": 0.4, "max": 1.8, "default": 1.0 },
+        { "type": "slider_float", "label": "Tail length", "path": "vm_cr_tail_len", "min": 0.4, "max": 1.8, "default": 1.0 },
+        { "type": "slider_float", "label": "Chubbiness", "path": "vm_cr_chubby", "min": 0.6, "max": 1.6, "default": 1.0 },
+        { "type": "separator" },
+        { "type": "slider_float", "label": "Fur length", "path": "vm_cr_fur_len", "min": 0.4, "max": 1.8, "default": 1.0 },
+        { "type": "slider_float", "label": "Fur stiffness", "path": "vm_cr_fur_stiff", "min": 4.0, "max": 80.0, "default": 26.0 },
+        { "type": "slider_float", "label": "Fur damping", "path": "vm_cr_fur_damp", "min": 1.0, "max": 16.0, "default": 6.5 },
+        { "type": "separator" },
+        { "type": "slider_float", "label": "Gait speed", "path": "vm_cr_gait", "min": 0.0, "max": 3.0, "default": 1.0 },
+        { "type": "slider_float", "label": "Bounce", "path": "vm_cr_bounce", "min": 0.0, "max": 2.5, "default": 1.0 },
+        { "type": "checkbox", "label": "Roam in a circle", "path": "vm_cr_roam", "default": true },
+        { "type": "slider_float", "label": "Roam radius", "path": "vm_cr_roam_radius", "min": 0.8, "max": 4.0, "default": 1.6 },
+        { "type": "separator" },
+        { "type": "color3", "label": "Body", "path": "vm_cr_col_body", "default_r": 0.18, "default_g": 0.32, "default_b": 0.36 },
+        { "type": "color3", "label": "Belly", "path": "vm_cr_col_belly", "default_r": 0.82, "default_g": 0.78, "default_b": 0.66 },
+        { "type": "color3", "label": "Fur", "path": "vm_cr_col_fur", "default_r": 0.95, "default_g": 0.45, "default_b": 0.25 },
+        { "type": "color3", "label": "Accent", "path": "vm_cr_col_accent", "default_r": 1.0, "default_g": 0.85, "default_b": 0.35 },
+        { "type": "text_disabled", "text": "Live-generated creature (skeleton, mesh, gait and lagging fur fins are all procedural). It walks beside the loaded model." }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Camera",
+      "default_open": false,
+      "elements": [
+        { "type": "slider_float", "label": "Zoom speed", "path": "vm_zoom_speed", "min": 0.01, "max": 0.3, "default": 0.08 },
+        { "type": "vmesh_frame", "label": "Frame model" },
+        { "type": "vmesh_tilt" }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Shadows",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Enable shadows", "path": "vm_shadow", "default": true },
+        { "type": "combo", "label": "Shadow map", "path": "vm_shadow_size", "default": 1, "items": [
+            { "label": "512" },
+            { "label": "1024" },
+            { "label": "2048" }
+        ]},
+        { "type": "slider_float", "label": "Softness (PCF)", "path": "vm_shadow_soft", "min": 0.5, "max": 4.0, "default": 1.6 },
+        { "type": "slider_float", "label": "Strength", "path": "vm_shadow_strength", "min": 0.0, "max": 1.0, "default": 0.85 },
+        { "type": "slider_float", "label": "Contact fade", "path": "vm_shadow_contact", "min": 0.0, "max": 1.0, "default": 0.55 },
+        { "type": "slider_float", "label": "Ground AO", "path": "vm_shadow_ao", "min": 0.0, "max": 1.5, "default": 0.55 },
+        { "type": "checkbox", "label": "Debug sun shadow view", "path": "vm_shadow_debug", "default": false }
+      ]
+    },
+    {
+      "type": "section",
+      "label": "Floor",
+      "default_open": false,
+      "elements": [
+        { "type": "checkbox", "label": "Enable floor", "path": "vm_floor", "default": true },
+        { "type": "slider_float", "label": "Tile size", "path": "vm_floor_tile", "min": 0.05, "max": 2.0, "default": 0.35 },
+        { "type": "slider_float", "label": "Tile lines", "path": "vm_floor_line", "min": 0.0, "max": 1.0, "default": 0.35 },
+        { "type": "slider_float", "label": "Fade distance", "path": "vm_floor_fade", "min": 2.0, "max": 40.0, "default": 9.0 },
+        { "type": "color3", "label": "Tile color A", "path": "vm_floor_col_a", "default_r": 0.185, "default_g": 0.19, "default_b": 0.20 },
+        { "type": "color3", "label": "Tile color B", "path": "vm_floor_col_b", "default_r": 0.145, "default_g": 0.15, "default_b": 0.16 }
+      ]
+    },
+    { "type": "separator" },
+    { "type": "meshopt_reset_defaults", "label": "Reset defaults" },
+    { "type": "same_line" },
+    { "type": "meshopt_reset_view", "label": "Reset view" },
+    { "type": "spacing", "height": 8.0 },
+    { "type": "meshopt_panel_size" }
+  ]
+}

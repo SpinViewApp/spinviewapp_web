@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wake Nanite - Virtual Mesh Viewer | SpinView</title>
+<meta name="description" content="Wake Nanite: a WebGPU virtual-mesh viewer with Nanite-style cluster LOD. Load .glb models and inspect clusters, LOD levels and error heat live in your browser.">
+<meta name="robots" content="index, follow">
+<meta name="googlebot" content="index, follow">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+
+<link rel="canonical" href="https://spinview.app/nanite">
+
+<meta property="og:title" content="Wake Nanite - Virtual Mesh Viewer">
+<meta property="og:description" content="A WebGPU virtual-mesh viewer with Nanite-style cluster LOD: load a model and inspect clusters, LOD levels and pixel error live.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://spinview.app/nanite">
+<meta property="og:site_name" content="SpinView">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Wake Nanite - Virtual Mesh Viewer">
+<meta name="twitter:description" content="A WebGPU virtual-mesh viewer with Nanite-style cluster LOD, running in the browser.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Wake Nanite",
+  "url": "https://spinview.app/nanite",
+  "description": "A WebGPU virtual-mesh viewer with Nanite-style cluster LOD built on meshoptimizer.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Web Browser",
+  "publisher": {
+    "@type": "Organization",
+    "name": "SpinView",
+    "url": "https://spinview.app"
+  }
+}
+</script>
+<script src="version.js"></script>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+body {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.game-canvas {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: #000;
+  z-index: 0;
+}
+.app-loader {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: rgba(255, 255, 255, 0.35);
+  background: #000;
+  z-index: 50;
+}
+.app-spinner {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  border: 4px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.42);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.gpu-notice {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #07070a;
+  padding: 24px;
+  overflow-y: auto;
+  -webkit-font-smoothing: antialiased;
+}
+.gpu-notice-card {
+  max-width: 30rem;
+  width: 100%;
+  color: #e6e6ea;
+  font: 400 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.gpu-notice h1 {
+  margin: 0 0 12px; font-size: 20px; font-weight: 600; letter-spacing: -.01em;
+}
+.gpu-notice p { margin: 0 0 14px; color: #a9a9b4; }
+.gpu-notice ul { margin: 0 0 18px; padding-left: 1.15em; color: #a9a9b4; }
+.gpu-notice li { margin: 4px 0; }
+.gpu-notice code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; color: #cfcfd8;
+  background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px;
+}
+.gpu-notice-detail {
+  margin-top: 22px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,.09);
+  font: 400 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #6d6d78; word-break: break-word;
+}
+.debug-console {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 48px;
+  display: none;
+  max-height: 50vh;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 10px;
+  color: #a8efa8;
+  background: rgba(0, 0, 0, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  font: 12px/1.4 Consolas, Monaco, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  z-index: 100;
+}
+.debug-console.visible { display: block; }
+.debug-console.has-error {
+  color: #ff9b9b;
+  border-color: rgba(255, 90, 90, 0.75);
+}
+/* Banner pinned at the top of the DEV panel: binary and backend identity.
+   It must not scroll with the logs, or it vanishes on the first line. */
+.dev-info {
+  position: sticky;
+  top: -10px;
+  margin: -10px -10px 8px -10px;
+  padding: 8px 10px;
+  background: #06131b;
+  border-bottom: 1px solid rgba(120, 220, 255, 0.35);
+  color: #9fe8ff;
+  z-index: 1;
+}
+.dev-info b { color: #ffffff; font-weight: 600; }
+.dev-info .k { color: #6fb6cc; display: inline-block; min-width: 78px; }
+.dev-info .row { white-space: pre-wrap; word-break: break-word; }
+.dev-info .ok  { color: #8ef0a8; }
+.dev-info .bad { color: #ff9b9b; }
+.debug-button {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  display: none;
+  min-width: 44px;
+  height: 28px;
+  padding: 0 8px;
+  color: #fff;
+  background: rgba(22, 22, 22, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  font: 700 11px Arial, Helvetica, sans-serif;
+  z-index: 110;
+}
+.debug-button.visible { display: block; }
+.debug-button.has-error {
+  background: rgba(120, 0, 0, 0.84);
+  border-color: rgba(255, 100, 100, 0.85);
+}
+
+/*
+ * Search-engine and accessibility content.
+ * It remains in the document flow for crawlers and assistive technologies
+ * without interfering with the fullscreen graphics canvas.
+ */
+.seo-content {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: normal;
+  border: 0;
+}
+</style>
+</head>
+<body>
+<main class="seo-content" id="about-nanite">
+  <h1>Wake Nanite</h1>
+
+  <p>
+    Wake Nanite is a virtual-mesh viewer running directly in your web browser
+    on WebGPU.
+  </p>
+
+  <p>
+    It builds a Nanite-style cluster LOD hierarchy on top of meshoptimizer and
+    renders the selected cut live: clusters, LOD levels, error heat, normals,
+    depth, UVs and albedo.
+  </p>
+
+  <p>
+    Load one of the bundled models or drop your own .glb, .gltf, .obj or
+    .wmesh file into the window.
+  </p>
+
+  <a href="https://spinview.app/">Visit SpinView</a>
+</main>
+
+<div class="app-loader" id="loader">
+  <div class="app-spinner"></div>
+  <div id="loaderText">Loading engine...</div>
+</div>
+<div class="debug-console" id="debugConsole"></div>
+<button class="debug-button" id="debugButton" type="button">...</button>
+<canvas class="game-canvas" id="canvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+<script>
+/* Source of truth for the web shell — copied by build.cwc to {pOut}index.html
+ * (and {pOut}App.html, replacing emscripten's own WebGL launcher). Same shell
+ * as Numeris: Module exists BEFORE App.js is fetched, every asset is
+ * cache-busted with the frozen page version, and the WebGPU preflight
+ * explains a refusal instead of leaving a black screen. */
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("canvas");
+  var loader = document.getElementById("loader");
+  var loaderText = document.getElementById("loaderText");
+  var debugConsole = document.getElementById("debugConsole");
+  var debugButton = document.getElementById("debugButton");
+  var logNative = console.log ? console.log.bind(console) : function () {};
+  var infoNative = console.info ? console.info.bind(console) : logNative;
+  var warnNative = console.warn ? console.warn.bind(console) : logNative;
+  var errNative = console.error ? console.error.bind(console) : logNative;
+  var consoleOpen = false;
+  var lineCount = 0;
+  var host = location.hostname || "";
+  var debugOn =
+    /(?:^|[?&])debug(?:[=&]|$)/i.test(String(location.search || "")) ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.indexOf("192.168.") === 0 ||
+    window.spinviewDebugEnabled === true;
+
+  /* ============== ENGINE / BACKEND BANNER (top of the DEV panel) ==============
+     Bootstrap and engine traces mix together fast. This banner stays pinned at
+     the top of the panel and answers the only questions that matter when in
+     doubt: which binary is running, on which backend, on which GPU, and is the
+     WebGL fallback even deployed. */
+  var devInfo = {
+    engine: "-", backend: "pending", why: "selection in progress",
+    gpu: "not probed", gl: "not probed", glBin: "not probed", runtime: ""
+  };
+  var devInfoEl = null, devGlProbed = false;
+
+  function devEsc(t) {
+    return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* Probe WebGL2 on a DETACHED canvas, then release the context: the page
+     canvas belongs to the engine and a canvas accepts one context type only. */
+  function devProbeGL() {
+    if (devGlProbed) return;
+    devGlProbed = true;
+    try {
+      var c = document.createElement("canvas");
+      var g = c.getContext("webgl2");
+      if (!g) { devInfo.gl = "unavailable"; return; }
+      var who = "";
+      try {
+        var ext = g.getExtension("WEBGL_debug_renderer_info");
+        if (ext) who = g.getParameter(ext.UNMASKED_RENDERER_WEBGL) + " / " +
+                       g.getParameter(ext.UNMASKED_VENDOR_WEBGL);
+      } catch (e1) {}
+      if (!who) who = g.getParameter(g.RENDERER) + " / " + g.getParameter(g.VENDOR);
+      devInfo.gl = who + "\n" + g.getParameter(g.VERSION) +
+        " | " + g.getParameter(g.SHADING_LANGUAGE_VERSION) +
+        "\ntex " + g.getParameter(g.MAX_TEXTURE_SIZE) +
+        " | units " + g.getParameter(g.MAX_TEXTURE_IMAGE_UNITS) +
+        " | MSAA " + g.getParameter(g.MAX_SAMPLES) +
+        " | drawbuf " + g.getParameter(g.MAX_DRAW_BUFFERS) +
+        " | float-render " + (g.getExtension("EXT_color_buffer_float") ? "yes" : "no");
+      try { var lc = g.getExtension("WEBGL_lose_context"); if (lc) lc.loseContext(); } catch (e2) {}
+    } catch (e) { devInfo.gl = "probe failed: " + (e && e.message ? e.message : e); }
+  }
+
+  function devInfoSet(key, value) {
+    devInfo[key] = value;
+    devInfoRender();
+  }
+
+  function devInfoRender() {
+    if (!debugConsole) return;
+    devProbeGL();
+    if (!devInfoEl) {
+      devInfoEl = document.createElement("div");
+      devInfoEl.className = "dev-info";
+      if (debugConsole.firstChild) debugConsole.insertBefore(devInfoEl, debugConsole.firstChild);
+      else debugConsole.appendChild(devInfoEl);
+    }
+    var flags = String(location.search || "").replace(/^\?/, "");
+    var scr = window.innerWidth + "x" + window.innerHeight + " css | dpr " +
+              (window.devicePixelRatio || 1);
+    var rows = [
+      ["engine",  "<b>" + devEsc(devInfo.engine) + "</b> — " + devEsc(devInfo.backend)],
+      ["sokol",   devEsc(devInfo.runtime || "not reported yet")],
+      ["choice",  devEsc(devInfo.why)],
+      ["version", devEsc(getCurrentVersion())],
+      ["WebGPU",  devEsc(devInfo.gpu)],
+      ["WebGL2",  devEsc(devInfo.gl)],
+      ["AppGL",   devEsc(devInfo.glBin)],
+      ["screen",  devEsc(scr)],
+      ["flags",   devEsc(flags || "none")],
+      ["UA",      devEsc(navigator.userAgent)]
+    ];
+    var html = "", i;
+    for (i = 0; i < rows.length; i++) {
+      html += '<div class="row"><span class="k">' + rows[i][0] + '</span>' + rows[i][1] + '</div>';
+    }
+    devInfoEl.innerHTML = html;
+  }
+  window.spinviewDevInfoSet = devInfoSet;
+
+  /* The wasm cannot see the loaded binary name nor the unmasked ANGLE
+     renderer, but the page can. */
+  window.spinviewGfxInfo = function () {
+    try {
+      devProbeGL();
+      return "Binary: " + (window.__spinEngine || "?") + ".wasm\n" +
+             "Loader: " + devInfo.why + "\n" +
+             "GPU: " + String(devInfo.gpu).replace(/\n/g, " | ") + "\n" +
+             "GL: " + String(devInfo.gl).replace(/\n/g, " | ");
+    } catch (e) { return ""; }
+  };
+
+  function getCurrentVersion() {
+    /* VERSION FROZEN AT BOOT.
+       The value returned here could change mid-page (version.js, localStorage)
+       and then App.js and its side files would come from two different builds.
+       One page = one version, frozen on the first call. */
+    if (window.__spinVerFrozen) return window.__spinVerFrozen;
+    var v;
+    try {
+      if (typeof window.getCurrentVersion === "function") v = window.getCurrentVersion();
+      if (!v) {
+        v = new URL(location.href).searchParams.get("_v") ||
+            localStorage.getItem("siteVersion") || "dev";
+      }
+    } catch (e) { v = "dev"; }
+    if (!v) v = "dev";
+    window.__spinVerFrozen = v;
+    try { console.log("[gpu-bootstrap] version frozen for this page: " + v); } catch (e2) {}
+    return v;
+  }
+
+  function bootToken() {
+    if (!window.__spinBootTok) window.__spinBootTok = Date.now();
+    return window.__spinBootTok;
+  }
+
+  function cacheBust(path) {
+    var version = getCurrentVersion();
+    var sep = path.indexOf("?") >= 0 ? "&" : "?";
+    return path + sep + "_v=" + encodeURIComponent(version) + "&_t=" + bootToken();
+  }
+
+  function updateVersionLabel() {
+    var version = getCurrentVersion();
+    if (debugButton) debugButton.textContent = version;
+    if (loaderText) loaderText.textContent = "Loading engine... " + version;
+  }
+
+  function consoleShow() {
+    consoleOpen = true;
+    devInfoRender();
+    debugConsole.classList.add("visible");
+  }
+  function consoleHide() {
+    consoleOpen = false;
+    debugConsole.classList.remove("visible");
+  }
+  function consoleToggle() {
+    if (consoleOpen) consoleHide();
+    else consoleShow();
+  }
+
+  function stringifyArg(v) {
+    if (v === undefined) return "undefined";
+    if (v === null) return "null";
+    if (typeof v === "string") return v;
+    if (v instanceof Error) return v.stack || v.message || String(v);
+    if (typeof v === "object") {
+      try { return JSON.stringify(v); }
+      catch (e) { return String(v); }
+    }
+    return String(v);
+  }
+
+  function mirrorConsole(kind, args) {
+    var parts = [], i, el;
+    for (i = 0; i < args.length; ++i) parts.push(stringifyArg(args[i]));
+    var joined = parts.join(" ");
+    /* The engine reports the backend sokol ACTUALLY brought up. That is the
+       only source of truth: the loader picks a file, but the wasm is compiled
+       for one backend and one only. */
+    if (joined.indexOf("[vmesh_backend]") >= 0) {
+      devInfo.runtime = joined.replace(/^.*\[vmesh_backend\]:\s*/, "");
+      try { devInfoRender(); } catch (eB) {}
+    }
+    el = document.createElement("div");
+    el.textContent = joined;
+    debugConsole.appendChild(el);
+    lineCount++;
+    while (lineCount > 400) {
+      /* firstChild may be the pinned info banner: only drop log lines. */
+      var victim = debugConsole.firstChild;
+      if (victim === devInfoEl) victim = victim.nextSibling;
+      if (!victim) break;
+      debugConsole.removeChild(victim);
+      lineCount--;
+    }
+    debugConsole.scrollTop = debugConsole.scrollHeight;
+    if (kind === "error") {
+      debugConsole.classList.add("has-error");
+      debugButton.classList.add("visible", "has-error");
+      /* The WebGPU panel is already a complete explanation: popping the error
+         console on top of it only hides it. The button stays there, in red,
+         for whoever wants the detail. */
+      if (debugOn && !window.__spinNoticeShown) consoleShow();
+    }
+  }
+
+  function resizeCanvas() {
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+  }
+
+  window.spinviewUpdateVersionLabel = updateVersionLabel;
+
+  console.log = function () {
+    var a = Array.prototype.slice.call(arguments);
+    mirrorConsole("log", a);
+    logNative.apply(null, a);
+  };
+  console.info = function () {
+    var a = Array.prototype.slice.call(arguments);
+    mirrorConsole("info", a);
+    infoNative.apply(null, a);
+  };
+  console.warn = function () {
+    var a = Array.prototype.slice.call(arguments);
+    mirrorConsole("warn", a);
+    warnNative.apply(null, a);
+  };
+  console.error = function () {
+    var a = Array.prototype.slice.call(arguments);
+    mirrorConsole("error", a);
+    errNative.apply(null, a);
+  };
+
+  debugButton.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.spinviewDeactivateKeyboard) window.spinviewDeactivateKeyboard();
+    if (document.activeElement === canvas) canvas.blur();
+    consoleToggle();
+  });
+  document.addEventListener("pointerdown", function (e) {
+    if (!consoleOpen) return;
+    if (debugConsole.contains(e.target) || e.target === debugButton) return;
+    consoleHide();
+  });
+
+  window.addEventListener("error", function (e) {
+    console.error("[error]", e.message || "Unknown JavaScript error",
+      e.filename || "", e.lineno || 0, e.colno || 0,
+      e.error ? (e.error.stack || e.error) : "");
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    console.error("[unhandledrejection]", e.reason);
+  });
+  window.addEventListener("load", resizeCanvas);
+  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("orientationchange", function () {
+    setTimeout(resizeCanvas, 50);
+    setTimeout(resizeCanvas, 250);
+    setTimeout(resizeCanvas, 500);
+  });
+
+  var loaderHidden = false;
+  var engineAborted = false;
+
+  function hideLoader() {
+    if (loaderHidden) return;
+    if (engineAborted) return;
+    loaderHidden = true;
+    if (loader) loader.style.display = "none";
+  }
+
+  /* Called by the engine on its first committed frame (vmesh_hud.hh).
+     numerisHideLoader stays as an alias: same shell, same contract. */
+  window.vmeshHideLoader = hideLoader;
+  window.numerisHideLoader = hideLoader;
+
+  /* Safety fallback only if the engine did not abort */
+  setTimeout(function () {
+    if (!engineAborted) hideLoader();
+  }, 8000);
+
+  updateVersionLabel();
+
+  /* Do not pre-create a graphics context here. Sokol owns the selected backend
+   * (WebGL2 or WebGPU); probing WebGL in the shared launcher is misleading and
+   * can interfere with WebGPU initialization on some browsers. */
+  console.info("[gpu-bootstrap]",
+    "secure=", window.isSecureContext === true,
+    "protocol=", location.protocol,
+    "navigator.gpu=", !!navigator.gpu,
+    "crossOriginIsolated=", window.crossOriginIsolated === true);
+  /* ===================== WEBGPU PREFLIGHT =====================
+     The engine is compiled for WebGPU. Without it sokol_app panics in the
+     middle of initialization and the screen stays black with a call stack in
+     the console - unreadable for a user. So we check BEFORE loading the
+     engine and explain plainly what is missing.
+     The three possible causes are kept apart because they call for different
+     actions: no WebGPU at all, no adapter (driver or GPU refused), or an
+     adapter too limited.
+     The strings below are user-facing UI text, deliberately localized. */
+  var FR = (navigator.language || "en").toLowerCase().indexOf("fr") === 0;
+  var T = FR ? {
+    title: "WebGPU est requis",
+    none: "Ce navigateur n'expose pas WebGPU. Cette application s'appuie dessus pour son rendu.",
+    noadapter: "WebGPU est present, mais aucun adaptateur graphique n'a pu etre obtenu. C'est souvent le pilote graphique ou l'acceleration materielle desactivee.",
+    missing: "L'adaptateur graphique de cet appareil refuse une fonction dont le moteur a besoin.",
+    nodevice: "L'adaptateur graphique a ete trouve, mais il refuse de creer un peripherique de rendu. C'est generalement le pilote graphique.",
+    insecure: "WebGPU exige une connexion securisee. Ouvre la page en HTTPS (ou depuis localhost).",
+    how: "Pour ouvrir cette page :",
+    b1: "Chrome ou Edge 113 et plus, sur ordinateur ou Android",
+    b2: "Safari 18 et plus (macOS et iOS 18)",
+    b3: "Firefox : activer WebGPU dans ",
+    b4: "verifier que l'acceleration materielle est active dans les reglages du navigateur",
+    detail: "Detail technique"
+  } : {
+    title: "WebGPU is required",
+    none: "This browser does not expose WebGPU. This application relies on it for rendering.",
+    noadapter: "WebGPU is present but no graphics adapter could be acquired. This usually means the graphics driver or hardware acceleration is unavailable.",
+    missing: "This device's graphics adapter refuses a feature the engine requires.",
+    nodevice: "A graphics adapter was found but it refuses to create a rendering device. This usually points at the graphics driver.",
+    insecure: "WebGPU requires a secure context. Open this page over HTTPS (or from localhost).",
+    how: "To open this page:",
+    b1: "Chrome or Edge 113+, on desktop or Android",
+    b2: "Safari 18+ (macOS and iOS 18)",
+    b3: "Firefox: enable WebGPU in ",
+    b4: "check that hardware acceleration is enabled in your browser settings",
+    detail: "Technical detail"
+  };
+
+  /* ============ BINARY SELECTION: WebGPU or WebGL2 fallback ============
+     Two binaries can live side by side in this folder: App.* (WebGPU) and
+     AppGL.* (WebGL2). The user downloads only ONE of them.
+       ?webgpu  forces WebGPU        ?webgl  forces WebGL2   (?gpu / ?gl alias)
+     With no flag: WebGPU when the device provides it, else WebGL2, else the
+     explanation panel. */
+  /* A flag counts as soon as it is present, like ?gui: ?webgl, ?webgl=1 and
+     ?gl are all true; only ?webgl=0 (or =false/=off/=no) turns it off. */
+  function qflag(name) {
+    try {
+      var m = new RegExp("[?&]" + name + "(?:=([^&]*))?(?=&|$)", "i")
+                .exec(String(location.search || ""));
+      if (!m) return false;
+      var v = m[1];
+      if (v === undefined || v === "") return true;
+      v = v.toLowerCase();
+      return !(v === "0" || v === "false" || v === "off" || v === "no");
+    } catch (e) { return false; }
+  }
+  var forceGL  = qflag("webgl") || qflag("gl");
+  var forceGPU = qflag("webgpu") || qflag("gpu");
+
+  function webgl2Available() {
+    /* On a DETACHED canvas: a canvas accepts a single context type, and the
+       page canvas belongs to the engine. */
+    try {
+      var c = document.createElement("canvas");
+      return !!(c.getContext("webgl2") || c.getContext("experimental-webgl2"));
+    } catch (e) { return false; }
+  }
+
+  function loadEngine(base) {
+    var sc = document.createElement("script");
+    sc.src = cacheBust(base + ".js");
+    sc.async = true;
+    sc.onload = function () { console.info("[gpu-bootstrap] " + base + ".js loaded", sc.src); };
+    sc.onerror = function (e) {
+      console.error("[gpu-bootstrap] " + base + ".js load failed", sc.src, e);
+      gpuNotice(T.nodevice, "could not load " + base + ".js");
+    };
+    window.__spinEngine = base;
+    devInfo.engine  = base + ".wasm";
+    devInfo.backend = (base === "AppGL") ? "WebGL2 (sokol SOKOL_GLES3)"
+                                         : "WebGPU (sokol SOKOL_WGPU)";
+    devInfoRender();
+    console.info("[gpu-bootstrap] engine selected: " + base +
+      (base === "AppGL" ? " (WebGL2)" : " (WebGPU)"));
+    document.body.appendChild(sc);
+  }
+
+  function gpuNotice(reason, detail) {
+    try { if (loader) loader.style.display = "none"; } catch (eL) {}
+    var d = document.createElement("div");
+    d.className = "gpu-notice";
+    var card = document.createElement("div");
+    card.className = "gpu-notice-card";
+    var h = document.createElement("h1");
+    h.textContent = T.title;
+    var p = document.createElement("p");
+    p.textContent = reason;
+    var how = document.createElement("p");
+    how.textContent = T.how;
+    var ul = document.createElement("ul");
+    var items = [T.b1, T.b2, null, T.b4];
+    var i, li;
+    for (i = 0; i < items.length; i++) {
+      li = document.createElement("li");
+      if (items[i] === null) {
+        li.appendChild(document.createTextNode(T.b3));
+        var c = document.createElement("code");
+        c.textContent = "about:config -> dom.webgpu.enabled";
+        li.appendChild(c);
+      } else li.textContent = items[i];
+      ul.appendChild(li);
+    }
+    var dt = document.createElement("div");
+    dt.className = "gpu-notice-detail";
+    dt.textContent = T.detail + " : " + detail;
+    card.appendChild(h); card.appendChild(p);
+    card.appendChild(how); card.appendChild(ul); card.appendChild(dt);
+    d.appendChild(card);
+    document.body.appendChild(d);
+    window.__spinNoticeShown = true;
+    try { consoleHide(); } catch (eC) {}
+    console.error("[gpu-bootstrap] startup refused: " + detail);
+  }
+
+  /* The WebGL2 binary is OPTIONAL. If it is not deployed next to App.wasm
+     there is simply no fallback and the explanation panel shows up. We probe
+     AppGL.wasm (the .js alone would be useless) with a HEAD; a server that
+     answers HTML for a missing file counts as absent. Result memoized so we
+     probe only once. */
+  var glBinaryState = -1;   /* -1 unknown, 0 absent, 1 present */
+  function glBinaryPresent(cb) {
+    if (glBinaryState >= 0) { cb(glBinaryState === 1); return; }
+    var url = cacheBust("AppGL.wasm"), done = false;
+    function settle(ok, why) {
+      if (done) return;
+      done = true;
+      glBinaryState = ok ? 1 : 0;
+      devInfo.glBin = ok ? "deployed" : "absent (" + why + ") — no fallback possible";
+      devInfoRender();
+      console.info("[gpu-bootstrap] WebGL2 binary " +
+        (ok ? "present" : "absent (" + why + ")") + " : " + url);
+      cb(ok);
+    }
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open("HEAD", url, true);
+      xhr.timeout = 6000;
+      xhr.onload = function () {
+        var ct = "";
+        try { ct = (xhr.getResponseHeader("Content-Type") || "").toLowerCase(); } catch (eH) {}
+        if (xhr.status < 200 || xhr.status >= 400) { settle(false, "HTTP " + xhr.status); return; }
+        if (ct.indexOf("html") >= 0) { settle(false, "HTML response"); return; }
+        settle(true, "");
+      };
+      xhr.onerror   = function () { settle(false, "network error"); };
+      xhr.ontimeout = function () { settle(false, "timeout"); };
+      xhr.send();
+    } catch (e) { settle(false, "XHR unavailable"); }
+  }
+
+  /* No usable WebGPU: try WebGL2 before giving up, but only if the matching
+     binary was actually deployed. */
+  function fallbackOrNotice(reason, detail) {
+    devInfo.why = "fallback: WebGPU unavailable (" + detail + ")";
+    if (devInfo.gpu === "not probed") devInfo.gpu = "unavailable: " + detail;
+    devInfoRender();
+    if (!webgl2Available()) {
+      gpuNotice(reason, detail + " | WebGL2 unavailable too");
+      return;
+    }
+    glBinaryPresent(function (ok) {
+      if (!ok) {
+        gpuNotice(reason, detail + " | no WebGL2 binary deployed");
+        return;
+      }
+      console.warn("[gpu-bootstrap] WebGPU unavailable (" + detail +
+        ") -> WebGL2 fallback");
+      loadEngine("AppGL");
+    });
+  }
+
+  function gpuPreflight(onReady) {
+    if (forceGL) {
+      devInfo.why = "forced by ?webgl flag";
+      glBinaryPresent(function (ok) {
+        if (ok) loadEngine("AppGL");
+        else gpuNotice(T.nodevice, "?webgl requested but AppGL.wasm is not deployed");
+      });
+      return;
+    }
+    if (forceGPU) devInfo.why = "forced by ?webgpu flag";
+    if (!navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
+      fallbackOrNotice(window.isSecureContext === false ? T.insecure : T.none,
+        "navigator.gpu absent | secure=" + (window.isSecureContext === true) +
+        " | " + navigator.userAgent);
+      return;
+    }
+    var settled = false;
+    /* A requestAdapter that never answers must not leave a black screen:
+       after 8 s we show the panel. */
+    var guard = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      fallbackOrNotice(T.noadapter, "requestAdapter did not answer within 8 s");
+    }, 8000);
+    navigator.gpu.requestAdapter({ powerPreference: "high-performance" })
+      .then(function (adapter) {
+        if (settled) return;
+        settled = true; clearTimeout(guard);
+        if (!adapter) {
+          fallbackOrNotice(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
+          return;
+        }
+        var nb = adapter.features ? adapter.features.size : 0;
+        try {
+          var ai = adapter.info || null;   /* adapter.info: recent Chrome */
+          var who = ai ? [ai.vendor, ai.architecture, ai.device, ai.description]
+                          .filter(Boolean).join(" / ") : "";
+          devInfo.gpu = (who || "adapter acquired") +
+            "\n" + nb + " features | tex2D max " +
+            (adapter.limits ? adapter.limits.maxTextureDimension2D : "?") +
+            " | depth32float-stencil8 " +
+            ((adapter.features && adapter.features.has &&
+              adapter.features.has("depth32float-stencil8")) ? "yes" : "NO");
+          if (!devInfo.why || devInfo.why === "selection in progress")
+            devInfo.why = "automatic: WebGPU adapter acquired";
+          devInfoRender();
+        } catch (eI) {}
+        console.info("[gpu-bootstrap] WebGPU adapter acquired",
+          "features=", nb,
+          "maxTexture2D=", adapter.limits ? adapter.limits.maxTextureDimension2D : "?");
+        /* DO NOT CREATE A DEVICE HERE.
+           A GPUAdapter can create exactly ONE device: a trial requestDevice
+           consumes it and the engine can no longer use it — the check itself
+           would cause the failure it is meant to detect.
+           So the preflight is limited to what costs nothing and touches
+           nothing: WebGPU exposed, adapter acquired. Everything else is caught
+           by the abort panel, which shows the engine's real panic. */
+        onReady();
+      }, function (eA) {
+        if (settled) return;
+        settled = true; clearTimeout(guard);
+        fallbackOrNotice(T.noadapter,
+          "requestAdapter: " + (eA && eA.message ? eA.message : String(eA)));
+      })
+      ;
+  }
+
+  /* Module MUST exist before App.js — same contract as Numeris / blobcone_fast. */
+  window.Module = {
+    canvas: canvas,
+    preRun: [],
+    postRun: [],
+    locateFile: function (path) {
+      return cacheBust(path);
+    },
+    print: function () {
+      console.log("[stdout]", Array.prototype.slice.call(arguments).join(" "));
+    },
+    printErr: function () {
+      var _m = Array.prototype.slice.call(arguments).join(" ");
+      console.error("[stderr]", _m);
+      /* The last [sapp][panic] is the real cause of an abort: keep it so we
+         can show it instead of a bare "Engine aborted". */
+      if (/\[panic\]|\[sapp\]/.test(_m)) window.__spinLastPanic = _m;
+    },
+    setStatus: function (msg) {
+      if (debugOn && msg) console.info("[status]", msg);
+    },
+    monitorRunDependencies: function () {},
+    onAbort: function (reason) {
+      engineAborted = true;
+      console.error("[abort]", reason);
+      /* An abort after a successful WebGPU preflight almost always comes from
+         graphics initialization. Show the same clean panel, with the engine's
+         last panic message - the one sokol throws away. */
+      var why = window.__spinLastPanic || String(reason || "");
+      if (typeof gpuNotice === "function" &&
+          !document.querySelector(".gpu-notice") &&
+          /wgpu|WGPU|webgpu|device|adapter|surface|swapchain/i.test(why)) {
+        gpuNotice(T.nodevice, why);
+        return;
+      }
+      if (loader) loader.style.display = "flex";
+      if (loaderText) {
+        loaderText.style.whiteSpace = "pre-wrap";
+        loaderText.textContent = debugOn && why
+          ? "Engine aborted\n" + why
+          : (FR ? "Le moteur n a pas pu demarrer." : "The engine failed to start.");
+      }
+    },
+    onRuntimeInitialized: function () {
+      window.vmeshRuntimeInitialized = true;
+      resizeCanvas();
+      if (typeof window.Shell_OnLoad === "function") window.Shell_OnLoad();
+      /* Stay over the canvas until the first graphics frame is committed
+       * (vmeshHideLoader, called by the engine). */
+      if (loaderText) loaderText.textContent = "Preparing... " + getCurrentVersion();
+      console.info("[runtime] Ready.");
+    }
+  };
+
+  debugButton.classList.add("visible");
+  window.spinviewConsoleShow = consoleShow;
+  window.spinviewConsoleHide = consoleHide;
+  window.spinviewConsoleToggle = consoleToggle;
+
+  /* Cap devicePixelRatio before loading App.js.
+     sokol_app (high_dpi=true) sizes the backing store at css * dpr. On a phone
+     dpr=3 -> 1080x2007 = 2.17 Mpx, MORE than desktop, for a 360x669 CSS
+     screen. Capping at 2 divides the fragment load by ~2.25 for a difference
+     the eye barely catches.
+     Tunable at runtime: ?dpr=3 restores the original, ?dpr=0 disables the cap. */
+  (function () {
+    var real = window.devicePixelRatio || 1;
+    var m = /[?&]dpr=([0-9.]+)/.exec(window.location.search);
+    var cap = m ? parseFloat(m[1]) : 2;
+    if (cap > 0 && real > cap) {
+      try {
+        Object.defineProperty(window, "devicePixelRatio", {
+          configurable: true,
+          get: function () { return cap; }
+        });
+        console.info("[gpu-bootstrap] devicePixelRatio", real, "-> capped", cap);
+      } catch (e) {
+        console.warn("[gpu-bootstrap] devicePixelRatio cap failed", e);
+      }
+    } else {
+      console.info("[gpu-bootstrap] devicePixelRatio", real, "(uncapped)");
+    }
+  })();
+
+  gpuPreflight(function () { loadEngine("App"); });
+  setTimeout(function () {
+    console.info("[gpu-bootstrap] 5s state",
+      "runtimeInitialized=", window.vmeshRuntimeInitialized === true,
+      "canvas=", canvas.width + "x" + canvas.height,
+      "css=", canvas.clientWidth + "x" + canvas.clientHeight);
+  }, 5000);
+})();
+</script>
+</body>
+</html>

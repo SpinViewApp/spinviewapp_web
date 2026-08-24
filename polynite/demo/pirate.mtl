@@ -1,0 +1,37 @@
+# pirate.mtl — realistic material colors for pirate.obj (Clint Bellanger, CC-BY-SA 3.0)
+# Kd values are what the Wake vmesh importer bakes into vertex colors.
+
+newmtl Skin
+Kd 0.870 0.640 0.480
+Ks 0.10 0.10 0.10
+Ns 12
+
+newmtl Leather
+Kd 0.360 0.215 0.110
+Ks 0.18 0.14 0.10
+Ns 24
+
+newmtl BlackCloth
+Kd 0.070 0.075 0.095
+Ks 0.04 0.04 0.05
+Ns 8
+
+newmtl WhiteCloth
+Kd 0.860 0.830 0.760
+Ks 0.05 0.05 0.05
+Ns 8
+
+newmtl WhiteCloth_NONE
+Kd 0.860 0.830 0.760
+Ks 0.05 0.05 0.05
+Ns 8
+
+newmtl Cornea
+Kd 0.930 0.930 0.910
+Ks 0.60 0.60 0.60
+Ns 96
+
+newmtl Iris
+Kd 0.180 0.290 0.160
+Ks 0.30 0.30 0.30
+Ns 64

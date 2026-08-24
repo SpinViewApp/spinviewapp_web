@@ -1,0 +1,13 @@
+{
+  "root": {
+    "type": "H",
+    "ratio": 0.30,
+    "1": {
+      "type": "V",
+      "ratio": 0.60,
+      "1": { "fmap": "meshopt_options_fmap", "cmd": "options" },
+      "2": { "fmap": "panhistory_fmap", "cmd": "history" }
+    },
+    "2": { "fmap": "vmesh_view_fmap", "cmd": "3D View" }
+  }
+}
