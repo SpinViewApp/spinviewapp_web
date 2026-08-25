@@ -1,0 +1,70 @@
+{
+"mainpan": {
+  "1": {
+    "1": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "options",
+        "func": "pantor_options_fmap",
+        "pane_uid": 3
+      },
+      "ratio": 0,
+      "type": "empty"
+    },
+    "2": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "history",
+        "func": "panhistory_fmap",
+        "pane_uid": 4
+      },
+      "ratio": 0,
+      "type": "empty"
+    },
+    "ratio": 0.45,
+    "type": "V"
+  },
+  "2": {
+    "1": {
+      "1": {
+        "app": {
+          "cmd": "view",
+          "func": "pantor_render_fmap",
+          "pane_uid": 5
+        }
+      },
+      "2": {
+        "app": {
+          "cmd": "history",
+          "func": "panhistory_fmap",
+          "pane_uid": 4
+        }
+      },
+      "ratio": 0.5,
+      "type": "H"
+    },
+    "2": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "options",
+        "func": "pantor_options_fmap",
+        "pane_uid": 3
+      },
+      "type": ""
+    },
+    "ratio": 0.164541,
+    "type": "V"
+  },
+  "ratio": 0.3,
+  "type": "H"
+},
+"panlayout_current_layout": "test2",
+"panlayout_last_session": "session/test2.session",
+"window": {
+  "h": 600,
+  "w": 800,
+  "x": 0,
+  "y": 0
+}
+
+}

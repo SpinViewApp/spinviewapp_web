@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8">
 <title>Wake Nanite - Virtual Mesh Viewer | SpinView</title>
@@ -208,8 +208,8 @@ body {
 }
 </style>
 </head>
-<body>
-<main class="seo-content" id="about-nanite">
+<body translate="no" class="notranslate">
+<main class="seo-content" id="about-nanite" translate="yes">
   <h1>Wake Nanite</h1>
 
   <p>
@@ -398,10 +398,10 @@ body {
     var v;
     try {
       if (typeof window.getCurrentVersion === "function") v = window.getCurrentVersion();
-      if (!v) {
-        v = new URL(location.href).searchParams.get("_v") ||
-            localStorage.getItem("siteVersion") || "dev";
-      }
+      /* No localStorage fallback: that key is per ORIGIN, so a sibling app on
+         the same host would hand us ITS version. ?_v or "dev" - the label is
+         corrected by spinviewSetDisplayVersion once version.txt lands. */
+      if (!v) v = new URL(location.href).searchParams.get("_v") || "dev";
     } catch (e) { v = "dev"; }
     if (!v) v = "dev";
     window.__spinVerFrozen = v;

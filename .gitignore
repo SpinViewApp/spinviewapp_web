@@ -1,3 +1,5 @@
 .cache/
 
 *.wmesh
+Shell_Common.css
+Shell_Common.js

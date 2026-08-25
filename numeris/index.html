@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8">
 <title>Numeris - Number Puzzle Game | SpinView</title>
@@ -164,6 +164,23 @@ body {
   color: #ff9b9b;
   border-color: rgba(255, 90, 90, 0.75);
 }
+/* Banner pinned at the top of the DEV panel: binary and backend identity.
+   It must not scroll with the logs, or it vanishes on the first line. */
+.dev-info {
+  position: sticky;
+  top: -10px;
+  margin: -10px -10px 8px -10px;
+  padding: 8px 10px;
+  background: #06131b;
+  border-bottom: 1px solid rgba(120, 220, 255, 0.35);
+  color: #9fe8ff;
+  z-index: 1;
+}
+.dev-info b { color: #ffffff; font-weight: 600; }
+.dev-info .k { color: #6fb6cc; display: inline-block; min-width: 78px; }
+.dev-info .row { white-space: pre-wrap; word-break: break-word; }
+.dev-info .ok  { color: #8ef0a8; }
+.dev-info .bad { color: #ff9b9b; }
 .debug-button {
   position: fixed;
   right: 8px;
@@ -203,8 +220,8 @@ body {
 }
 </style>
 </head>
-<body>
-<main class="seo-content" id="about-numeris">
+<body translate="no" class="notranslate">
+<main class="seo-content" id="about-numeris" translate="yes">
   <h1>Numeris</h1>
 
   <p>
@@ -243,15 +260,15 @@ body {
 (function () {
   "use strict";
 
-  /* ===================== TRACEUR DE CONTEXTES AUDIO =====================
-     Huit "The AudioContext was not allowed to start" apparaissent au premier
-     toucher. Sur Android, chaque contexte audio ouvre un FLUX de sortie
-     systeme, et chaque ouverture/fermeture de flux claque. Il faut savoir
-     combien de contextes existent et qui les cree. Pose ici, avant App.js,
-     donc rien ne peut passer dessous. */
+  /* ===================== AUDIO CONTEXT TRACER =====================
+     Eight "The AudioContext was not allowed to start" showed up on the first
+     touch. On Android every audio context opens a system OUTPUT STREAM, and
+     every stream open/close clicks. We need to know how many contexts exist
+     and who creates them. Installed here, before App.js, so nothing can slip
+     underneath. */
   (function () {
-    /* Traceur derriere le meme interrupteur que les diagnostics du bus :
-         ...?audiodiag=1   ou   localStorage.spinAudioDiag = 1              */
+    /* Same switch as the audio bus diagnostics:
+         ...?audiodiag=1   or   localStorage.spinAudioDiag = 1              */
     var on = false;
     try {
       on = /[?&]audiodiag=1/.test(location.search || "") ||
@@ -275,7 +292,7 @@ body {
         nb++;
         c.__spinId = nb;
         try {
-          console.warn("[audio-trace] CONTEXTE #" + nb + " cree | etat=" + c.state +
+          console.warn("[audio-trace] CONTEXT #" + nb + " created | state=" + c.state +
             " sr=" + c.sampleRate + " | " + frames());
         } catch (e) {}
         var mets = ["resume", "suspend", "close"], j;
@@ -286,7 +303,7 @@ body {
             c[m] = function () {
               try {
                 console.warn("[audio-trace] ctx#" + c.__spinId + " " + m +
-                  "() etat=" + c.state + " | " + frames());
+                  "() state=" + c.state + " | " + frames());
               } catch (e2) {}
               return f.apply(c, arguments);
             };
@@ -313,33 +330,155 @@ body {
   var consoleOpen = false;
   var lineCount = 0;
   var host = location.hostname || "";
-  var debugOn =
-    /(?:^|[?&])debug(?:[=&]|$)/i.test(String(location.search || "")) ||
+  /* Two audiences, decided once at boot and never re-evaluated.
+       dev  - ?dev (or ?debug), or a local host: everything is shown.
+       user - the shipped default: failures only, in plain language. */
+  var devMode =
+    /(?:^|[?&])(?:dev|debug)(?:[=&]|$)/i.test(String(location.search || "")) ||
     host === "localhost" ||
     host === "127.0.0.1" ||
     host === "::1" ||
     host.indexOf("192.168.") === 0 ||
     window.spinviewDebugEnabled === true;
 
+  /* A failure raised INSIDE the runtime is a call stack, not a message: it
+     names components, symbols and source files, and none of that helps the
+     person looking at it. Outside dev mode such a line becomes one sentence
+     plus a stable reference code - enough for a support exchange, and the
+     full text is one ?dev away. Our own loader messages ([gpu-bootstrap],
+     hyphenated on purpose) are written for users and pass through intact. */
+  function isRuntimeText(t) { return /\[[a-z_]{2,12}\]/i.test(String(t)); }
+  function refCode(t) {
+    var s = String(t), h = 0, i;
+    for (i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return ("0000000" + (h >>> 0).toString(16)).slice(-8);
+  }
+  function userSafe(t) {
+    if (devMode || !isRuntimeText(t)) return String(t);
+    return ((navigator.language || "en").toLowerCase().indexOf("fr") === 0
+      ? "Erreur du moteur graphique - reference "
+      : "Graphics engine error - reference ") + refCode(t);
+  }
+
+  /* ============== ENGINE / BACKEND BANNER (top of the DEV panel) ==============
+     Bootstrap, engine and audio traces mix together fast. This banner stays
+     pinned at the top of the panel and answers the only questions that matter
+     when in doubt: which binary is running, on which backend, on which GPU,
+     and is the WebGL fallback even deployed. */
+  var devInfo = {
+    engine: "-", backend: "pending", why: "selection in progress",
+    gpu: "not probed", gl: "not probed", glBin: "not probed", runtime: "",
+    api: "pending"   /* the one graphics line a user may see */
+  };
+  var devInfoEl = null, devGlProbed = false;
+
+  function devEsc(t) {
+    return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* Probe WebGL2 on a DETACHED canvas, then release the context: the page
+     canvas belongs to the engine and a canvas accepts one context type only. */
+  function devProbeGL() {
+    if (devGlProbed) return;
+    devGlProbed = true;
+    try {
+      var c = document.createElement("canvas");
+      var g = c.getContext("webgl2");
+      if (!g) { devInfo.gl = "unavailable"; return; }
+      var who = "";
+      try {
+        var ext = g.getExtension("WEBGL_debug_renderer_info");
+        if (ext) who = g.getParameter(ext.UNMASKED_RENDERER_WEBGL) + " / " +
+                       g.getParameter(ext.UNMASKED_VENDOR_WEBGL);
+      } catch (e1) {}
+      if (!who) who = g.getParameter(g.RENDERER) + " / " + g.getParameter(g.VENDOR);
+      devInfo.gl = who + "\n" + g.getParameter(g.VERSION) +
+        " | " + g.getParameter(g.SHADING_LANGUAGE_VERSION) +
+        "\ntex " + g.getParameter(g.MAX_TEXTURE_SIZE) +
+        " | units " + g.getParameter(g.MAX_TEXTURE_IMAGE_UNITS) +
+        " | MSAA " + g.getParameter(g.MAX_SAMPLES) +
+        " | drawbuf " + g.getParameter(g.MAX_DRAW_BUFFERS) +
+        " | float-render " + (g.getExtension("EXT_color_buffer_float") ? "yes" : "no");
+      try { var lc = g.getExtension("WEBGL_lose_context"); if (lc) lc.loseContext(); } catch (e2) {}
+    } catch (e) { devInfo.gl = "probe failed: " + (e && e.message ? e.message : e); }
+  }
+
+  function devInfoSet(key, value) {
+    devInfo[key] = value;
+    devInfoRender();
+  }
+
+  function devInfoRender() {
+    if (!debugConsole) return;
+    if (devMode) devProbeGL();
+    if (!devInfoEl) {
+      devInfoEl = document.createElement("div");
+      devInfoEl.className = "dev-info";
+      if (debugConsole.firstChild) debugConsole.insertBefore(devInfoEl, debugConsole.firstChild);
+      else debugConsole.appendChild(devInfoEl);
+    }
+    var flags = String(location.search || "").replace(/^\?/, "");
+    var scr = window.innerWidth + "x" + window.innerHeight + " css | dpr " +
+              (window.devicePixelRatio || 1);
+    var rows = devMode ? [
+      ["engine",  "<b>" + devEsc(devInfo.engine) + "</b> \u2014 " + devEsc(devInfo.backend)],
+      ["runtime", devEsc(devInfo.runtime || "not reported yet")],
+      ["choice",  devEsc(devInfo.why)],
+      ["version", devEsc(shownVersion())],
+      ["WebGPU",  devEsc(devInfo.gpu)],
+      ["WebGL2",  devEsc(devInfo.gl)],
+      ["AppGL",   devEsc(devInfo.glBin)],
+      ["screen",  devEsc(scr)],
+      ["flags",   devEsc(flags || "none")],
+      ["UA",      devEsc(navigator.userAgent)]
+    ] : [
+      /* Shipped panel: exactly what a support request needs. The visitor's own
+         GPU and browser are theirs, not a secret - how the frame is drawn is
+         ours, and none of it is here. */
+      ["version",  devEsc(shownVersion())],
+      ["graphics", devEsc(devInfo.api)],
+      ["display",  devEsc(scr)],
+      ["device",   devEsc(navigator.userAgent)]
+    ];
+    var html = "", i;
+    for (i = 0; i < rows.length; i++) {
+      html += '<div class="row"><span class="k">' + rows[i][0] + '</span>' + rows[i][1] + '</div>';
+    }
+    devInfoEl.innerHTML = html;
+  }
+  window.spinviewDevInfoSet = devInfoSet;
+
+  /* Called ONCE by the in-app DEV tab: the wasm cannot see the loaded binary
+     name nor the unmasked ANGLE renderer, but the page can. */
+  window.spinviewGfxInfo = function () {
+    try {
+      devProbeGL();
+      return "Binary: " + (window.__spinEngine || "?") + ".wasm\n" +
+             "Loader: " + devInfo.why + "\n" +
+             "GPU: " + String(devInfo.gpu).replace(/\n/g, " | ") + "\n" +
+             "GL: " + String(devInfo.gl).replace(/\n/g, " | ");
+    } catch (e) { return ""; }
+  };
+
   function getCurrentVersion() {
-    /* VERSION GELEE AU DEMARRAGE.
-       Bogue observe : App.js etait charge en _v=v1178 et sound_bus.js, demande
-       quelques secondes plus tard, en _v=v0940 — donc un bus audio d une tout
-       autre version que le moteur. La valeur renvoyee ici pouvait changer en
-       cours de page (version.js, localStorage). Une page = une version, figee
-       au premier appel. */
+    /* VERSION FROZEN AT BOOT.
+       Observed bug: App.js was loaded at _v=v1178 while sound_bus.js, requested
+       a few seconds later, came in at _v=v0940 - an audio bus from a completely
+       different build than the engine. The value returned here could change
+       mid-page (version.js, localStorage). One page = one version, frozen on
+       the first call. */
     if (window.__spinVerFrozen) return window.__spinVerFrozen;
     var v;
     try {
       if (typeof window.getCurrentVersion === "function") v = window.getCurrentVersion();
-      if (!v) {
-        v = new URL(location.href).searchParams.get("_v") ||
-            localStorage.getItem("siteVersion") || "dev";
-      }
+      /* No localStorage fallback: that key is per ORIGIN, so a sibling app on
+         the same host would hand us ITS version. ?_v or "dev" - the label is
+         corrected by spinviewSetDisplayVersion once version.txt lands. */
+      if (!v) v = new URL(location.href).searchParams.get("_v") || "dev";
     } catch (e) { v = "dev"; }
     if (!v) v = "dev";
     window.__spinVerFrozen = v;
-    try { console.log("[gpu-bootstrap] version gelee pour cette page : " + v); } catch (e2) {}
+    try { console.log("[gpu-bootstrap] version frozen for this page: " + v); } catch (e2) {}
     return v;
   }
 
@@ -354,14 +493,29 @@ body {
     return path + sep + "_v=" + encodeURIComponent(version) + "&_t=" + bootToken();
   }
 
+  /* Label only: version.js pushes the real version.txt value here once it
+     lands. The frozen version above stays the one used for cache-busting. */
+  var displayVersion = "";
+  function shownVersion() { return displayVersion || getCurrentVersion(); }
+
   function updateVersionLabel() {
-    var version = getCurrentVersion();
+    var version = shownVersion();
     if (debugButton) debugButton.textContent = version;
-    if (loaderText) loaderText.textContent = "Loading engine... " + version;
+    if (loaderText && !window.numerisRuntimeInitialized)
+      loaderText.textContent = "Loading engine... " + version;
   }
+
+  window.spinviewSetDisplayVersion = function (v) {
+    if (!v) return;
+    v = String(v);
+    if (v === displayVersion) return;
+    displayVersion = v;
+    updateVersionLabel();
+  };
 
   function consoleShow() {
     consoleOpen = true;
+    devInfoRender();
     debugConsole.classList.add("visible");
   }
   function consoleHide() {
@@ -388,22 +542,36 @@ body {
   function mirrorConsole(kind, args) {
     var parts = [], i, el;
     for (i = 0; i < args.length; ++i) parts.push(stringifyArg(args[i]));
+    var joined = parts.join(" ");
+    /* The engine reports the backend it ACTUALLY brought up. That is the only
+       source of truth: the loader picks a file, but the wasm is compiled for
+       one backend and one only. */
+    if (joined.indexOf("[numeris_backend]") >= 0) {
+      devInfo.runtime = joined.replace(/^.*\[numeris_backend\]:\s*/, "");
+      try { devInfoRender(); } catch (eB) {}
+    }
+    /* Outside dev mode the panel keeps only what a user can act on. */
+    if (!devMode && kind !== "error") return;
     el = document.createElement("div");
-    el.textContent = parts.join(" ");
+    el.textContent = userSafe(joined);
     debugConsole.appendChild(el);
     lineCount++;
-    while (lineCount > 400 && debugConsole.firstChild) {
-      debugConsole.removeChild(debugConsole.firstChild);
+    while (lineCount > 400) {
+      /* firstChild may be the pinned info banner: only drop log lines. */
+      var victim = debugConsole.firstChild;
+      if (victim === devInfoEl) victim = victim.nextSibling;
+      if (!victim) break;
+      debugConsole.removeChild(victim);
       lineCount--;
     }
     debugConsole.scrollTop = debugConsole.scrollHeight;
     if (kind === "error") {
       debugConsole.classList.add("has-error");
       debugButton.classList.add("visible", "has-error");
-      /* Le panneau WebGPU est deja une explication complete : ouvrir la
-         console d erreurs par-dessus ne fait que la cacher. Le bouton reste
-         la, en rouge, pour qui veut le detail. */
-      if (debugOn && !window.__spinNoticeShown) consoleShow();
+      /* The WebGPU panel is already a complete explanation: popping the error
+         console on top of it only hides it. The button stays there, in red,
+         for whoever wants the detail. */
+      if (devMode && !window.__spinNoticeShown) consoleShow();
     }
   }
 
@@ -414,15 +582,17 @@ body {
 
   window.spinviewUpdateVersionLabel = updateVersionLabel;
 
+  /* log/info are the running trace: dev only, in the panel AND in devtools.
+     warn and error always reach devtools - a real failure is never silent. */
   console.log = function () {
     var a = Array.prototype.slice.call(arguments);
     mirrorConsole("log", a);
-    logNative.apply(null, a);
+    if (devMode) logNative.apply(null, a);
   };
   console.info = function () {
     var a = Array.prototype.slice.call(arguments);
     mirrorConsole("info", a);
-    infoNative.apply(null, a);
+    if (devMode) infoNative.apply(null, a);
   };
   console.warn = function () {
     var a = Array.prototype.slice.call(arguments);
@@ -489,7 +659,7 @@ body {
 
   updateVersionLabel();
 
-  /* Do not pre-create a graphics context here. Sokol owns the selected backend
+  /* Do not pre-create a graphics context here. The engine owns the selected backend
    * (WebGL2 or WebGPU); probing WebGL in the shared launcher is misleading and
    * can interfere with WebGPU initialization on some browsers. */
   console.info("[gpu-bootstrap]",
@@ -497,14 +667,15 @@ body {
     "protocol=", location.protocol,
     "navigator.gpu=", !!navigator.gpu,
     "crossOriginIsolated=", window.crossOriginIsolated === true);
-  /* ===================== CONTROLE WEBGPU AVANT DEMARRAGE =====================
-     Le moteur est compile pour WebGPU. Sans lui, sokol_app panique en pleine
-     initialisation et l ecran reste noir avec une pile d appels dans la
-     console — illisible pour un joueur. On verifie donc AVANT de charger le
-     moteur, et on explique proprement ce qui manque.
-     Les trois causes possibles sont distinguees, parce qu elles n appellent
-     pas la meme action : pas de WebGPU du tout, aucun adaptateur (pilote ou
-     GPU refuse), ou un adaptateur trop limite. */
+  /* ===================== WEBGPU PREFLIGHT =====================
+     The engine is compiled for WebGPU. Without it it panics in the
+     middle of initialization and the screen stays black with a call stack in
+     the console - unreadable for a user. So we check BEFORE loading the
+     engine and explain plainly what is missing.
+     The three possible causes are kept apart because they call for different
+     actions: no WebGPU at all, no adapter (driver or GPU refused), or an
+     adapter too limited.
+     The strings below are user-facing UI text, deliberately localized. */
   var FR = (navigator.language || "en").toLowerCase().indexOf("fr") === 0;
   var T = FR ? {
     title: "WebGPU est requis",
@@ -534,6 +705,56 @@ body {
     detail: "Technical detail"
   };
 
+  /* ============ BINARY SELECTION: WebGPU or WebGL2 fallback ============
+     Two binaries live side by side in this folder: App.* (WebGPU) and AppGL.*
+     (WebGL2). The user downloads only ONE of them.
+       ?webgpu  forces WebGPU        ?webgl  forces WebGL2   (?gpu / ?gl alias)
+     With no flag: WebGPU when the device provides it, else WebGL2, else the
+     explanation panel. */
+  /* A flag counts as soon as it is present, like ?gui: ?webgl, ?webgl=1 and
+     ?gl are all true; only ?webgl=0 (or =false/=off/=no) turns it off. */
+  function qflag(name) {
+    try {
+      var m = new RegExp("[?&]" + name + "(?:=([^&]*))?(?=&|$)", "i")
+                .exec(String(location.search || ""));
+      if (!m) return false;
+      var v = m[1];
+      if (v === undefined || v === "") return true;
+      v = v.toLowerCase();
+      return !(v === "0" || v === "false" || v === "off" || v === "no");
+    } catch (e) { return false; }
+  }
+  var forceGL  = qflag("webgl") || qflag("gl");
+  var forceGPU = qflag("webgpu") || qflag("gpu");
+
+  function webgl2Available() {
+    /* On a DETACHED canvas: a canvas accepts a single context type, and the
+       page canvas belongs to the engine. */
+    try {
+      var c = document.createElement("canvas");
+      return !!(c.getContext("webgl2") || c.getContext("experimental-webgl2"));
+    } catch (e) { return false; }
+  }
+
+  function loadEngine(base) {
+    var sc = document.createElement("script");
+    sc.src = cacheBust(base + ".js");
+    sc.async = true;
+    sc.onload = function () { console.info("[gpu-bootstrap] " + base + ".js loaded", sc.src); };
+    sc.onerror = function (e) {
+      console.error("[gpu-bootstrap] " + base + ".js load failed", sc.src, e);
+      gpuNotice(T.nodevice, "could not load " + base + ".js");
+    };
+    window.__spinEngine = base;
+    devInfo.engine  = base + ".wasm";
+    devInfo.api     = (base === "AppGL") ? "WebGL2" : "WebGPU";
+    devInfo.backend = devInfo.api;
+    devInfoRender();
+    console.info("[gpu-bootstrap] engine selected: " + base +
+      (base === "AppGL" ? " (WebGL2)" : " (WebGPU)"));
+    document.body.appendChild(sc);
+  }
+
   function gpuNotice(reason, detail) {
     try { if (loader) loader.style.display = "none"; } catch (eL) {}
     var d = document.createElement("div");
@@ -561,80 +782,145 @@ body {
     }
     var dt = document.createElement("div");
     dt.className = "gpu-notice-detail";
-    dt.textContent = T.detail + " : " + detail;
+    dt.textContent = T.detail + " : " + userSafe(detail);
     card.appendChild(h); card.appendChild(p);
     card.appendChild(how); card.appendChild(ul); card.appendChild(dt);
     d.appendChild(card);
     document.body.appendChild(d);
     window.__spinNoticeShown = true;
+    devInfo.api = "unavailable";
+    try { devInfoRender(); } catch (eR) {}
     try { consoleHide(); } catch (eC) {}
-    console.error("[gpu-bootstrap] demarrage refuse : " + detail);
+    console.error("[gpu-bootstrap] startup refused: " + detail);
+  }
+
+  /* The WebGL2 binary is OPTIONAL. If it is not deployed next to App.wasm
+     there is simply no fallback and the explanation panel shows up. We probe
+     AppGL.wasm (the .js alone would be useless) with a HEAD; a server that
+     answers HTML for a missing file counts as absent. Result memoized so we
+     probe only once. */
+  var glBinaryState = -1;   /* -1 unknown, 0 absent, 1 present */
+  function glBinaryPresent(cb) {
+    if (glBinaryState >= 0) { cb(glBinaryState === 1); return; }
+    var url = cacheBust("AppGL.wasm"), done = false;
+    function settle(ok, why) {
+      if (done) return;
+      done = true;
+      glBinaryState = ok ? 1 : 0;
+      devInfo.glBin = ok ? "deployed" : "absent (" + why + ") \u2014 no fallback possible";
+      devInfoRender();
+      console.info("[gpu-bootstrap] WebGL2 binary " +
+        (ok ? "present" : "absent (" + why + ")") + " : " + url);
+      cb(ok);
+    }
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open("HEAD", url, true);
+      xhr.timeout = 6000;
+      xhr.onload = function () {
+        var ct = "";
+        try { ct = (xhr.getResponseHeader("Content-Type") || "").toLowerCase(); } catch (eH) {}
+        if (xhr.status < 200 || xhr.status >= 400) { settle(false, "HTTP " + xhr.status); return; }
+        if (ct.indexOf("html") >= 0) { settle(false, "HTML response"); return; }
+        settle(true, "");
+      };
+      xhr.onerror   = function () { settle(false, "network error"); };
+      xhr.ontimeout = function () { settle(false, "timeout"); };
+      xhr.send();
+    } catch (e) { settle(false, "XHR unavailable"); }
+  }
+
+  /* No usable WebGPU: try WebGL2 before giving up, but only if the matching
+     binary was actually deployed. */
+  function fallbackOrNotice(reason, detail) {
+    devInfo.why = "fallback: WebGPU unavailable (" + detail + ")";
+    if (devInfo.gpu === "not probed") devInfo.gpu = "unavailable: " + detail;
+    devInfoRender();
+    if (!webgl2Available()) {
+      gpuNotice(reason, detail + " | WebGL2 unavailable too");
+      return;
+    }
+    glBinaryPresent(function (ok) {
+      if (!ok) {
+        gpuNotice(reason, detail + " | no WebGL2 binary deployed");
+        return;
+      }
+      console.warn("[gpu-bootstrap] WebGPU unavailable (" + detail +
+        ") -> WebGL2 fallback");
+      loadEngine("AppGL");
+    });
   }
 
   function gpuPreflight(onReady) {
+    if (forceGL) {
+      devInfo.why = "forced by ?webgl flag";
+      glBinaryPresent(function (ok) {
+        if (ok) loadEngine("AppGL");
+        else gpuNotice(T.nodevice, "?webgl requested but AppGL.wasm is not deployed");
+      });
+      return;
+    }
+    if (forceGPU) devInfo.why = "forced by ?webgpu flag";
     if (!navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
-      gpuNotice(window.isSecureContext === false ? T.insecure : T.none,
+      fallbackOrNotice(window.isSecureContext === false ? T.insecure : T.none,
         "navigator.gpu absent | secure=" + (window.isSecureContext === true) +
         " | " + navigator.userAgent);
       return;
     }
     var settled = false;
-    /* Un requestAdapter qui ne repond jamais ne doit pas laisser un ecran
-       noir : au bout de 8 s on affiche le panneau. */
+    /* A requestAdapter that never answers must not leave a black screen:
+       after 8 s we show the panel. */
     var guard = setTimeout(function () {
       if (settled) return;
       settled = true;
-      gpuNotice(T.noadapter, "requestAdapter sans reponse apres 8 s");
+      fallbackOrNotice(T.noadapter, "requestAdapter did not answer within 8 s");
     }, 8000);
     navigator.gpu.requestAdapter({ powerPreference: "high-performance" })
       .then(function (adapter) {
         if (settled) return;
         settled = true; clearTimeout(guard);
         if (!adapter) {
-          gpuNotice(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
+          fallbackOrNotice(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
           return;
         }
         var nb = adapter.features ? adapter.features.size : 0;
+        try {
+          var ai = adapter.info || null;   /* adapter.info: recent Chrome */
+          var who = ai ? [ai.vendor, ai.architecture, ai.device, ai.description]
+                          .filter(Boolean).join(" / ") : "";
+          devInfo.gpu = (who || "adapter acquired") +
+            "\n" + nb + " features | tex2D max " +
+            (adapter.limits ? adapter.limits.maxTextureDimension2D : "?") +
+            " | depth32float-stencil8 " +
+            ((adapter.features && adapter.features.has &&
+              adapter.features.has("depth32float-stencil8")) ? "yes" : "NO");
+          if (!devInfo.why || devInfo.why === "selection in progress")
+            devInfo.why = "automatic: WebGPU adapter acquired";
+          devInfoRender();
+        } catch (eI) {}
         console.info("[gpu-bootstrap] WebGPU adapter acquired",
           "features=", nb,
           "maxTexture2D=", adapter.limits ? adapter.limits.maxTextureDimension2D : "?");
-        /* ON NE DEVINE PLUS, ON ESSAIE POUR DE VRAI.
-           Premiere version : je verifiais la presence de depth32float-stencil8
-           dans la liste de l adaptateur. C etait faux — sur Firefox la
-           fonction EST annoncee, et c est pourtant la creation du peripherique
-           qui echoue. sokol jette le message d erreur (_SOKOL_UNUSED(msg)),
-           donc personne ne sait pourquoi.
-           On refait donc ici exactement ce que le moteur va faire, en deux
-           temps, et on affiche le message reel du navigateur :
-             1. un peripherique nu   -> echoue = probleme de pilote
-             2. avec la fonction exigee par sokol -> echoue = fonction refusee
-           Le peripherique de test est detruit aussitot. */
-        var need = "depth32float-stencil8";
-        adapter.requestDevice().then(function (dev0) {
-          try { if (dev0 && dev0.destroy) dev0.destroy(); } catch (eD0) {}
-          return adapter.requestDevice({ requiredFeatures: [need] })
-            .then(function (dev1) {
-              try { if (dev1 && dev1.destroy) dev1.destroy(); } catch (eD1) {}
-              console.info("[gpu-bootstrap] peripherique de test OK (" + need + ")");
-              onReady();
-            }, function (e1) {
-              gpuNotice(T.missing,
-                need + " refuse : " +
-                (e1 && e1.message ? e1.message : String(e1)) +
-                " | " + nb + " fonctions | " + navigator.userAgent);
-            });
-        }, function (e0) {
-          gpuNotice(T.nodevice,
-            "requestDevice : " + (e0 && e0.message ? e0.message : String(e0)) +
-            " | " + nb + " fonctions | " + navigator.userAgent);
-        });
-      })
-      .catch(function (e) {
+        /* DO NOT CREATE A DEVICE HERE.
+           Earlier version: a trial requestDevice, to get the real error
+           message. Result on Chrome -
+              adapter is "consumed": it has already been used to create a
+              device (dawn/native/Adapter.cpp:328)
+           A GPUAdapter can create exactly ONE device. The trial consumed it
+           and the engine could no longer use it: the check itself caused the
+           failure it was meant to detect, and refused startup on a perfectly
+           capable device.
+           So the preflight is limited to what costs nothing and touches
+           nothing: WebGPU exposed, adapter acquired. Everything else is caught
+           by the abort panel, which shows the engine's real panic. */
+        onReady();
+      }, function (eA) {
         if (settled) return;
         settled = true; clearTimeout(guard);
-        gpuNotice(T.noadapter,
-          "requestAdapter : " + (e && e.message ? e.message : String(e)));
-      });
+        fallbackOrNotice(T.noadapter,
+          "requestAdapter: " + (eA && eA.message ? eA.message : String(eA)));
+      })
+      ;
   }
 
   /* Module MUST exist before App.js — same contract as blobcone_fast / spinviewapp_web/test. */
@@ -651,12 +937,13 @@ body {
     printErr: function () {
       var _m = Array.prototype.slice.call(arguments).join(" ");
       console.error("[stderr]", _m);
-      /* Le dernier [sapp][panic] est la vraie cause d un abort : on le garde
-         pour l afficher au joueur au lieu d un "Engine aborted" nu. */
-      if (/\[panic\]|\[sapp\]/.test(_m)) window.__spinLastPanic = _m;
-      /* cdx TEMPORAIRE : SAFE_HEAP appelle err() sans pile. On la reconstruit
-         ici : les frames wasm de l acces fautif y sont encore. */
-      if (window.__cdx_traceStderr !== false && /alignment fault|segmentation fault/.test(_m)) {
+      /* The last panic line is the real cause of an abort: keep it so we can
+         show it (dev) or reference it (user) instead of a bare "aborted". */
+      if (/panic|fatal/i.test(_m)) window.__spinLastPanic = _m;
+      /* cdx TEMPORARY: SAFE_HEAP calls err() without a stack. We rebuild one
+         here: the wasm frames of the faulting access are still on it. */
+      if (devMode && window.__cdx_traceStderr !== false &&
+          /alignment fault|segmentation fault/.test(_m)) {
         if (!window.__cdx_traceCount) window.__cdx_traceCount = 0;
         if (window.__cdx_traceCount++ < 5) {
           console.error("[stderr-stack] " + _m + "\n" + (new Error()).stack);
@@ -664,15 +951,15 @@ body {
       }
     },
     setStatus: function (msg) {
-      if (debugOn && msg) console.info("[status]", msg);
+      if (devMode && msg) console.info("[status]", msg);
     },
     monitorRunDependencies: function () {},
       onAbort: function (reason) {
         engineAborted = true;
         console.error("[abort]", reason);
-        /* Un abort apres un controle WebGPU reussi vient presque toujours de
-           l initialisation graphique. On montre le meme panneau propre, avec
-           le dernier message de panique du moteur — celui que sokol jette. */
+        /* An abort after a successful WebGPU preflight almost always comes
+           from graphics initialization. Show the same clean panel, keyed on
+           the last panic message - the one the abort path throws away. */
         var why = window.__spinLastPanic || String(reason || "");
         if (typeof gpuNotice === "function" &&
             !document.querySelector(".gpu-notice") &&
@@ -683,7 +970,7 @@ body {
         if (loader) loader.style.display = "flex";
         if (loaderText) {
           loaderText.style.whiteSpace = "pre-wrap";
-          loaderText.textContent = debugOn && why
+          loaderText.textContent = devMode && why
             ? "Engine aborted\n" + why
             : (FR ? "Le moteur n a pas pu demarrer." : "The engine failed to start.");
         }
@@ -695,7 +982,7 @@ body {
       if (typeof window.Shell_OnLoad === "function") window.Shell_OnLoad();
       /* Stay over the canvas until the first dark graphics frame is committed
        * (numerisHideLoader). Then the blit lifts and the title writes. */
-      if (loaderText) loaderText.textContent = "Preparing... " + getCurrentVersion();
+      if (loaderText) loaderText.textContent = "Preparing... " + shownVersion();
       console.info("[runtime] Ready.");
     }
   };
@@ -705,13 +992,13 @@ body {
   window.spinviewConsoleHide = consoleHide;
   window.spinviewConsoleToggle = consoleToggle;
 
-  /* cdx: plafonner le devicePixelRatio avant de charger App.js.
-     sokol_app (high_dpi=true) dimensionne le backing store a css * dpr. Sur un
-     telephone dpr=3 -> 1080x2007 = 2.17 Mpx, soit PLUS que le desktop, pour un
-     ecran de 360x669 CSS. Le fond shadertoy est un fragment shader plein ecran :
-     son cout suit exactement le nombre de pixels. Plafonner a 2 divise la charge
-     fragment par ~2.25 pour une difference quasi invisible a l oeil.
-     Reglable a chaud : ?dpr=3 pour revenir a l origine, ?dpr=0 pour ne pas plafonner. */
+  /* cdx: cap devicePixelRatio before loading App.js.
+     The engine (high_dpi=true) sizes the backing store at css * dpr. On a phone
+     dpr=3 -> 1080x2007 = 2.17 Mpx, MORE than desktop, for a 360x669 CSS screen.
+     The shadertoy background is a fullscreen fragment shader: its cost tracks
+     the pixel count exactly. Capping at 2 divides the fragment load by ~2.25
+     for a difference the eye barely catches.
+     Tunable at runtime: ?dpr=3 restores the original, ?dpr=0 disables the cap. */
   (function () {
     var real = window.devicePixelRatio || 1;
     var m = /[?&]dpr=([0-9.]+)/.exec(window.location.search);
@@ -731,19 +1018,7 @@ body {
     }
   })();
 
-  gpuPreflight(function () {
-    var s = document.createElement("script");
-    s.src = cacheBust("App.js");
-    s.async = true;
-    s.onload = function () {
-      console.info("[gpu-bootstrap] App.js loaded", s.src);
-    };
-    s.onerror = function (e) {
-      console.error("[gpu-bootstrap] App.js load failed", s.src, e);
-    };
-    console.info("[gpu-bootstrap] loading App.js", s.src);
-    document.body.appendChild(s);
-  });
+  gpuPreflight(function () { loadEngine("App"); });
   setTimeout(function () {
     console.info("[gpu-bootstrap] 5s state",
       "runtimeInitialized=", window.numerisRuntimeInitialized === true,

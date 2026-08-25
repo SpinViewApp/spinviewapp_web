@@ -2,33 +2,33 @@
 <html lang="en" translate="no">
 <head>
 <meta charset="utf-8">
-<title>Wake Nanite - Virtual Mesh Viewer | SpinView</title>
-<meta name="description" content="Wake Nanite: a WebGPU virtual-mesh viewer with Nanite-style cluster LOD. Load .glb models and inspect clusters, LOD levels and error heat live in your browser.">
+<title>Wake Raytracer - Realtime Blob Raytracer | SpinView</title>
+<meta name="description" content="Wake Raytracer: a realtime blob raytracer running in your browser on WebGPU, with a BVH-accelerated scene, soft shadows, an adaptive resolution scale and a side-by-side VR view.">
 <meta name="robots" content="index, follow">
 <meta name="googlebot" content="index, follow">
 
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 
-<link rel="canonical" href="https://spinview.app/nanite">
+<link rel="canonical" href="https://spinview.app/raytracer">
 
-<meta property="og:title" content="Wake Nanite - Virtual Mesh Viewer">
-<meta property="og:description" content="A WebGPU virtual-mesh viewer with Nanite-style cluster LOD: load a model and inspect clusters, LOD levels and pixel error live.">
+<meta property="og:title" content="Wake Raytracer - Realtime Blob Raytracer">
+<meta property="og:description" content="A realtime blob raytracer in the browser on WebGPU: BVH-accelerated, soft shadows, adaptive resolution and a side-by-side VR view.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://spinview.app/nanite">
+<meta property="og:url" content="https://spinview.app/raytracer">
 <meta property="og:site_name" content="SpinView">
 
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Wake Nanite - Virtual Mesh Viewer">
-<meta name="twitter:description" content="A WebGPU virtual-mesh viewer with Nanite-style cluster LOD, running in the browser.">
+<meta name="twitter:title" content="Wake Raytracer - Realtime Blob Raytracer">
+<meta name="twitter:description" content="A realtime blob raytracer running in the browser on WebGPU.">
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Wake Nanite",
-  "url": "https://spinview.app/nanite",
-  "description": "A WebGPU virtual-mesh viewer with Nanite-style cluster LOD.",
+  "name": "Wake Raytracer",
+  "url": "https://spinview.app/raytracer",
+  "description": "A realtime blob raytracer running in the browser on WebGPU.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Web Browser",
   "publisher": {
@@ -209,23 +209,23 @@ body {
 </style>
 </head>
 <body translate="no" class="notranslate">
-<main class="seo-content" id="about-nanite" translate="yes">
-  <h1>Wake Nanite</h1>
+<main class="seo-content" id="about-raytracer" translate="yes">
+  <h1>Wake Raytracer</h1>
 
   <p>
-    Wake Nanite is a virtual-mesh viewer running directly in your web browser
-    on WebGPU.
+    Wake Raytracer is a realtime raytracer running directly in your web
+    browser on WebGPU.
   </p>
 
   <p>
-    It builds a Nanite-style cluster LOD hierarchy and renders the selected
-    cut live: clusters, LOD levels, error heat, normals, depth, UVs and
-    albedo.
+    Every frame is traced against a BVH-accelerated scene of blob creatures
+    and lamps: soft shadows, contact shadows and a resolution scale that
+    adapts to the frame budget rather than dropping frames.
   </p>
 
   <p>
-    Load one of the bundled models or drop your own .glb, .gltf, .obj or
-    .wmesh file into the window.
+    Drag to orbit, pinch to zoom, and use the headset view for a
+    side-by-side stereo pass with adjustable convergence.
   </p>
 
   <a href="https://spinview.app/">Visit SpinView</a>
@@ -296,7 +296,7 @@ body {
      WebGL fallback even deployed. */
   var devInfo = {
     engine: "-", backend: "pending", why: "selection in progress",
-    gpu: "not probed", gl: "not probed", glBin: "not probed", runtime: "",
+    gpu: "not probed", gl: "not probed", runtime: "",
     api: "pending"   /* the one graphics line a user may see */
   };
   var devInfoEl = null, devGlProbed = false;
@@ -356,7 +356,6 @@ body {
       ["version", devEsc(shownVersion())],
       ["WebGPU",  devEsc(devInfo.gpu)],
       ["WebGL2",  devEsc(devInfo.gl)],
-      ["AppGL",   devEsc(devInfo.glBin)],
       ["screen",  devEsc(scr)],
       ["flags",   devEsc(flags || "none")],
       ["UA",      devEsc(navigator.userAgent)]
@@ -428,7 +427,7 @@ body {
   function updateVersionLabel() {
     var version = shownVersion();
     if (debugButton) debugButton.textContent = version;
-    if (loaderText && !window.vmeshRuntimeInitialized)
+    if (loaderText && !window.spinRuntimeInitialized)
       loaderText.textContent = "Loading engine... " + version;
   }
 
@@ -473,8 +472,8 @@ body {
     /* The engine reports the backend it ACTUALLY brought up. That is the only
        source of truth: the loader picks a file, but the wasm is compiled for
        one backend and one only. */
-    if (joined.indexOf("[vmesh_backend]") >= 0) {
-      devInfo.runtime = joined.replace(/^.*\[vmesh_backend\]:\s*/, "");
+    if (/\[[a-z_]*backend\]/i.test(joined)) {
+      devInfo.runtime = joined.replace(/^.*\[[a-z_]*backend\]:\s*/i, "");
       try { devInfoRender(); } catch (eB) {}
     }
     /* Outside dev mode the panel keeps only what a user can act on. */
@@ -573,7 +572,8 @@ body {
 
   /* Called by the engine on its first committed frame (vmesh_hud.hh).
      numerisHideLoader stays as an alias: same shell, same contract. */
-  window.vmeshHideLoader = hideLoader;
+  window.spinviewHideLoader = hideLoader;
+  window.vmeshHideLoader = hideLoader;      /* same contract in the other shells */
   window.numerisHideLoader = hideLoader;
 
   /* Safety fallback only if the engine did not abort */
@@ -583,9 +583,9 @@ body {
 
   updateVersionLabel();
 
-  /* Do not pre-create a graphics context here. The engine owns the selected
-   * backend (WebGL2 or WebGPU); probing WebGL in the shared launcher is
-   * misleading and can interfere with WebGPU initialization on some browsers. */
+  /* Do not pre-create a graphics context here: the page canvas belongs to the
+   * engine, and probing it in the launcher can interfere with WebGPU
+   * initialization on some browsers. */
   console.info("[gpu-bootstrap]",
     "secure=", window.isSecureContext === true,
     "protocol=", location.protocol,
@@ -613,6 +613,8 @@ body {
     b2: "Safari 18 et plus (macOS et iOS 18)",
     b3: "Firefox : activer WebGPU dans ",
     b4: "verifier que l'acceleration materielle est active dans les reglages du navigateur",
+    dl: "Le fichier du moteur n'a pas pu etre recupere. Verifie ta connexion, puis recharge la page.",
+    title_dl: "Le moteur n'a pas pu etre telecharge",
     detail: "Detail technique"
   } : {
     title: "WebGPU is required",
@@ -626,40 +628,15 @@ body {
     b2: "Safari 18+ (macOS and iOS 18)",
     b3: "Firefox: enable WebGPU in ",
     b4: "check that hardware acceleration is enabled in your browser settings",
+    dl: "The engine file could not be fetched. Check your connection, then reload the page.",
+    title_dl: "The engine could not be downloaded",
     detail: "Technical detail"
   };
 
-  /* ============ BINARY SELECTION: WebGPU or WebGL2 fallback ============
-     Two binaries can live side by side in this folder: App.* (WebGPU) and
-     AppGL.* (WebGL2). The user downloads only ONE of them.
-       ?webgpu  forces WebGPU        ?webgl  forces WebGL2   (?gpu / ?gl alias)
-     With no flag: WebGPU when the device provides it, else WebGL2, else the
-     explanation panel. */
-  /* A flag counts as soon as it is present, like ?gui: ?webgl, ?webgl=1 and
-     ?gl are all true; only ?webgl=0 (or =false/=off/=no) turns it off. */
-  function qflag(name) {
-    try {
-      var m = new RegExp("[?&]" + name + "(?:=([^&]*))?(?=&|$)", "i")
-                .exec(String(location.search || ""));
-      if (!m) return false;
-      var v = m[1];
-      if (v === undefined || v === "") return true;
-      v = v.toLowerCase();
-      return !(v === "0" || v === "false" || v === "off" || v === "no");
-    } catch (e) { return false; }
-  }
-  var forceGL  = qflag("webgl") || qflag("gl");
-  var forceGPU = qflag("webgpu") || qflag("gpu");
-
-  function webgl2Available() {
-    /* On a DETACHED canvas: a canvas accepts a single context type, and the
-       page canvas belongs to the engine. */
-    try {
-      var c = document.createElement("canvas");
-      return !!(c.getContext("webgl2") || c.getContext("experimental-webgl2"));
-    } catch (e) { return false; }
-  }
-
+  /* Single binary: App.js + App.wasm. No second engine to probe, no flag to
+     read - if WebGPU is missing there is nothing to fall back to, and the
+     panel below says so plainly instead of hunting for a file that was never
+     built. */
   function loadEngine(base) {
     var sc = document.createElement("script");
     sc.src = cacheBust(base + ".js");
@@ -667,32 +644,32 @@ body {
     sc.onload = function () { console.info("[gpu-bootstrap] " + base + ".js loaded", sc.src); };
     sc.onerror = function (e) {
       console.error("[gpu-bootstrap] " + base + ".js load failed", sc.src, e);
-      gpuNotice(T.nodevice, "could not load " + base + ".js");
+      gpuNotice(T.dl, "could not load " + base + ".js", T.title_dl);
     };
     window.__spinEngine = base;
     devInfo.engine  = base + ".wasm";
-    devInfo.api     = (base === "AppGL") ? "WebGL2" : "WebGPU";
+    devInfo.api     = "WebGPU";
     devInfo.backend = devInfo.api;
     devInfoRender();
-    console.info("[gpu-bootstrap] engine selected: " + base +
-      (base === "AppGL" ? " (WebGL2)" : " (WebGPU)"));
+    console.info("[gpu-bootstrap] engine selected: " + base + " (WebGPU)");
     document.body.appendChild(sc);
   }
 
-  function gpuNotice(reason, detail) {
+  function gpuNotice(reason, detail, title) {
     try { if (loader) loader.style.display = "none"; } catch (eL) {}
     var d = document.createElement("div");
     d.className = "gpu-notice";
     var card = document.createElement("div");
     card.className = "gpu-notice-card";
     var h = document.createElement("h1");
-    h.textContent = T.title;
+    h.textContent = title || T.title;
     var p = document.createElement("p");
     p.textContent = reason;
     var how = document.createElement("p");
-    how.textContent = T.how;
     var ul = document.createElement("ul");
-    var items = [T.b1, T.b2, null, T.b4];
+    /* A download failure needs no browser checklist. */
+    var items = title ? [] : [T.b1, T.b2, null, T.b4];
+    how.textContent = items.length ? T.how : "";
     var i, li;
     for (i = 0; i < items.length; i++) {
       li = document.createElement("li");
@@ -712,81 +689,25 @@ body {
     d.appendChild(card);
     document.body.appendChild(d);
     window.__spinNoticeShown = true;
-    devInfo.api = "unavailable";
+    /* NOT devInfo.api = "unavailable" here: this panel also shows when the
+       script simply failed to download. gpuPreflight owns that field. */
     try { devInfoRender(); } catch (eR) {}
     try { consoleHide(); } catch (eC) {}
     console.error("[gpu-bootstrap] startup refused: " + detail);
   }
 
-  /* The WebGL2 binary is OPTIONAL. If it is not deployed next to App.wasm
-     there is simply no fallback and the explanation panel shows up. We probe
-     AppGL.wasm (the .js alone would be useless) with a HEAD; a server that
-     answers HTML for a missing file counts as absent. Result memoized so we
-     probe only once. */
-  var glBinaryState = -1;   /* -1 unknown, 0 absent, 1 present */
-  function glBinaryPresent(cb) {
-    if (glBinaryState >= 0) { cb(glBinaryState === 1); return; }
-    var url = cacheBust("AppGL.wasm"), done = false;
-    function settle(ok, why) {
-      if (done) return;
-      done = true;
-      glBinaryState = ok ? 1 : 0;
-      devInfo.glBin = ok ? "deployed" : "absent (" + why + ") — no fallback possible";
-      devInfoRender();
-      console.info("[gpu-bootstrap] WebGL2 binary " +
-        (ok ? "present" : "absent (" + why + ")") + " : " + url);
-      cb(ok);
-    }
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open("HEAD", url, true);
-      xhr.timeout = 6000;
-      xhr.onload = function () {
-        var ct = "";
-        try { ct = (xhr.getResponseHeader("Content-Type") || "").toLowerCase(); } catch (eH) {}
-        if (xhr.status < 200 || xhr.status >= 400) { settle(false, "HTTP " + xhr.status); return; }
-        if (ct.indexOf("html") >= 0) { settle(false, "HTML response"); return; }
-        settle(true, "");
-      };
-      xhr.onerror   = function () { settle(false, "network error"); };
-      xhr.ontimeout = function () { settle(false, "timeout"); };
-      xhr.send();
-    } catch (e) { settle(false, "XHR unavailable"); }
-  }
-
-  /* No usable WebGPU: try WebGL2 before giving up, but only if the matching
-     binary was actually deployed. */
-  function fallbackOrNotice(reason, detail) {
-    devInfo.why = "fallback: WebGPU unavailable (" + detail + ")";
+  /* No WebGPU: there is no second engine here, so state it and stop. */
+  function noGpu(reason, detail) {
+    devInfo.why = "WebGPU unavailable (" + detail + ")";
+    devInfo.api = "unavailable";
     if (devInfo.gpu === "not probed") devInfo.gpu = "unavailable: " + detail;
     devInfoRender();
-    if (!webgl2Available()) {
-      gpuNotice(reason, detail + " | WebGL2 unavailable too");
-      return;
-    }
-    glBinaryPresent(function (ok) {
-      if (!ok) {
-        gpuNotice(reason, detail + " | no WebGL2 binary deployed");
-        return;
-      }
-      console.warn("[gpu-bootstrap] WebGPU unavailable (" + detail +
-        ") -> WebGL2 fallback");
-      loadEngine("AppGL");
-    });
+    gpuNotice(reason, detail);
   }
 
   function gpuPreflight(onReady) {
-    if (forceGL) {
-      devInfo.why = "forced by ?webgl flag";
-      glBinaryPresent(function (ok) {
-        if (ok) loadEngine("AppGL");
-        else gpuNotice(T.nodevice, "?webgl requested but AppGL.wasm is not deployed");
-      });
-      return;
-    }
-    if (forceGPU) devInfo.why = "forced by ?webgpu flag";
     if (!navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
-      fallbackOrNotice(window.isSecureContext === false ? T.insecure : T.none,
+      noGpu(window.isSecureContext === false ? T.insecure : T.none,
         "navigator.gpu absent | secure=" + (window.isSecureContext === true) +
         " | " + navigator.userAgent);
       return;
@@ -797,14 +718,14 @@ body {
     var guard = setTimeout(function () {
       if (settled) return;
       settled = true;
-      fallbackOrNotice(T.noadapter, "requestAdapter did not answer within 8 s");
+      noGpu(T.noadapter, "requestAdapter did not answer within 8 s");
     }, 8000);
     navigator.gpu.requestAdapter({ powerPreference: "high-performance" })
       .then(function (adapter) {
         if (settled) return;
         settled = true; clearTimeout(guard);
         if (!adapter) {
-          fallbackOrNotice(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
+          noGpu(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
           return;
         }
         var nb = adapter.features ? adapter.features.size : 0;
@@ -836,7 +757,7 @@ body {
       }, function (eA) {
         if (settled) return;
         settled = true; clearTimeout(guard);
-        fallbackOrNotice(T.noadapter,
+        noGpu(T.noadapter,
           "requestAdapter: " + (eA && eA.message ? eA.message : String(eA)));
       })
       ;
@@ -886,12 +807,18 @@ body {
       }
     },
     onRuntimeInitialized: function () {
-      window.vmeshRuntimeInitialized = true;
+      window.spinRuntimeInitialized = true;
       resizeCanvas();
       if (typeof window.Shell_OnLoad === "function") window.Shell_OnLoad();
       /* Stay over the canvas until the first graphics frame is committed
        * (vmeshHideLoader, called by the engine). */
       if (loaderText) loaderText.textContent = "Preparing... " + shownVersion();
+      /* This engine has no "first frame committed" callback, so lift the
+         spinner after two real animation frames instead of waiting out the
+         8 s safety timeout. */
+      try {
+        requestAnimationFrame(function () { requestAnimationFrame(hideLoader); });
+      } catch (eF) { hideLoader(); }
       console.info("[runtime] Ready.");
     }
   };
@@ -929,7 +856,7 @@ body {
   gpuPreflight(function () { loadEngine("App"); });
   setTimeout(function () {
     console.info("[gpu-bootstrap] 5s state",
-      "runtimeInitialized=", window.vmeshRuntimeInitialized === true,
+      "runtimeInitialized=", window.spinRuntimeInitialized === true,
       "canvas=", canvas.width + "x" + canvas.height,
       "css=", canvas.clientWidth + "x" + canvas.clientHeight);
   }, 5000);

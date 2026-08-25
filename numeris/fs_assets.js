@@ -6,6 +6,13 @@
   var M = (typeof Module !== "undefined") ? Module : (window.Module = window.Module || {});
   M.preRun = M.preRun || [];
 
+  /* ADDING A LANGUAGE takes three edits and this is one of them:
+   *   1. src/localization/<code>.json
+   *   2. its -#Copy line in build.cwc
+   *   3. the "Rc/localization/<code>.json" entry below
+   * The web has no directory listing, so a catalog absent from this list is
+   * invisible to the engine - including to the automatic language detection,
+   * which probes MEMFS before adopting a code (numeris_base.hh). */
   var ASSETS = [
     "pane/options.pane",
     "layout/layout.json",
