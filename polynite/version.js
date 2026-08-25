@@ -19,7 +19,7 @@
     }
 
     function hasDebugParameter(){
-        return /(?:^|[?&])debug(?:[=&]|$)/i.test(location.search);
+        return /(?:^|[?&])(?:dev|debug)(?:[=&]|$)/i.test(location.search);
     }
 
     function readStorage(storage,key){
@@ -123,6 +123,11 @@
             VERSION_KEY,
             remoteVersion
         );
+
+        /* Label: the shell froze its version before this fetch answered. */
+        if(typeof window.spinviewSetDisplayVersion === "function"){
+            window.spinviewSetDisplayVersion(remoteVersion);
+        }
 
         updateDebugState();
 
