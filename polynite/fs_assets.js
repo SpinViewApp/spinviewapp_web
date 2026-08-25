@@ -6,12 +6,16 @@
   var M = (typeof Module !== "undefined") ? Module : (window.Module = window.Module || {});
   M.preRun = M.preRun || [];
 
+  /* Boot payload: small files only. Every entry here is an emscripten RUN
+   * DEPENDENCY, so main() does not start until all of them have landed -
+   * demo/knot.glb (10 MB) alone was holding the first frame hostage on every
+   * visit for a model most sessions never open. The demo models are now
+   * downloaded on demand, the first time the menu asks for one
+   * (vmesh_load_demo in vmesh_view.hh). */
   var ASSETS = [
     "pane/options.pane",
     "layout/layout.json",
-    "Rc/defaults/app.json",
-    "demo/knot.glb",
-    "demo/pirate.glb"
+    "Rc/defaults/app.json"
   ];
 
   function ensureDir(path) {
