@@ -7,6 +7,7 @@ Holofil-flying-icarus.glb 5593444
 Human_Skull.glb 2185768
 nickpanek-black-knight-1689.glb 14391060
 pixellabs-battle-axe-3881.glb 43241768
+pixellabs-battle-axe-3881_optimized.glb 42872940
 pixellabs-bone-spear-3640.glb 39333076
 pixellabs-creepy-creature-3319.glb 36873132
 pixellabs-cute-grim-reaper-cat-3d-model-2477.glb 2140076
