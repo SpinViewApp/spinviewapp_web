@@ -3,32 +3,49 @@
   "title": "Numeris",
   "type": "game",
   "collection": "spinmind",
-  "status": "live",
+  "status": "beta",
   "released": true,
-
+  "badge": "Beta",
+  "tagline": "Solve, progress and share your branch.",
   "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
   "short": "Cross-math puzzles inside an evolving visual world.",
-
   "icon": "screen/image.webp",
-  "cover": "screen/image.webp",
-
+  "cover": "screen/image2.webp",
   "screens": [
-    "screen/image.webp",
     "screen/image2.webp",
+    "screen/image.webp",
     "screen/image3.webp"
   ],
-
   "tags": [
     "Puzzle",
     "SpinMind"
   ],
-
   "url": "/projects/numeris.html",
   "play": "/numeris/",
-
+  "play_label": "Play Numeris",
   "visible": true,
-
-  "featured": false,
-  "featured_order": 1,
-  "featured_kicker": "SpinMind · Live"
+  "featured": true,
+  "featured_order": 2,
+  "featured_kicker": "SpinMind · Beta",
+  "slides": [
+    {
+      "id": "numeris",
+      "kind": "hero",
+      "image": "screen/image2.webp",
+      "focus": "50% 42%",
+      "kicker": "SpinMind",
+      "badge": "Beta",
+      "title": "Numeris",
+      "text": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
+      "actions": [
+        {
+          "label": "Play Numeris",
+          "href": "/numeris/",
+          "primary": true
+        }
+      ]
+    }
+  ],
+  "lift": 1.45,
+  "scrim": 0.84
 }

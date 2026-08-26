@@ -1,1 +1,363 @@
-{"generated": "2026-08-26T12:32:30", "projects": [{"id": "polynite", "title": "PolyNite", "type": "app", "collection": "spinview", "status": "live", "released": true, "release_date": "2026-08-26", "tagline": "Drop a model. Explore every detail.", "description": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a 3D model and explore it instantly with dynamic lighting, environments, animations and real-time LOD.", "short": "A WebGPU GLB viewer with Nanite-like adaptive geometry.", "iconText": "P", "cover": "screen/img07.jpg", "screens": ["screen/img07.jpg", "screen/img09.jpg", "screen/img05.jpg", "screen/img13jpg.jpg", "screen/img08.jpg", "screen/img02.jpg", "screen/img03.jpg", "screen/img01.jpg", "screen/img10.jpg", "screen/img11.jpg", "screen/img12.jpg", "screen/img06.jpg"], "tags": ["WebGPU", "3D", "GLB", "Viewer"], "url": "/polynite/", "play": "/polynite/", "play_label": "Launch PolyNite", "visible": true, "featured": true, "featured_order": 1, "featured_kicker": "SpinView · Now live", "features": [{"title": "Drag & drop GLB", "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded."}, {"title": "Adaptive geometry", "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail."}, {"title": "WebGPU rendering", "text": "Modern GPU pipeline running natively in the browser."}, {"title": "Dynamic lighting", "text": "Real-time lights, environments, reflections and materials."}, {"title": "Animation playback", "text": "Skinned and rigged GLB animations play straight from the file."}, {"title": "Desktop and mobile", "text": "One viewer, adapting to the device it runs on."}], "slides": [{"id": "hero", "kind": "hero", "image": "screen/img07.jpg", "focus": "50% 45%", "kicker": "SpinView · Now live", "title": "PolyNite", "text": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a model and explore every detail — no install, no upload.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}, {"label": "See how it works", "slide": "clusters"}]}, {"id": "clusters", "kind": "segmentation", "image": "seg/01.jpg", "focus": "50% 42%", "kicker": "Inside the engine", "title": "It sees clusters", "text": "PolyNite breaks every mesh into thousands of small clusters. Each frame, the engine keeps only the clusters — and the level of detail — the camera actually needs.", "chips": ["Meshlet clusters", "View-dependent LOD", "GPU-driven culling"], "stats": [], "readout": "Building cluster hierarchy"}, {"id": "render", "kind": "reveal", "image": "screen/img13jpg.jpg", "focus": "50% 40%", "kicker": "On screen", "title": "You see the model", "text": "None of that work is visible. What reaches the screen is the full model — lit, shaded and animated in real time.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}]}, {"id": "drop", "kind": "hero", "image": "screen/img02.jpg", "focus": "50% 50%", "kicker": "Zero friction", "title": "Drag. Drop. Done.", "text": "Your file never leaves your machine. Drop a .glb or .gltf on the page and it opens instantly, on desktop and on mobile.", "actions": [{"label": "Open the viewer", "href": "/polynite/", "primary": true}]}, {"id": "dense", "kind": "features", "image": "screen/img09.jpg", "focus": "50% 45%", "kicker": "Built for dense geometry", "title": "Made for the new 3D", "text": "High-density scans, sculpts and AI-generated assets render without melting the page.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}]}], "_base": "./_data/app/polynite/"}, {"id": "numeris", "title": "Numeris", "type": "game", "collection": "spinmind", "status": "live", "released": true, "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.", "short": "Cross-math puzzles inside an evolving visual world.", "icon": "screen/image.webp", "cover": "screen/image.webp", "screens": ["screen/image.webp", "screen/image2.webp", "screen/image3.webp"], "tags": ["Puzzle", "SpinMind"], "url": "/projects/numeris.html", "play": "/numeris/", "visible": true, "featured": false, "featured_order": 1, "featured_kicker": "SpinMind · Live", "_base": "./_data/game/numeris/"}, {"id": "deitouch", "title": "DeiTouch", "type": "app", "status": "forming", "released": false, "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.", "short": "Experimental touch interfaces and virtual keyboard concepts.", "iconText": "D", "tags": ["Touch", "Interface"], "visible": true, "featured": false, "featured_order": 2, "featured_kicker": "App · Forming", "_base": "./_data/app/deitouch/"}, {"id": "holophone", "title": "Holophone", "type": "app", "status": "forming", "released": false, "description": "A tactile music experiment where gestures become the instrument.", "short": "A tactile musical interface shaped directly through touch.", "iconText": "H", "tags": ["Music", "Touch"], "visible": true, "featured": false, "featured_order": 3, "featured_kicker": "Music · Forming", "_base": "./_data/app/holophone/"}, {"id": "mandelbrot", "title": "Mandelbrot Study", "type": "experiment", "status": "prototype", "released": false, "description": "Procedural shader studies around evolving Mandelbrot worlds.", "iconText": "M", "tags": ["Shader", "Fractal"], "visible": true, "featured": false, "_base": "./_data/experiment/mandelbrot/"}, {"id": "raytracer", "title": "Raytracer Study", "type": "experiment", "status": "prototype", "released": false, "description": "A procedural raytracing study exploring reflections, soft shadows and evolving geometry.", "iconText": "R", "tags": ["Shader", "Raytracing"], "visible": true, "featured": false, "_base": "./_data/experiment/raytracer/"}], "spinfx": [{"id": "spinfx-099", "number": 99, "title": "Depth Study", "type": "spinfx", "description": "Living-image experiment exploring movement and visual parallax.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-19", "_base": "./_data/spinfx/099/"}, {"id": "spinfx-098", "number": 98, "title": "Motion Study", "type": "spinfx", "description": "Compact visual experiment from the SpinFX series.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-12", "_base": "./_data/spinfx/098/"}, {"id": "spinfx-097", "number": 97, "title": "Light Study", "type": "spinfx", "description": "Small exploration around light, depth and motion.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-05", "_base": "./_data/spinfx/097/"}, {"id": "spinfx-096", "number": 96, "title": "Shader Study", "type": "spinfx", "description": "A procedural visual experiment from SpinView.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-07-29", "_base": "./_data/spinfx/096/"}, {"id": "spinfx-001", "number": 1, "title": "Wire Study", "type": "spinfx", "description": "An early flow study from the SpinFX series.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-07-01", "_base": "./_data/spinfx/001/"}], "notes": [{"date": "08/19", "title": "Numeris sharing branches", "text": "Refining how a branch is shared, continued and challenged.", "url": "/projects/numeris.html"}, {"date": "08/18", "title": "Dynamic boss levels", "text": "Testing bosses that build the board while the player solves it.", "url": "/projects/numeris.html"}, {"date": "08/17", "title": "Mandelbrot as identity", "text": "The fractal background is becoming one of Numeris' strongest visual signatures.", "url": "/projects/numeris.html"}]}
+{"generated":"2026-08-26T08:57:37","projects":[{"id": "polynite",
+  "title": "PolyNite",
+  "type": "app",
+  "collection": "spinview",
+  "status": "live",
+  "released": true,
+  "release_date": "2026-08-26",
+  "tagline": "Drop a model. Explore every detail.",
+  "description": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a 3D model and explore it instantly with dynamic lighting, environments, animations and real-time LOD.",
+  "short": "A WebGPU GLB viewer with Nanite-like adaptive geometry.",
+  "iconText": "P",
+  "cover": "screen/img07.jpg",
+  "screens": [
+    "screen/img07.jpg",
+    "screen/img09.jpg",
+    "screen/img05.jpg",
+    "screen/img13jpg.jpg",
+    "screen/img08.jpg",
+    "screen/img02.jpg",
+    "screen/img03.jpg",
+    "screen/img01.jpg",
+    "screen/img10.jpg",
+    "screen/img11.jpg",
+    "screen/img12.jpg",
+    "screen/img06.jpg"
+  ],
+  "tags": [
+    "WebGPU",
+    "3D",
+    "GLB",
+    "Viewer"
+  ],
+  "url": "/polynite/",
+  "play": "/polynite/",
+  "play_label": "Launch PolyNite",
+  "visible": true,
+  "featured": true,
+  "featured_order": 1,
+  "featured_kicker": "SpinView · Now live",
+  "features": [
+    {
+      "title": "Drag & drop GLB",
+      "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded."
+    },
+    {
+      "title": "Adaptive geometry",
+      "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail."
+    },
+    {
+      "title": "WebGPU rendering",
+      "text": "Modern GPU pipeline running natively in the browser."
+    },
+    {
+      "title": "Dynamic lighting",
+      "text": "Real-time lights, environments, reflections and materials."
+    },
+    {
+      "title": "Animation playback",
+      "text": "Skinned and rigged GLB animations play straight from the file."
+    },
+    {
+      "title": "Desktop and mobile",
+      "text": "One viewer, adapting to the device it runs on."
+    }
+  ],
+  "slides": [
+    {
+      "id": "hero",
+      "kind": "hero",
+      "image": "screen/img07.jpg",
+      "focus": "50% 45%",
+      "kicker": "SpinView · Now live",
+      "title": "PolyNite",
+      "text": "Drop a model. Explore every detail — right in your browser.",
+      "actions": [
+        {
+          "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        },
+        {
+          "label": "See how it works",
+          "slide": "clusters"
+        }
+      ],
+      "pool": "showcase"
+    },
+    {
+      "id": "clusters",
+      "kind": "segmentation",
+      "image": "seg/01.jpg",
+      "focus": "50% 42%",
+      "kicker": "Inside the engine",
+      "title": "It sees clusters",
+      "text": "PolyNite breaks every mesh into thousands of small clusters. Each frame, the engine keeps only the clusters — and the level of detail — the camera actually needs.",
+      "chips": [
+        "Meshlet clusters",
+        "View-dependent LOD",
+        "GPU-driven culling"
+      ],
+      "stats": [],
+      "readout": "Building cluster hierarchy"
+    },
+    {
+      "id": "render",
+      "kind": "reveal",
+      "image": "screen/img13jpg.jpg",
+      "focus": "50% 40%",
+      "kicker": "On screen",
+      "title": "You see the model",
+      "text": "None of that work is visible. What reaches the screen is the full model — lit, shaded and animated in real time.",
+      "actions": [
+        {
+          "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
+    },
+    {
+      "id": "drop",
+      "kind": "hero",
+      "image": "screen/img02.jpg",
+      "focus": "50% 50%",
+      "kicker": "Zero friction",
+      "title": "Drag. Drop. Done.",
+      "text": "A WebGPU pipeline, no install, no upload. Drop a .glb or .gltf on the page and it opens instantly — desktop and mobile.",
+      "actions": [
+        {
+          "label": "Open the viewer",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
+    },
+    {
+      "id": "dense",
+      "kind": "features",
+      "image": "screen/img09.jpg",
+      "focus": "50% 45%",
+      "kicker": "Built for dense geometry",
+      "title": "Made for the new 3D",
+      "text": "High-density scans, sculpts and AI-generated assets render without melting the page.",
+      "actions": [
+        {
+          "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
+    }
+  ],
+  "pools": {
+    "showcase": [
+      "screen/img07.jpg",
+      "screen/img02.jpg",
+      "screen/img03.jpg",
+      "screen/img09.jpg",
+      "screen/img05.jpg",
+      "screen/img08.jpg",
+      "screen/img13jpg.jpg",
+      "screen/img10.jpg",
+      "screen/img06.jpg"
+    ]
+  },"_base":"./_data/app/polynite/"},{"id": "numeris",
+  "title": "Numeris",
+  "type": "game",
+  "collection": "spinmind",
+  "status": "beta",
+  "released": true,
+  "badge": "Beta",
+  "tagline": "Solve, progress and share your branch.",
+  "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
+  "short": "Cross-math puzzles inside an evolving visual world.",
+  "icon": "screen/image.webp",
+  "cover": "screen/image2.webp",
+  "screens": [
+    "screen/image2.webp",
+    "screen/image.webp",
+    "screen/image3.webp"
+  ],
+  "tags": [
+    "Puzzle",
+    "SpinMind"
+  ],
+  "url": "/projects/numeris.html",
+  "play": "/numeris/",
+  "play_label": "Play Numeris",
+  "visible": true,
+  "featured": true,
+  "featured_order": 2,
+  "featured_kicker": "SpinMind · Beta",
+  "slides": [
+    {
+      "id": "numeris",
+      "kind": "hero",
+      "image": "screen/image2.webp",
+      "focus": "50% 42%",
+      "kicker": "SpinMind",
+      "badge": "Beta",
+      "title": "Numeris",
+      "text": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
+      "actions": [
+        {
+          "label": "Play Numeris",
+          "href": "/numeris/",
+          "primary": true
+        }
+      ]
+    }
+  ],
+  "lift": 1.45,
+  "scrim": 0.84,"_base":"./_data/game/numeris/"},{"id": "deitouch",
+  "title": "DeiTouch",
+  "type": "app",
+  "status": "forming",
+  "released": false,
+
+  "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.",
+  "short": "Experimental touch interfaces and virtual keyboard concepts.",
+  "iconText": "D",
+
+  "tags": [
+    "Touch",
+    "Interface"
+  ],
+
+  "visible": true,
+
+  "featured": false,
+  "featured_order": 2,
+  "featured_kicker": "App · Forming","_base":"./_data/app/deitouch/"},{"id": "holophone",
+  "title": "Holophone",
+  "type": "app",
+  "status": "forming",
+  "released": false,
+
+  "description": "A tactile music experiment where gestures become the instrument.",
+  "short": "A tactile musical interface shaped directly through touch.",
+  "iconText": "H",
+
+  "tags": [
+    "Music",
+    "Touch"
+  ],
+
+  "visible": true,
+
+  "featured": false,
+  "featured_order": 3,
+  "featured_kicker": "Music · Forming","_base":"./_data/app/holophone/"},{"id": "mandelbrot",
+  "title": "Mandelbrot Study",
+  "type": "experiment",
+  "status": "prototype",
+  "released": false,
+
+  "description": "Procedural shader studies around evolving Mandelbrot worlds.",
+  "iconText": "M",
+
+  "tags": [
+    "Shader",
+    "Fractal"
+  ],
+
+  "visible": true,
+  "featured": false,"_base":"./_data/experiment/mandelbrot/"},{"id": "raytracer",
+  "title": "Raytracer Study",
+  "type": "experiment",
+  "status": "prototype",
+  "released": false,
+
+  "description": "A procedural raytracing study exploring reflections, soft shadows and evolving geometry.",
+  "iconText": "R",
+
+  "tags": [
+    "Shader",
+    "Raytracing"
+  ],
+
+  "visible": true,
+  "featured": false,"_base":"./_data/experiment/raytracer/"}],"spinfx":[{"id": "spinfx-099",
+  "number": 99,
+  "title": "Depth Study",
+  "type": "spinfx",
+
+  "description": "Living-image experiment exploring movement and visual parallax.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-19","_base":"./_data/spinfx/099/"},{"id": "spinfx-098",
+  "number": 98,
+  "title": "Motion Study",
+  "type": "spinfx",
+
+  "description": "Compact visual experiment from the SpinFX series.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-12","_base":"./_data/spinfx/098/"},{"id": "spinfx-097",
+  "number": 97,
+  "title": "Light Study",
+  "type": "spinfx",
+
+  "description": "Small exploration around light, depth and motion.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-08-05","_base":"./_data/spinfx/097/"},{"id": "spinfx-096",
+  "number": 96,
+  "title": "Shader Study",
+  "type": "spinfx",
+
+  "description": "A procedural visual experiment from SpinView.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-07-29","_base":"./_data/spinfx/096/"},{"id": "spinfx-001",
+  "number": 1,
+  "title": "Wire Study",
+  "type": "spinfx",
+
+  "description": "An early flow study from the SpinFX series.",
+  "cover": "cover.webp",
+
+  "url": "https://www.youtube.com/@SpinViewFx",
+
+  "visible": true,
+  "featured": false,
+  "date": "2026-07-01","_base":"./_data/spinfx/001/"}],"notes":[
+    {
+      "date": "08/19",
+      "title": "Numeris sharing branches",
+      "text": "Refining how a branch is shared, continued and challenged.",
+      "url": "/projects/numeris.html"
+    },
+    {
+      "date": "08/18",
+      "title": "Dynamic boss levels",
+      "text": "Testing bosses that build the board while the player solves it.",
+      "url": "/projects/numeris.html"
+    },
+    {
+      "date": "08/17",
+      "title": "Mandelbrot as identity",
+      "text": "The fractal background is becoming one of Numeris' strongest visual signatures.",
+      "url": "/projects/numeris.html"
+    }
+  ]}

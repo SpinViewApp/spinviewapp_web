@@ -187,14 +187,12 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   z-index: 60;
   display: flex;
   align-items: center;
-  gap: 9px;
   opacity: 0;
   transform: translateY(-6px);
   transition: opacity .7s var(--ease) .15s, transform .7s var(--ease) .15s;
 }
 body.lit .mark-corner { opacity: .5; transform: none; }
 .mark-corner:hover, .mark-corner:focus-visible { opacity: 1 !important; }
-.mark-corner img { width: 25px; height: auto; }
 .mark-corner span {
   font-size: 10.5px;
   font-weight: 500;
@@ -245,6 +243,7 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   inset: 0;
   z-index: 1;
   pointer-events: none;
+  transition: opacity .9s var(--ease);
   background:
     radial-gradient(118% 80% at 50% 46%, rgba(0,0,0,.22) 0%, rgba(0,0,0,.66) 60%, rgba(0,0,0,.92) 100%),
     linear-gradient(180deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,.18) 26%, rgba(0,0,0,.42) 62%, rgba(0,0,0,.94) 100%);
@@ -281,6 +280,7 @@ body.lit .mark-corner { opacity: .5; transform: none; }
 .slide.on { opacity: 1; visibility: visible; pointer-events: auto; }
 
 .slide-inner {
+  position: relative;
   width: 100%;
   max-width: 820px;
   display: grid;
@@ -288,6 +288,31 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   text-align: center;
   gap: clamp(14px, 2vh, 22px);
 }
+
+/* A soft dark pool behind the copy. Cheaper on the eye than a black glow
+   on the glyphs, and it only darkens where the text actually sits.
+   Per-slide strength comes from --halo (0 disables it). */
+.slide-inner::before,
+.seg-copy::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -9%;
+  right: -9%;
+  top: -12%;
+  bottom: -14%;
+  pointer-events: none;
+  opacity: var(--halo, 1);
+  background: radial-gradient(58% 56% at 50% 50%,
+    rgba(0,0,0,.80) 0%,
+    rgba(0,0,0,.62) 40%,
+    rgba(0,0,0,.30) 64%,
+    rgba(0,0,0,0) 82%);
+  filter: blur(24px);
+}
+.slide.kind-segmentation .slide-inner::before { display: none; }
+.seg-copy { position: relative; }
+.seg-copy::before { left: -12%; right: -12%; }
 
 /* per-element entrance */
 .slide .anim {
@@ -314,6 +339,7 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   text-indent: .3em;
   text-transform: uppercase;
   color: var(--cyan);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8), 0 2px 14px rgba(0,0,0,.7);
 }
 .kicker::before {
   content: "";
@@ -323,6 +349,35 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   text-indent: 0;
 }
 
+.badge {
+  display: inline-block;
+  padding: 3px 8px 2px;
+  border: 1px solid rgba(255,196,107,.42);
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-indent: .2em;
+  text-transform: uppercase;
+  color: #ffc46b;
+  background: rgba(255,196,107,.1);
+  box-shadow: 0 0 22px -6px rgba(255,196,107,.5);
+}
+
+.card-badge {
+  position: absolute;
+  top: 11px; right: 12px;
+  padding: 3px 7px 2px;
+  border: 1px solid rgba(255,196,107,.42);
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #ffc46b;
+  background: rgba(10,8,4,.6);
+}
+
 .title {
   margin: 0;
   font-size: clamp(44px, 8.6vw, 118px);
@@ -330,7 +385,10 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   font-weight: 200;
   letter-spacing: -.028em;
   text-wrap: balance;
-  text-shadow: 0 4px 30px rgba(0,0,0,.55), 0 10px 70px rgba(0,0,0,.7);
+  text-shadow:
+    0 1px 2px rgba(0,0,0,.62),
+    0 4px 26px rgba(0,0,0,.55),
+    0 12px 70px rgba(0,0,0,.68);
 }
 .title em {
   font-style: normal;
@@ -348,7 +406,10 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   font-weight: 300;
   color: var(--ink-soft);
   text-wrap: pretty;
-  text-shadow: 0 2px 18px rgba(0,0,0,.85), 0 6px 40px rgba(0,0,0,.7);
+  text-shadow:
+    0 1px 2px rgba(0,0,0,.75),
+    0 2px 16px rgba(0,0,0,.8),
+    0 6px 38px rgba(0,0,0,.65);
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -695,7 +756,8 @@ body.lit .nav { opacity: 1; }
   font-variant-numeric: tabular-nums;
 }
 
-/* scroll cue - only when there is more below */
+/* Scroll cue. Only when there is something below, only once the viewer
+   has reached the end of the reel, and never again after they scroll. */
 .cue {
   position: absolute;
   z-index: 20;
@@ -711,7 +773,9 @@ body.lit .nav { opacity: 1; }
   color: rgba(255,255,255,.3);
   animation: bob 2.6s ease-in-out infinite;
 }
-body.has-more .cue { display: inline-flex; }
+body.has-more .cue.show { display: inline-flex; }
+.cue { cursor: pointer; transition: color .3s var(--ease); }
+.cue:hover { color: rgba(255,255,255,.72); }
 @keyframes bob { 50% { transform: translate(-50%, 6px); } }
 
 /* ----------------------------------------------------------------- archive */
@@ -844,7 +908,6 @@ body.lit .stage .foot-line { opacity: 1; }
   .feature span { display: none; }
   .seg-stage { max-height: 34vh; }
   .seg-hud { font-size: 9px; letter-spacing: .14em; gap: 8px; padding: 9px 11px; }
-  .mark-corner span { display: none; }
   .stage .foot-line { display: none; }
 }
 
@@ -879,18 +942,17 @@ body.lit .stage .foot-line { opacity: 1; }
 </div>
 
 <a class="mark-corner" href="/" aria-label="SpinView">
-  <img src="/assets/spinview-mark.png" alt="" onerror="this.style.display='none'">
   <span>SPINVIEW</span>
 </a>
 
 <section class="stage" id="stage" aria-roledescription="carousel" aria-label="Featured">
   <div class="bg-layer" id="bgLayer"></div>
-  <div class="scrim"></div>
+  <div class="scrim" id="scrim"></div>
   <div class="grain"></div>
 
   <div class="slides" id="slides"></div>
 
-  <div class="cue" aria-hidden="true">More <span>&#9662;</span></div>
+  <button class="cue" id="cue" type="button">More <span aria-hidden="true">&#9662;</span></button>
 
   <div class="nav" id="nav">
     <button class="arrow" id="prev" type="button" aria-label="Previous">
@@ -1021,6 +1083,65 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     return all.filter(function (p) { return p.visible !== false; });
   }
 
+  function shuffled(a) {
+    var out = a.slice(), i, j, t;
+    for (i = out.length - 1; i > 0; i--) {
+      j = Math.floor(Math.random() * (i + 1));
+      t = out[i]; out[i] = out[j]; out[j] = t;
+    }
+    return out;
+  }
+
+  /* A slide may draw its backdrop from a pool instead of naming one file:
+       "pool": "showcase"   -> the named list in the project's "pools"
+       "pool": "screens"    -> the project's own screens array
+       "pool": ["a", "b"]   -> an inline list
+     Paths resolve against _base like any other presentation asset. */
+  function resolvePool(p, raw) {
+    var list = null;
+    if (raw === true || raw === "screens") list = p.screens || [];
+    else if (typeof raw === "string") list = (p.pools && p.pools[raw]) || [];
+    else if (Object.prototype.toString.call(raw) === "[object Array]") list = raw;
+    if (!list || !list.length) return null;
+    var out = [];
+    for (var i = 0; i < list.length; i++) out.push(asset(p, list[i]));
+    return out;
+  }
+
+  /* Deal one backdrop per pooled slide: never the same shot twice on the
+     same pass, and never the shot that slide just had. skip keeps the
+     slide currently on screen untouched. */
+  function dealImages(skip) {
+    var used = {};
+    var i, k, bag, pick;
+
+    for (i = 0; i < state.slides.length; i++) {
+      if (!state.slides[i].pool) used[state.slides[i].image] = true;
+    }
+    if (skip != null && state.slides[skip]) used[state.slides[skip].image] = true;
+
+    for (i = 0; i < state.slides.length; i++) {
+      var sl = state.slides[i];
+      if (!sl.pool || i === skip) continue;
+
+      bag = shuffled(sl.pool);
+      pick = null;
+      for (k = 0; k < bag.length; k++) {
+        if (!used[bag[k]] && bag[k] !== sl.image) { pick = bag[k]; break; }
+      }
+      if (!pick) {
+        for (k = 0; k < bag.length; k++) if (!used[bag[k]]) { pick = bag[k]; break; }
+      }
+      if (!pick) pick = bag[0];
+
+      used[pick] = true;
+      sl.image = pick;
+      if (sl._img && sl._img.getAttribute("src") !== pick + ver()) {
+        sl._img.src = pick + ver();
+      }
+    }
+  }
+
   /* "App · Live" when a project declares no kicker of its own. */
   function kickerFor(p) {
     var a = p.collection || p.type || "";
@@ -1040,8 +1161,13 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         _p: p,
         kind: "hero",
         image: asset(p, p.cover || (p.screens && p.screens[0])),
+        pool: resolvePool(p, p.pool),
         focus: "50% 45%",
+        lift: p.lift || 0,
+        halo: (p.halo != null ? p.halo : 1),
+        scrim: (p.scrim != null ? p.scrim : 1),
         kicker: p.featured_kicker || kickerFor(p),
+        badge: p.badge || "",
         title: p.title,
         text: p.description || p.short || "",
         actions: p.play ? [{ label: p.play_label || ("Open " + p.title), href: p.play, primary: true }] : []
@@ -1056,8 +1182,13 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         id: s.id || (p.id + "-" + i),
         kind: s.kind || "hero",
         image: asset(p, s.image),
+        pool: resolvePool(p, s.pool),
         focus: s.focus || "50% 45%",
+        lift: s.lift || p.lift || 0,
+        halo: (s.halo != null ? s.halo : (p.halo != null ? p.halo : 1)),
+        scrim: (s.scrim != null ? s.scrim : (p.scrim != null ? p.scrim : 1)),
         kicker: s.kicker || p.featured_kicker || "",
+        badge: s.badge !== undefined ? s.badge : (p.badge || ""),
         title: s.title || p.title,
         text: s.text || "",
         chips: s.chips || [],
@@ -1077,9 +1208,38 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     timer: null,
     tick: null,
     started: 0,
-    duration: 8200,
-    paused: false
+    paused: false,
+    cueSeen: false
   };
+
+  function words(t) {
+    t = String(t || "").trim();
+    return t ? t.split(/\s+/).length : 0;
+  }
+
+  /* How long a slide holds. A slide is on screen for as long as it takes to
+     read it, not for a fixed beat: the opening card is a hook and gets out of
+     the way fast, a dense card lingers. A slide may override this with
+     "duration" (milliseconds) in project.json. */
+  function durationFor(s, isFirst) {
+    if (s.duration) return s.duration;
+
+    var n = words(s.title) + words(s.text);
+    if (s.chips) n += words(s.chips.join(" "));
+
+    var d = 2600 + n * 190;
+
+    if (s.kind === "segmentation") {
+      d += 3400;                       /* the clusters take ~2.6s to assemble */
+    } else if (s.kind === "features") {
+      var f = (s._p && s._p.features) ? s._p.features.length : 0;
+      d += 1200 + f * 300;
+    }
+
+    if (isFirst) d = Math.min(d * 0.72, 5400);
+
+    return Math.max(4000, Math.min(d, 10500));
+  }
 
   function buildBackgrounds() {
     var layer = $("bgLayer");
@@ -1094,8 +1254,11 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         img.decoding = "async";
         img.loading = i === 0 ? "eager" : "lazy";
         img.style.objectPosition = s.focus;
+        /* a dark screenshot needs a lift before the scrim buries it */
+        if (s.lift) img.style.filter = "brightness(" + s.lift + ") saturate(1.12)";
         img.onerror = function () { this.remove(); };
         wrap.appendChild(img);
+        s._img = img;
       }
       layer.appendChild(wrap);
       s._bg = wrap;
@@ -1132,9 +1295,26 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     return -1;
   }
 
+  /* Kicker line, optionally carrying a status badge ("Beta", "Preview"...). */
+  function kickerNode(s, extraClass) {
+    if (!s.kicker && !s.badge) return null;
+    var k = el("div", "kicker" + (extraClass || ""));
+    if (s.kicker) {
+      var t = el("span");
+      t.textContent = s.kicker;
+      k.appendChild(t);
+    }
+    if (s.badge) {
+      var b = el("span", "badge");
+      b.textContent = s.badge;
+      k.appendChild(b);
+    }
+    return k;
+  }
+
   function heroSlide(s) {
     var inner = el("div", "slide-inner");
-    if (s.kicker) { var k = el("div", "kicker anim"); k.textContent = s.kicker; inner.appendChild(k); }
+    var k = kickerNode(s, " anim"); if (k) inner.appendChild(k);
     var h = el("h1", "title anim");
     h.innerHTML = markTitle(s.title);
     inner.appendChild(h);
@@ -1146,7 +1326,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
   function revealSlide(s) {
     var inner = el("div", "slide-inner");
-    if (s.kicker) { var k = el("div", "kicker anim"); k.textContent = s.kicker; inner.appendChild(k); }
+    var k = kickerNode(s, " anim"); if (k) inner.appendChild(k);
     var h = el("h1", "title anim");
     h.innerHTML = markTitle(s.title);
     inner.appendChild(h);
@@ -1158,7 +1338,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
   function featureSlide(s) {
     var inner = el("div", "slide-inner");
-    if (s.kicker) { var k = el("div", "kicker anim"); k.textContent = s.kicker; inner.appendChild(k); }
+    var k = kickerNode(s, " anim"); if (k) inner.appendChild(k);
     var h = el("h1", "title anim");
     h.innerHTML = markTitle(s.title);
     inner.appendChild(h);
@@ -1189,7 +1369,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     var inner = el("div", "slide-inner");
 
     var copy = el("div", "seg-copy anim");
-    if (s.kicker) { var k = el("div", "kicker"); k.textContent = s.kicker; copy.appendChild(k); }
+    var segK = kickerNode(s, ""); if (segK) copy.appendChild(segK);
     var h = el("h2", "title"); h.innerHTML = markTitle(s.title); copy.appendChild(h);
     if (s.text) { var p = el("p", "blurb"); p.textContent = s.text; copy.appendChild(p); }
     if (s.chips && s.chips.length) {
@@ -1313,6 +1493,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     host.innerHTML = "";
     state.slides.forEach(function (s, i) {
       var node = el("section", "slide kind-" + s.kind);
+      if (s.halo !== 1) node.style.setProperty("--halo", String(s.halo));
       node.setAttribute("role", "tabpanel");
       node.setAttribute("aria-label", (i + 1) + " of " + state.slides.length);
       var inner;
@@ -1362,14 +1543,30 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     state.index = next;
     $("counter").textContent = pad(next + 1) + " / " + pad(n);
 
+    /* a new pass gets a new set of backdrops, dealt behind the viewer */
+    if (n > 1 && next === 0 && prev === n - 1) {
+      setTimeout(function () { dealImages(0); }, 1600);
+    }
+
+    var sc = $("scrim");
+    if (sc) sc.style.opacity = String(state.slides[next].scrim != null ? state.slides[next].scrim : 1);
+
     var cur = state.slides[next];
     if (cur.kind === "segmentation") segPlay(cur);
     if (manual) syncUrl(cur);
+    updateCue(next, n);
 
     restart(manual);
   }
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  function updateCue(index, total) {
+    var cue = $("cue");
+    if (!cue) return;
+    var show = !state.cueSeen && total > 0 && index === total - 1;
+    cue.classList.toggle("show", show);
+  }
 
   /* Reflect the project the viewer is on, so the address bar can be copied.
      Only on deliberate navigation - autoplay never rewrites the URL. */
@@ -1389,8 +1586,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     if (state.slides.length < 2) return;
     state.started = Date.now();
     var s = state.slides[state.index];
-    var d = (s.kind === "segmentation" || s.kind === "features") ? state.duration + 3000 : state.duration;
-    state.duration_current = d;
+    var d = durationFor(s, state.index === 0);
 
     state.tick = setInterval(function () {
       if (state.paused) { state.started += 60; return; }
@@ -1439,6 +1635,11 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         kick.textContent = p.status;
         card.appendChild(kick);
       }
+      if (p.badge) {
+        var bg = el("div", "card-badge");
+        bg.textContent = p.badge;
+        card.appendChild(bg);
+      }
       var body = el("div", "card-body");
       var b = el("b"); b.textContent = p.title || p.id;
       var sp = el("span"); sp.textContent = p.short || p.description || "";
@@ -1467,7 +1668,19 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     });
 
     var stage = $("stage");
-    stage.addEventListener("mouseenter", function () { state.paused = true; });
+
+    /* Pause only while the pointer is actually on something readable or
+       clickable. The stage fills the whole viewport, so pausing on the stage
+       itself would freeze the reel for anyone whose cursor sits on the page. */
+    var HOLD = ".slide-inner, .nav, .cue, .mark-corner";
+    function holds(node) {
+      while (node && node !== stage) {
+        if (node.matches && node.matches(HOLD)) return true;
+        node = node.parentNode;
+      }
+      return false;
+    }
+    stage.addEventListener("mouseover", function (e) { state.paused = holds(e.target); });
     stage.addEventListener("mouseleave", function () { state.paused = false; });
 
     var x0 = null, y0 = null;
@@ -1488,6 +1701,23 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     document.addEventListener("visibilitychange", function () {
       state.paused = document.hidden;
     });
+
+    var cue = $("cue");
+    if (cue) {
+      cue.addEventListener("click", function () {
+        var a = $("archive");
+        if (a) a.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+
+    /* once they have scrolled, they know there is more - stop offering */
+    window.addEventListener("scroll", function () {
+      if (state.cueSeen) return;
+      if (window.pageYOffset > 40) {
+        state.cueSeen = true;
+        if (cue) cue.classList.remove("show");
+      }
+    }, { passive: true });
   }
 
   function runIntro() {
@@ -1555,6 +1785,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       return;
     }
 
+    dealImages(null);
     buildBackgrounds();
     buildSlides();
     buildDots();

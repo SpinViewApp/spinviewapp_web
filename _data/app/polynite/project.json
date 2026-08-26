@@ -4,18 +4,13 @@
   "type": "app",
   "collection": "spinview",
   "status": "live",
-
   "released": true,
   "release_date": "2026-08-26",
-
   "tagline": "Drop a model. Explore every detail.",
-
   "description": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a 3D model and explore it instantly with dynamic lighting, environments, animations and real-time LOD.",
   "short": "A WebGPU GLB viewer with Nanite-like adaptive geometry.",
-
   "iconText": "P",
   "cover": "screen/img07.jpg",
-
   "screens": [
     "screen/img07.jpg",
     "screen/img09.jpg",
@@ -30,33 +25,45 @@
     "screen/img12.jpg",
     "screen/img06.jpg"
   ],
-
   "tags": [
     "WebGPU",
     "3D",
     "GLB",
     "Viewer"
   ],
-
   "url": "/polynite/",
   "play": "/polynite/",
   "play_label": "Launch PolyNite",
-
   "visible": true,
-
   "featured": true,
   "featured_order": 1,
   "featured_kicker": "SpinView · Now live",
-
   "features": [
-    { "title": "Drag & drop GLB",        "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded." },
-    { "title": "Adaptive geometry",      "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail." },
-    { "title": "WebGPU rendering",       "text": "Modern GPU pipeline running natively in the browser." },
-    { "title": "Dynamic lighting",       "text": "Real-time lights, environments, reflections and materials." },
-    { "title": "Animation playback",     "text": "Skinned and rigged GLB animations play straight from the file." },
-    { "title": "Desktop and mobile",     "text": "One viewer, adapting to the device it runs on." }
+    {
+      "title": "Drag & drop GLB",
+      "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded."
+    },
+    {
+      "title": "Adaptive geometry",
+      "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail."
+    },
+    {
+      "title": "WebGPU rendering",
+      "text": "Modern GPU pipeline running natively in the browser."
+    },
+    {
+      "title": "Dynamic lighting",
+      "text": "Real-time lights, environments, reflections and materials."
+    },
+    {
+      "title": "Animation playback",
+      "text": "Skinned and rigged GLB animations play straight from the file."
+    },
+    {
+      "title": "Desktop and mobile",
+      "text": "One viewer, adapting to the device it runs on."
+    }
   ],
-
   "slides": [
     {
       "id": "hero",
@@ -65,11 +72,19 @@
       "focus": "50% 45%",
       "kicker": "SpinView · Now live",
       "title": "PolyNite",
-      "text": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a model and explore every detail — no install, no upload.",
+      "text": "Drop a model. Explore every detail — right in your browser.",
       "actions": [
-        { "label": "Launch PolyNite", "href": "/polynite/", "primary": true },
-        { "label": "See how it works", "slide": "clusters" }
-      ]
+        {
+          "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        },
+        {
+          "label": "See how it works",
+          "slide": "clusters"
+        }
+      ],
+      "pool": "showcase"
     },
     {
       "id": "clusters",
@@ -96,8 +111,13 @@
       "title": "You see the model",
       "text": "None of that work is visible. What reaches the screen is the full model — lit, shaded and animated in real time.",
       "actions": [
-        { "label": "Launch PolyNite", "href": "/polynite/", "primary": true }
-      ]
+        {
+          "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
     },
     {
       "id": "drop",
@@ -106,10 +126,15 @@
       "focus": "50% 50%",
       "kicker": "Zero friction",
       "title": "Drag. Drop. Done.",
-      "text": "Your file never leaves your machine. Drop a .glb or .gltf on the page and it opens instantly, on desktop and on mobile.",
+      "text": "A WebGPU pipeline, no install, no upload. Drop a .glb or .gltf on the page and it opens instantly — desktop and mobile.",
       "actions": [
-        { "label": "Open the viewer", "href": "/polynite/", "primary": true }
-      ]
+        {
+          "label": "Open the viewer",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
     },
     {
       "id": "dense",
@@ -120,8 +145,26 @@
       "title": "Made for the new 3D",
       "text": "High-density scans, sculpts and AI-generated assets render without melting the page.",
       "actions": [
-        { "label": "Launch PolyNite", "href": "/polynite/", "primary": true }
-      ]
+        {
+          "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
     }
-  ]
+  ],
+  "pools": {
+    "showcase": [
+      "screen/img07.jpg",
+      "screen/img02.jpg",
+      "screen/img03.jpg",
+      "screen/img09.jpg",
+      "screen/img05.jpg",
+      "screen/img08.jpg",
+      "screen/img13jpg.jpg",
+      "screen/img10.jpg",
+      "screen/img06.jpg"
+    ]
+  }
 }
