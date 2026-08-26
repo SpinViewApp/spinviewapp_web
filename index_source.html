@@ -347,52 +347,10 @@ body.lit .projects { opacity: 1; transform: none; }
   gap: clamp(14px, 2vh, 22px);
 }
 
-/* Legibility band behind the copy.
-   A tight dark blob reads as a stain, so this spans the full width and
-   falls off over a long distance - it lands as part of the vignette
-   instead of a shape. Where the browser supports it, a gentle backdrop
-   blur does most of the work and the tint can stay very light: the photo
-   keeps its colour, only the fine detail under the text is softened.
-   Per-slide strength comes from --halo (0 disables it). */
-.slide-inner::before,
-.seg-copy::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: -60vw;
-  right: -60vw;
-  top: -22%;
-  bottom: -24%;
-  pointer-events: none;
-  opacity: var(--halo, 1);
-  background: radial-gradient(42% 62% at 50% 50%,
-    rgba(0,0,0,.52) 0%,
-    rgba(0,0,0,.34) 42%,
-    rgba(0,0,0,.14) 66%,
-    rgba(0,0,0,0) 84%);
-  filter: blur(34px);
-}
-
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .slide-inner::before,
-  .seg-copy::before {
-    filter: none;
-    background: radial-gradient(42% 62% at 50% 50%,
-      rgba(0,0,0,.34) 0%,
-      rgba(0,0,0,.22) 44%,
-      rgba(0,0,0,.08) 68%,
-      rgba(0,0,0,0) 85%);
-    -webkit-backdrop-filter: blur(18px) saturate(1.2);
-    backdrop-filter: blur(18px) saturate(1.2);
-    -webkit-mask-image: radial-gradient(40% 60% at 50% 50%,
-      #000 0%, rgba(0,0,0,.92) 40%, rgba(0,0,0,.45) 64%, transparent 84%);
-    mask-image: radial-gradient(40% 60% at 50% 50%,
-      #000 0%, rgba(0,0,0,.92) 40%, rgba(0,0,0,.45) 64%, transparent 84%);
-  }
-}
-.slide.kind-segmentation .slide-inner::before { display: none; }
-.seg-copy { position: relative; }
-.seg-copy::before { left: -18%; right: -18%; }
+/* Legibility comes from the glyphs themselves: a black glow radiating from
+   the letterforms, layered from tight to wide. It follows the shape of the
+   text instead of dropping a dark panel over the picture, so the backdrop
+   stays fully visible. --halo scales it per slide (0 removes it). */
 
 /* per-element entrance */
 .slide .anim {
@@ -419,7 +377,10 @@ body.lit .projects { opacity: 1; transform: none; }
   text-indent: .3em;
   text-transform: uppercase;
   color: var(--cyan);
-  text-shadow: 0 1px 3px rgba(0,0,0,.8), 0 2px 14px rgba(0,0,0,.7);
+  text-shadow:
+    0 0 2px  rgba(0,0,0, calc(.9 * var(--halo, 1))),
+    0 0 7px  rgba(0,0,0, calc(.8 * var(--halo, 1))),
+    0 0 18px rgba(0,0,0, calc(.6 * var(--halo, 1)));
 }
 .kicker::before {
   content: "";
@@ -440,8 +401,8 @@ body.lit .projects { opacity: 1; transform: none; }
   text-indent: .2em;
   text-transform: uppercase;
   color: #ffc46b;
-  background: rgba(255,196,107,.1);
-  box-shadow: 0 0 22px -6px rgba(255,196,107,.5);
+  background: rgba(8,6,3,.55);
+  box-shadow: 0 0 22px -6px rgba(255,196,107,.45), 0 2px 12px rgba(0,0,0,.6);
 }
 
 .card-badge {
@@ -466,9 +427,12 @@ body.lit .projects { opacity: 1; transform: none; }
   letter-spacing: -.028em;
   text-wrap: balance;
   text-shadow:
-    0 1px 2px rgba(0,0,0,.62),
-    0 4px 26px rgba(0,0,0,.55),
-    0 12px 70px rgba(0,0,0,.68);
+    0 0 3px   rgba(0,0,0, calc(.70 * var(--halo, 1))),
+    0 0 9px   rgba(0,0,0, calc(.64 * var(--halo, 1))),
+    0 0 22px  rgba(0,0,0, calc(.56 * var(--halo, 1))),
+    0 0 48px  rgba(0,0,0, calc(.46 * var(--halo, 1))),
+    0 0 96px  rgba(0,0,0, calc(.34 * var(--halo, 1))),
+    0 2px 5px rgba(0,0,0, calc(.50 * var(--halo, 1)));
 }
 .title em {
   font-style: normal;
@@ -487,9 +451,11 @@ body.lit .projects { opacity: 1; transform: none; }
   color: var(--ink-soft);
   text-wrap: pretty;
   text-shadow:
-    0 1px 2px rgba(0,0,0,.75),
-    0 2px 16px rgba(0,0,0,.8),
-    0 6px 38px rgba(0,0,0,.65);
+    0 0 2px   rgba(0,0,0, calc(.82 * var(--halo, 1))),
+    0 0 7px   rgba(0,0,0, calc(.74 * var(--halo, 1))),
+    0 0 18px  rgba(0,0,0, calc(.62 * var(--halo, 1))),
+    0 0 40px  rgba(0,0,0, calc(.44 * var(--halo, 1))),
+    0 1px 3px rgba(0,0,0, calc(.62 * var(--halo, 1)));
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -570,8 +536,11 @@ body.lit .projects { opacity: 1; transform: none; }
   font-size: 11px;
   font-weight: 500;
   letter-spacing: .07em;
-  color: var(--ink-faint);
-  background: rgba(255,255,255,.035);
+  color: rgba(255,255,255,.62);
+  background: rgba(6,8,13,.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-shadow: 0 1px 3px rgba(0,0,0,.7);
 }
 .chip::before {
   content: "";
@@ -1504,7 +1473,13 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
   /* The cluster viewer: the segmentation shot is assembled cell by cell,
      the gaps close, and the readout completes. */
+  /* 182 tiles each painting a scaled copy of the same JPEG is heavy on a
+     phone GPU, so the grid is coarser on small screens. */
   var SEG_COLS = 14, SEG_ROWS = 13;
+  try {
+    if (window.innerWidth <= 620) { SEG_COLS = 9; SEG_ROWS = 8; }
+    else if (window.innerWidth <= 900) { SEG_COLS = 11; SEG_ROWS = 10; }
+  } catch (e) {}
 
   function segSlide(s) {
     var inner = el("div", "slide-inner");
@@ -1582,7 +1557,25 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     inner.appendChild(stage);
 
-    s._seg = { stage: stage, pct: pct, bar: bar, raf: null };
+    /* The cell animations are on a clock; the image is not. If the assembly
+       starts before the file has decoded, every delay has already elapsed by
+       the time pixels exist and the whole thing pops in at once - which is
+       exactly what a slow phone shows. So we wait for the decode. */
+    var probe = new Image();
+    var ready = false;
+    var waiting = null;
+    probe.onload = probe.onerror = function () {
+      ready = true;
+      if (waiting) { var f = waiting; waiting = null; f(); }
+    };
+    probe.src = s.image + ver();
+    if (probe.complete) ready = true;
+
+    s._seg = {
+      stage: stage, pct: pct, bar: bar, raf: null,
+      isReady: function () { return ready; },
+      onReady: function (fn) { if (ready) fn(); else waiting = fn; }
+    };
     return inner;
   }
 
@@ -1594,6 +1587,12 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
   function segPlay(s) {
     var seg = s._seg;
     if (!seg) return;
+    if (seg.onReady && !seg.isReady()) {
+      seg.onReady(function () {
+        if (state.slides[state.index] === s) segPlay(s);
+      });
+      return;
+    }
     var stage = seg.stage;
     stage.classList.remove("play", "building", "solid");
     /* force reflow so the animation restarts */
@@ -2037,6 +2036,15 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         urlLock = true;
         go(t, true);
         urlLock = false;
+      }
+    });
+
+    /* warm the segmentation shot early - it drives an animation, so it must
+       be decoded before its slide comes up */
+    state.slides.forEach(function (sl) {
+      if (sl.kind === "segmentation" && sl.image) {
+        var w = new Image();
+        w.src = sl.image + ver();
       }
     });
 
