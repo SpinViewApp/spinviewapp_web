@@ -947,6 +947,60 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     return base + raw;
   }
 
+  /* Deep links.
+       /?polynite            -> that project, first slide
+       /?polynite=clusters   -> that project, that slide id
+       /?p=polynite          -> same as the first form
+       /#polynite/clusters   -> same, via the hash
+     A project reachable this way does not have to be featured or released,
+     so an unreleased project can still be previewed through a direct link. */
+  function readDeepLink() {
+    var out = { project: "", slide: "" };
+    var raw = "";
+    var q = (location.search || "").replace(/^\?/, "");
+
+    if (q) {
+      var parts = q.split("&");
+      for (var i = 0; i < parts.length; i++) {
+        if (!parts[i]) continue;
+        var kv = parts[i].split("=");
+        var k = "", v = "";
+        try { k = decodeURIComponent(kv[0] || ""); } catch (e) { k = kv[0] || ""; }
+        try { v = decodeURIComponent(kv[1] || ""); } catch (e) { v = kv[1] || ""; }
+        if (!k) continue;
+        if (k === "p" || k === "project" || k === "app") { raw = v; break; }
+        raw = k;
+        if (kv.length > 1) out.slide = v;
+        break;
+      }
+    }
+    if (!raw) {
+      try { raw = decodeURIComponent((location.hash || "").replace(/^#/, "")); }
+      catch (e) { raw = (location.hash || "").replace(/^#/, ""); }
+    }
+
+    var seg = String(raw).split("/");
+    out.project = (seg[0] || "").toLowerCase().trim();
+    if (seg[1] && !out.slide) out.slide = seg[1];
+    out.slide = String(out.slide || "").toLowerCase().trim();
+    return out;
+  }
+
+  /* Index of the first slide matching a deep link, or -1. */
+  function findDeep(deep) {
+    if (!deep || !deep.project) return -1;
+    var first = -1;
+    for (var i = 0; i < state.slides.length; i++) {
+      var s = state.slides[i];
+      var pid = String((s._p && s._p.id) || "").toLowerCase();
+      if (pid !== deep.project) continue;
+      if (first < 0) first = i;
+      if (!deep.slide) return i;
+      if (String(s.id || "").toLowerCase() === deep.slide) return i;
+    }
+    return first;
+  }
+
   var reduced = false;
   try {
     reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -967,6 +1021,14 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     return all.filter(function (p) { return p.visible !== false; });
   }
 
+  /* "App · Live" when a project declares no kicker of its own. */
+  function kickerFor(p) {
+    var a = p.collection || p.type || "";
+    var b = p.status || "";
+    var t = function (x) { return x ? x.charAt(0).toUpperCase() + x.slice(1) : ""; };
+    return [t(a), t(b)].filter(Boolean).join(" \u00b7 ");
+  }
+
   /* Turn a project into an array of stage slides. A project may declare its
      own `slides`; otherwise one slide is derived from its base fields. */
   function slidesFor(p) {
@@ -979,7 +1041,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         kind: "hero",
         image: asset(p, p.cover || (p.screens && p.screens[0])),
         focus: "50% 45%",
-        kicker: p.featured_kicker || p.title,
+        kicker: p.featured_kicker || kickerFor(p),
         title: p.title,
         text: p.description || p.short || "",
         actions: p.play ? [{ label: p.play_label || ("Open " + p.title), href: p.play, primary: true }] : []
@@ -1302,11 +1364,25 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     var cur = state.slides[next];
     if (cur.kind === "segmentation") segPlay(cur);
+    if (manual) syncUrl(cur);
 
     restart(manual);
   }
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  /* Reflect the project the viewer is on, so the address bar can be copied.
+     Only on deliberate navigation - autoplay never rewrites the URL. */
+  var urlLock = false;
+  function syncUrl(slide) {
+    if (urlLock) return;
+    if (!window.history || !history.replaceState) return;
+    var id = (slide._p && slide._p.id) || "";
+    if (!id) return;
+    try {
+      history.replaceState(null, "", location.pathname + "?" + encodeURIComponent(id));
+    } catch (e) {}
+  }
 
   function restart(manual) {
     stopTimer();
@@ -1332,13 +1408,13 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
   /* ------------------------------------------------------------- archive */
 
   function buildArchive(projects) {
-    var featuredIds = {};
-    projects.forEach(function (p) {
-      if (p.featured && isReleased(p)) featuredIds[p.id] = true;
+    var onStage = {};
+    state.slides.forEach(function (s) {
+      if (s._p && s._p.id) onStage[s._p.id] = true;
     });
 
     var rest = projects.filter(function (p) {
-      return isReleased(p) && !featuredIds[p.id];
+      return isReleased(p) && !onStage[p.id];
     });
 
     if (!rest.length) return false;
@@ -1459,6 +1535,16 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       stars = projects.filter(isReleased).slice(0, 1);
     }
 
+    var deep = readDeepLink();
+    if (deep.project) {
+      var hit = null;
+      for (var d = 0; d < projects.length; d++) {
+        if (String(projects[d].id).toLowerCase() === deep.project) { hit = projects[d]; break; }
+      }
+      /* a direct link wins over the featured/released filter */
+      if (hit && stars.indexOf(hit) < 0) stars.unshift(hit);
+    }
+
     stars.forEach(function (p) {
       state.slides = state.slides.concat(slidesFor(p));
     });
@@ -1475,8 +1561,19 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     bindInput();
     buildArchive(projects);
 
-    go(0, false);
+    var start = findDeep(deep);
+    go(start > 0 ? start : 0, false);
     runIntro();
+
+    /* let #hash changes move the stage without a reload */
+    window.addEventListener("hashchange", function () {
+      var t = findDeep(readDeepLink());
+      if (t >= 0) {
+        urlLock = true;
+        go(t, true);
+        urlLock = false;
+      }
+    });
 
     /* warm the next background so the cross-fade is clean */
     if (state.slides[1] && state.slides[1].image) {
