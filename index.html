@@ -153,9 +153,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   display: grid;
   justify-items: center;
   gap: clamp(16px, 2.6vh, 26px);
-  transform: scale(.94);
   opacity: 0;
-  animation: introIn 1s var(--ease-out) .12s forwards;
+  /* opacity only - a scale or width animation on a logo reads as a wobble */
+  animation: introIn .7s var(--ease) .05s forwards;
 }
 .intro-mark {
   width: clamp(74px, 12vw, 118px);
@@ -170,13 +170,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   color: rgba(255,255,255,.82);
 }
 .intro-rule {
-  width: 0;
+  width: clamp(120px, 18vw, 230px);
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--cyan), var(--magenta), transparent);
-  animation: introRule 1.5s var(--ease-out) .5s forwards;
+  opacity: 0;
+  animation: introIn .8s var(--ease) .28s forwards;
 }
-@keyframes introIn  { to { transform: scale(1); opacity: 1; } }
-@keyframes introRule { to { width: clamp(120px, 18vw, 230px); } }
+@keyframes introIn { to { opacity: 1; } }
 
 /* ------------------------------------------------------------------ chrome */
 
@@ -953,6 +953,12 @@ body.has-more .cue.show { display: inline-flex; }
   letter-spacing: .13em;
   color: rgba(255,255,255,.26);
 }
+.build-stamp {
+  margin-left: 10px;
+  opacity: .55;
+  font-variant-numeric: tabular-nums;
+}
+
 .stage .foot-line {
   position: absolute;
   z-index: 20;
@@ -964,7 +970,13 @@ body.has-more .cue.show { display: inline-flex; }
   opacity: 0;
   transition: opacity .8s var(--ease) .4s;
 }
-body.lit .stage .foot-line { opacity: 1; }
+body.lit .build-stamp {
+  margin-left: 10px;
+  opacity: .55;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage .foot-line { opacity: 1; }
 
 /* ------------------------------------------------------------- responsive */
 
@@ -1000,7 +1012,13 @@ body.lit .stage .foot-line { opacity: 1; }
   .feature span { display: none; }
   .seg-stage { max-height: 34vh; }
   .seg-hud { font-size: 9px; letter-spacing: .14em; gap: 8px; padding: 9px 11px; }
-  .stage .foot-line { display: none; }
+  .build-stamp {
+  margin-left: 10px;
+  opacity: .55;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage .foot-line { display: none; }
   .projects { gap: 13px; top: max(14px, env(safe-area-inset-top)); }
   .proj { font-size: 9px; letter-spacing: .17em; text-indent: .17em; }
   .proj .tag { margin-left: 5px; font-size: 7.5px; }
@@ -1063,7 +1081,7 @@ body.lit .stage .foot-line { opacity: 1; }
     <div class="counter" id="counter"></div>
   </div>
 
-  <div class="foot-line">&copy; <span id="yearTop"></span> SpinView &middot; Majify Technologies Inc.</div>
+  <div class="foot-line">&copy; <span id="yearTop"></span> SpinView &middot; Majify Technologies Inc. <span class="build-stamp"></span></div>
 </section>
 
 <section class="archive" id="archive" hidden>
@@ -1076,10 +1094,11 @@ body.lit .stage .foot-line { opacity: 1; }
 
 <footer class="foot" id="foot" hidden>
   <span>&copy; <span id="year"></span> SpinView &middot; Majify Technologies Inc.</span>
+  <span class="build-stamp"></span>
 </footer>
 
 <script>
-var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated":"2026-08-26T09:09:47","projects":[{"id": "polynite",
+var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated":"2026-08-26T09:23:09","projects":[{"id": "polynite",
   "title": "PolyNite",
   "type": "app",
   "collection": "spinview",
@@ -1728,7 +1747,19 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated":"2026-08-26T09:0
         img.style.objectPosition = s.focus;
         /* a dark screenshot needs a lift before the scrim buries it */
         if (s.lift) img.style.filter = "brightness(" + s.lift + ") saturate(1.12)";
-        img.onerror = function () { this.remove(); };
+        /* A shot that 404s is dropped from its pool and replaced, so one
+           file missing from a deploy cannot leave a slide on black. */
+        img.onerror = function () {
+          var dead = s.image;
+          if (s.pool && s.pool.length > 1) {
+            s.pool = s.pool.filter(function (u) { return u !== dead; });
+            try { console.warn("[SpinView] missing " + dead + " - dropped from pool"); } catch (e) {}
+            dealImages(null);
+          } else {
+            try { console.warn("[SpinView] missing " + dead); } catch (e) {}
+            this.remove();
+          }
+        };
         wrap.appendChild(img);
         s._img = img;
       }
@@ -2250,24 +2281,43 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated":"2026-08-26T09:0
     }, { passive: true });
   }
 
+  /* The opening card plays on every load, the way a title card should.
+     Only a reduced-motion preference skips it. */
   function runIntro() {
     var intro = $("intro");
-    var seen = false;
-    try { seen = sessionStorage.getItem("sv-intro") === "1"; } catch (e) {}
 
     function finish() {
       intro.classList.add("done");
       document.body.classList.add("lit");
-      try { sessionStorage.setItem("sv-intro", "1"); } catch (e) {}
       setTimeout(function () { if (intro.parentNode) intro.parentNode.removeChild(intro); }, 1000);
     }
 
-    if (seen || reduced) {
+    if (reduced) {
       intro.style.transition = "none";
       finish();
       return;
     }
-    setTimeout(finish, 1750);
+    setTimeout(finish, 1450);
+  }
+
+  /* Which build is this?
+     `generated` is stamped into index.html by the catalog builder, so it can
+     never be out of step with the page you are looking at - unlike
+     version.js, which is a separate request the browser may cache on its own.
+     Printed to the console, written into the footer, and readable at any time
+     with SPINVIEW_BUILD in the console. */
+  function stampBuild(cat) {
+    var gen = (cat && cat.generated) ? String(cat.generated).replace("T", " ").slice(0, 16) : "?";
+    var v = window.SPINVIEW_VERSION || "local";
+
+    window.SPINVIEW_BUILD = { version: v, generated: gen };
+
+    var nodes = document.querySelectorAll(".build-stamp");
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].textContent = "\u00b7 " + v + " \u00b7 " + gen;
+      nodes[i].title = "Build " + v + ", catalog generated " + gen;
+    }
+    try { console.log("[SpinView] build " + v + " \u00b7 catalog " + gen); } catch (e) {}
   }
 
   function boot() {
@@ -2275,6 +2325,10 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated":"2026-08-26T09:0
     var y = String(new Date().getFullYear());
     $("year").textContent = y;
     $("yearTop").textContent = y;
+
+    stampBuild(cat);
+    /* version.js is injected asynchronously - restamp once it has landed */
+    window.addEventListener("load", function () { stampBuild(cat); });
 
     if (!cat || !cat.projects) {
       console.error("[SpinView] catalog missing or malformed");
