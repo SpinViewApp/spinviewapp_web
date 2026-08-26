@@ -3,6 +3,7 @@
   "title": "Holophone",
   "type": "app",
   "status": "forming",
+  "released": false,
 
   "description": "A tactile music experiment where gestures become the instrument.",
   "short": "A tactile musical interface shaped directly through touch.",
@@ -15,7 +16,7 @@
 
   "visible": true,
 
-  "featured": true,
+  "featured": false,
   "featured_order": 3,
   "featured_kicker": "Music · Forming"
 }

@@ -1,14 +1,139 @@
-{"generated":"2026-08-20T17:20:26","projects":[{"id": "numeris",
+{"generated":"2026-08-26T08:27:10","projects":[{"id": "polynite",
+  "title": "PolyNite",
+  "type": "app",
+  "collection": "spinview",
+  "status": "live",
+
+  "released": true,
+  "release_date": "2026-08-26",
+
+  "tagline": "Drop a model. Explore every detail.",
+
+  "description": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a 3D model and explore it instantly with dynamic lighting, environments, animations and real-time LOD.",
+  "short": "A WebGPU GLB viewer with Nanite-like adaptive geometry.",
+
+  "iconText": "P",
+  "cover": "screen/img07.jpg",
+
+  "screens": [
+    "screen/img07.jpg",
+    "screen/img09.jpg",
+    "screen/img05.jpg",
+    "screen/img13jpg.jpg",
+    "screen/img08.jpg",
+    "screen/img02.jpg",
+    "screen/img03.jpg",
+    "screen/img01.jpg",
+    "screen/img10.jpg",
+    "screen/img11.jpg",
+    "screen/img12.jpg",
+    "screen/img06.jpg"
+  ],
+
+  "tags": [
+    "WebGPU",
+    "3D",
+    "GLB",
+    "Viewer"
+  ],
+
+  "url": "/polynite/",
+  "play": "/polynite/",
+  "play_label": "Launch PolyNite",
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 1,
+  "featured_kicker": "SpinView · Now live",
+
+  "features": [
+    { "title": "Drag & drop GLB",        "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded." },
+    { "title": "Adaptive geometry",      "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail." },
+    { "title": "WebGPU rendering",       "text": "Modern GPU pipeline running natively in the browser." },
+    { "title": "Dynamic lighting",       "text": "Real-time lights, environments, reflections and materials." },
+    { "title": "Animation playback",     "text": "Skinned and rigged GLB animations play straight from the file." },
+    { "title": "Desktop and mobile",     "text": "One viewer, adapting to the device it runs on." }
+  ],
+
+  "slides": [
+    {
+      "id": "hero",
+      "kind": "hero",
+      "image": "screen/img07.jpg",
+      "focus": "50% 45%",
+      "kicker": "SpinView · Now live",
+      "title": "PolyNite",
+      "text": "A WebGPU-powered GLB viewer with Nanite-like adaptive geometry. Drop a model and explore every detail — no install, no upload.",
+      "actions": [
+        { "label": "Launch PolyNite", "href": "/polynite/", "primary": true },
+        { "label": "See how it works", "slide": "clusters" }
+      ]
+    },
+    {
+      "id": "clusters",
+      "kind": "segmentation",
+      "image": "seg/01.jpg",
+      "focus": "50% 42%",
+      "kicker": "Inside the engine",
+      "title": "It sees clusters",
+      "text": "PolyNite breaks every mesh into thousands of small clusters. Each frame, the engine keeps only the clusters — and the level of detail — the camera actually needs.",
+      "chips": [
+        "Meshlet clusters",
+        "View-dependent LOD",
+        "GPU-driven culling"
+      ],
+      "stats": [],
+      "readout": "Building cluster hierarchy"
+    },
+    {
+      "id": "render",
+      "kind": "reveal",
+      "image": "screen/img13jpg.jpg",
+      "focus": "50% 40%",
+      "kicker": "On screen",
+      "title": "You see the model",
+      "text": "None of that work is visible. What reaches the screen is the full model — lit, shaded and animated in real time.",
+      "actions": [
+        { "label": "Launch PolyNite", "href": "/polynite/", "primary": true }
+      ]
+    },
+    {
+      "id": "drop",
+      "kind": "hero",
+      "image": "screen/img02.jpg",
+      "focus": "50% 50%",
+      "kicker": "Zero friction",
+      "title": "Drag. Drop. Done.",
+      "text": "Your file never leaves your machine. Drop a .glb or .gltf on the page and it opens instantly, on desktop and on mobile.",
+      "actions": [
+        { "label": "Open the viewer", "href": "/polynite/", "primary": true }
+      ]
+    },
+    {
+      "id": "dense",
+      "kind": "features",
+      "image": "screen/img09.jpg",
+      "focus": "50% 45%",
+      "kicker": "Built for dense geometry",
+      "title": "Made for the new 3D",
+      "text": "High-density scans, sculpts and AI-generated assets render without melting the page.",
+      "actions": [
+        { "label": "Launch PolyNite", "href": "/polynite/", "primary": true }
+      ]
+    }
+  ],"_base":"./_data/app/polynite/"},{"id": "numeris",
   "title": "Numeris",
   "type": "game",
   "collection": "spinmind",
   "status": "live",
+  "released": true,
 
   "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
   "short": "Cross-math puzzles inside an evolving visual world.",
 
-  "icon": "icon.webp",
-  "cover": "cover.webp",
+  "icon": "screen/image.webp",
+  "cover": "screen/image.webp",
 
   "screens": [
     "screen/image.webp",
@@ -26,12 +151,13 @@
 
   "visible": true,
 
-  "featured": true,
+  "featured": false,
   "featured_order": 1,
   "featured_kicker": "SpinMind · Live","_base":"./_data/game/numeris/"},{"id": "deitouch",
   "title": "DeiTouch",
   "type": "app",
   "status": "forming",
+  "released": false,
 
   "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.",
   "short": "Experimental touch interfaces and virtual keyboard concepts.",
@@ -44,12 +170,13 @@
 
   "visible": true,
 
-  "featured": true,
+  "featured": false,
   "featured_order": 2,
   "featured_kicker": "App · Forming","_base":"./_data/app/deitouch/"},{"id": "holophone",
   "title": "Holophone",
   "type": "app",
   "status": "forming",
+  "released": false,
 
   "description": "A tactile music experiment where gestures become the instrument.",
   "short": "A tactile musical interface shaped directly through touch.",
@@ -62,12 +189,13 @@
 
   "visible": true,
 
-  "featured": true,
+  "featured": false,
   "featured_order": 3,
   "featured_kicker": "Music · Forming","_base":"./_data/app/holophone/"},{"id": "mandelbrot",
   "title": "Mandelbrot Study",
   "type": "experiment",
   "status": "prototype",
+  "released": false,
 
   "description": "Procedural shader studies around evolving Mandelbrot worlds.",
   "iconText": "M",
@@ -82,6 +210,7 @@
   "title": "Raytracer Study",
   "type": "experiment",
   "status": "prototype",
+  "released": false,
 
   "description": "A procedural raytracing study exploring reflections, soft shadows and evolving geometry.",
   "iconText": "R",

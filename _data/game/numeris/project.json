@@ -4,12 +4,13 @@
   "type": "game",
   "collection": "spinmind",
   "status": "live",
+  "released": true,
 
   "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.",
   "short": "Cross-math puzzles inside an evolving visual world.",
 
-  "icon": "icon.webp",
-  "cover": "cover.webp",
+  "icon": "screen/image.webp",
+  "cover": "screen/image.webp",
 
   "screens": [
     "screen/image.webp",
@@ -27,7 +28,7 @@
 
   "visible": true,
 
-  "featured": true,
+  "featured": false,
   "featured_order": 1,
   "featured_kicker": "SpinMind · Live"
 }

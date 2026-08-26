@@ -3,6 +3,7 @@
   "title": "DeiTouch",
   "type": "app",
   "status": "forming",
+  "released": false,
 
   "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.",
   "short": "Experimental touch interfaces and virtual keyboard concepts.",
@@ -15,7 +16,7 @@
 
   "visible": true,
 
-  "featured": true,
+  "featured": false,
   "featured_order": 2,
   "featured_kicker": "App · Forming"
 }

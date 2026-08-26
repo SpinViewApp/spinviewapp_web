@@ -3,6 +3,7 @@
   "title": "Raytracer Study",
   "type": "experiment",
   "status": "prototype",
+  "released": false,
 
   "description": "A procedural raytracing study exploring reflections, soft shadows and evolving geometry.",
   "iconText": "R",

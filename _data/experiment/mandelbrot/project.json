@@ -3,6 +3,7 @@
   "title": "Mandelbrot Study",
   "type": "experiment",
   "status": "prototype",
+  "released": false,
 
   "description": "Procedural shader studies around evolving Mandelbrot worlds.",
   "iconText": "M",
