@@ -92,7 +92,15 @@
   --accent:        var(--cyan);
 
   --stage-pad-x:   clamp(22px, 6vw, 96px);
-  --stage-pad-b:   clamp(96px, 13vh, 152px);
+  --stage-pad-t:   96px;
+  --stage-pad-b:   96px;
+  /* the copy block is a fixed height, centred in the stage - so its lower
+     edge sits at the same place on every slide, and the button pinned just
+     under that edge never moves either */
+  /* a floor as well as a proportion: on a short laptop 42vh is not enough
+     to hold the feature grid, and the block would grow past the button */
+  --copy-h:        max(420px, 42vh);
+  --cta-gap:       34px;
 
   --ease:          cubic-bezier(.22,.61,.36,1);
   --ease-out:      cubic-bezier(.16,1,.3,1);
@@ -157,11 +165,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   /* opacity only - a scale or width animation on a logo reads as a wobble */
   animation: introIn .7s var(--ease) .05s forwards;
 }
-.intro-mark {
-  width: clamp(74px, 12vw, 118px);
-  height: auto;
-  filter: drop-shadow(0 0 30px rgba(122,110,255,.5));
-}
 .intro-word {
   font-size: clamp(11px, 1.5vw, 14px);
   font-weight: 500;
@@ -199,6 +202,7 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   letter-spacing: .34em;
   text-indent: .34em;
   color: rgba(255,255,255,.9);
+  text-shadow: 0 0 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.7);
 }
 
 /* Project switcher. Doubles as the "whose slide is this" indicator, so the
@@ -227,7 +231,7 @@ body.lit .projects { opacity: 1; transform: none; }
   text-transform: uppercase;
   white-space: nowrap;
   color: rgba(255,255,255,.32);
-  text-shadow: 0 1px 4px rgba(0,0,0,.8);
+  text-shadow: 0 0 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.85), 0 0 24px rgba(0,0,0,.6);
   transition: color .3s var(--ease);
 }
 .proj:hover { color: rgba(255,255,255,.78); }
@@ -329,7 +333,7 @@ body.lit .projects { opacity: 1; transform: none; }
   display: grid;
   align-content: center;
   justify-items: center;
-  padding: clamp(80px, 12vh, 130px) var(--stage-pad-x) var(--stage-pad-b);
+  padding: var(--stage-pad-t) var(--stage-pad-x) var(--stage-pad-b);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -341,7 +345,9 @@ body.lit .projects { opacity: 1; transform: none; }
   position: relative;
   width: 100%;
   max-width: 820px;
+  min-height: var(--copy-h);
   display: grid;
+  align-content: center;
   justify-items: center;
   text-align: center;
   gap: clamp(14px, 2vh, 22px);
@@ -351,6 +357,11 @@ body.lit .projects { opacity: 1; transform: none; }
    the letterforms, layered from tight to wide. It follows the shape of the
    text instead of dropping a dark panel over the picture, so the backdrop
    stays fully visible. --halo scales it per slide (0 removes it). */
+
+/* No idle animation on the copy. A slow translation of large light type
+   either steps in whole pixels or, once promoted to its own layer, goes
+   soft - both were worse than a still frame. The life on screen comes from
+   the backdrop, which drifts continuously behind the scrim. */
 
 /* per-element entrance */
 .slide .anim {
@@ -378,9 +389,12 @@ body.lit .projects { opacity: 1; transform: none; }
   text-transform: uppercase;
   color: var(--cyan);
   text-shadow:
-    0 0 2px  rgba(0,0,0, calc(.9 * var(--halo, 1))),
-    0 0 7px  rgba(0,0,0, calc(.8 * var(--halo, 1))),
-    0 0 18px rgba(0,0,0, calc(.6 * var(--halo, 1)));
+    0 0 1px  rgba(0,0,0, calc(1 * var(--halo, 1))),
+    0 0 4px  rgba(0,0,0, calc(.98 * var(--halo, 1))),
+    0 0 9px  rgba(0,0,0, calc(.92 * var(--halo, 1))),
+    0 0 20px rgba(0,0,0, calc(.80 * var(--halo, 1))),
+    0 0 40px rgba(0,0,0, calc(.62 * var(--halo, 1))),
+    0 0 76px rgba(0,0,0, calc(.45 * var(--halo, 1)));
 }
 .kicker::before {
   content: "";
@@ -427,12 +441,13 @@ body.lit .projects { opacity: 1; transform: none; }
   letter-spacing: -.028em;
   text-wrap: balance;
   text-shadow:
-    0 0 3px   rgba(0,0,0, calc(.70 * var(--halo, 1))),
-    0 0 9px   rgba(0,0,0, calc(.64 * var(--halo, 1))),
-    0 0 22px  rgba(0,0,0, calc(.56 * var(--halo, 1))),
-    0 0 48px  rgba(0,0,0, calc(.46 * var(--halo, 1))),
-    0 0 96px  rgba(0,0,0, calc(.34 * var(--halo, 1))),
-    0 2px 5px rgba(0,0,0, calc(.50 * var(--halo, 1)));
+    0 0 2px   rgba(0,0,0, calc(.92 * var(--halo, 1))),
+    0 0 6px   rgba(0,0,0, calc(.86 * var(--halo, 1))),
+    0 0 14px  rgba(0,0,0, calc(.78 * var(--halo, 1))),
+    0 0 30px  rgba(0,0,0, calc(.68 * var(--halo, 1))),
+    0 0 62px  rgba(0,0,0, calc(.54 * var(--halo, 1))),
+    0 0 120px rgba(0,0,0, calc(.40 * var(--halo, 1))),
+    0 2px 6px rgba(0,0,0, calc(.62 * var(--halo, 1)));
 }
 .title em {
   font-style: normal;
@@ -451,11 +466,12 @@ body.lit .projects { opacity: 1; transform: none; }
   color: var(--ink-soft);
   text-wrap: pretty;
   text-shadow:
-    0 0 2px   rgba(0,0,0, calc(.82 * var(--halo, 1))),
-    0 0 7px   rgba(0,0,0, calc(.74 * var(--halo, 1))),
-    0 0 18px  rgba(0,0,0, calc(.62 * var(--halo, 1))),
-    0 0 40px  rgba(0,0,0, calc(.44 * var(--halo, 1))),
-    0 1px 3px rgba(0,0,0, calc(.62 * var(--halo, 1)));
+    0 0 2px   rgba(0,0,0, calc(.96 * var(--halo, 1))),
+    0 0 5px   rgba(0,0,0, calc(.90 * var(--halo, 1))),
+    0 0 12px  rgba(0,0,0, calc(.82 * var(--halo, 1))),
+    0 0 26px  rgba(0,0,0, calc(.66 * var(--halo, 1))),
+    0 0 54px  rgba(0,0,0, calc(.48 * var(--halo, 1))),
+    0 1px 3px rgba(0,0,0, calc(.80 * var(--halo, 1)));
 }
 
 /* ---------------------------------------------------------------- actions */
@@ -483,34 +499,39 @@ body.lit .projects { opacity: 1; transform: none; }
   text-indent: .17em;
   text-transform: uppercase;
   color: #fff;
-  background: rgba(255,255,255,.045);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(3,7,13,.5);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  text-shadow: 0 0 10px rgba(0,0,0,.7);
   overflow: hidden;
   transition: border-color .3s var(--ease), background .3s var(--ease),
               transform .3s var(--ease), box-shadow .3s var(--ease);
 }
-.btn:hover { border-color: rgba(255,255,255,.42); background: rgba(255,255,255,.1); transform: translateY(-1px); }
+.btn:hover { border-color: rgba(255,255,255,.4); background: rgba(16,26,40,.62); transform: translateY(-1px); }
 
 .btn.primary {
-  border-color: transparent;
-  color: #06080d;
-  background: #ffffff;
-  box-shadow: 0 12px 40px -16px rgba(255,255,255,.55);
+  /* one accent, nothing else: dark glass, a cyan edge, white type */
+  border-color: rgba(77,214,255,.62);
+  color: #ffffff;
+  background: rgba(3,9,15,.62);
+  box-shadow:
+    0 0 18px -6px rgba(77,214,255,.45),
+    inset 0 0 20px rgba(77,214,255,.07);
 }
 .btn.primary::after {
   content: "";
   position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--cyan), var(--violet) 50%, var(--magenta));
+  inset: 0;
+  background: rgba(77,214,255,.1);
   opacity: 0;
-  transition: opacity .3s var(--ease);
+  transition: opacity .35s var(--ease);
 }
 .btn.primary:hover {
-  background: #fff;
+  border-color: var(--cyan);
   transform: translateY(-2px);
-  box-shadow: 0 18px 52px -18px rgba(150,190,255,.9);
+  box-shadow:
+    0 0 28px -6px rgba(77,214,255,.75),
+    inset 0 0 26px rgba(77,214,255,.12);
 }
 .btn.primary:hover::after { opacity: 1; }
 
@@ -558,7 +579,7 @@ body.lit .projects { opacity: 1; transform: none; }
   position: relative;
   width: 100%;
   aspect-ratio: 735 / 654;
-  max-height: 58vh;
+  max-height: calc(var(--copy-h) - 8px);
   margin: 0 auto;
   border: 1px solid var(--line-soft);
   border-radius: 6px;
@@ -712,7 +733,7 @@ body.lit .projects { opacity: 1; transform: none; }
   overflow: hidden;
 }
 .feature {
-  padding: clamp(15px, 2vw, 22px);
+  padding: clamp(13px, 1.7vw, 19px);
   text-align: left;
   background: rgba(6,8,14,.62);
   backdrop-filter: blur(14px);
@@ -734,6 +755,32 @@ body.lit .projects { opacity: 1; transform: none; }
   line-height: 1.5;
   font-weight: 300;
   color: var(--ink-faint);
+}
+
+/* The call to action does not live inside the slide copy: it is pinned to
+   the stage, so it holds exactly the same spot for every slide of a project
+   and never blinks out on a slide that declares no action of its own. */
+.cta {
+  position: absolute;
+  z-index: 15;
+  left: 0;
+  right: 0;
+  top: calc(50% + (var(--copy-h) / 2) + var(--cta-gap));
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .5s var(--ease);
+}
+body.lit .cta { opacity: 1; }
+
+.cta-inner { position: relative; display: inline-flex; }
+
+/* the secondary sits beside the primary without shifting it off centre */
+.cta .btn.ghost {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 0;
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------- navigation */
@@ -815,6 +862,7 @@ body.lit .nav { opacity: 1; }
   letter-spacing: .2em;
   color: rgba(255,255,255,.3);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.7);
 }
 
 /* Scroll cue. Only when there is something below, only once the viewer
@@ -822,9 +870,8 @@ body.lit .nav { opacity: 1; }
 .cue {
   position: absolute;
   z-index: 20;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: max(78px, calc(env(safe-area-inset-bottom) + 70px));
+  right: var(--stage-pad-x);
+  bottom: max(86px, calc(env(safe-area-inset-bottom) + 80px));
   display: none;
   align-items: center;
   gap: 8px;
@@ -837,7 +884,7 @@ body.lit .nav { opacity: 1; }
 body.has-more .cue.show { display: inline-flex; }
 .cue { cursor: pointer; transition: color .3s var(--ease); }
 .cue:hover { color: rgba(255,255,255,.72); }
-@keyframes bob { 50% { transform: translate(-50%, 6px); } }
+@keyframes bob { 50% { transform: translateY(5px); } }
 
 /* ----------------------------------------------------------------- archive */
 
@@ -963,23 +1010,36 @@ body.lit .build-stamp {
   .seg-copy { justify-items: center; }
   .seg-copy .blurb { max-width: 52ch; }
   .chips { justify-content: center; }
-  .seg-stage { max-width: 430px; max-height: 42vh; }
+  .seg-stage { max-width: 400px; max-height: calc(var(--copy-h) - 236px); }
+  .slide.kind-segmentation .chips { display: none; }
   .counter { display: none; }
 }
 
 @media (max-width: 620px) {
-  :root { --stage-pad-b: clamp(88px, 15vh, 120px); }
+  :root { --stage-pad-t: 70px; --stage-pad-b: 70px; --copy-h: 56vh; --cta-gap: 24px; }
+  .cta { left: var(--stage-pad-x); right: var(--stage-pad-x); }
+  .cta-inner { display: flex; width: 100%; }
+  .cta .btn.primary { width: 100%; }
+  .cta .btn.ghost {
+    left: 50%;
+    top: auto;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%);
+  }
   .slide { padding-top: clamp(72px, 14vh, 110px); }
   .title { font-size: clamp(38px, 12.5vw, 62px); }
   .blurb { font-size: 14.5px; line-height: 1.6; }
   .btn { min-height: 46px; padding: 0 20px; font-size: 11px; }
   .actions { width: 100%; flex-direction: column; }
   .actions .btn { width: 100%; }
+  :root { --copy-h: 54vh; --cta-gap: 18px; }
+  .slide.kind-segmentation .seg-copy .title { font-size: clamp(26px, 7.6vw, 36px); }
+  .slide.kind-segmentation .seg-copy .blurb { font-size: 13.5px; line-height: 1.5; }
+  .seg-stage { max-height: calc(var(--copy-h) - 186px); }
   .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .feature { padding: 13px 14px; }
+  .feature { padding: 12px 13px; }
   .feature b { margin: 0; font-size: 12px; }
   .feature span { display: none; }
-  .seg-stage { max-height: 34vh; }
   .seg-hud { font-size: 9px; letter-spacing: .14em; gap: 8px; padding: 9px 11px; }
   .build-stamp {
   margin-left: 10px;
@@ -996,11 +1056,12 @@ body.lit .build-stamp {
 
 /* very short landscape phones */
 @media (max-height: 520px) and (orientation: landscape) {
-  .slide { padding-top: 62px; --stage-pad-b: 68px; }
+  :root { --stage-pad-t: 40px; --stage-pad-b: 40px; --copy-h: 62vh; --cta-gap: 14px; }
+  .seg-stage { max-height: calc(var(--copy-h) - 150px); }
   .title { font-size: clamp(30px, 6vw, 46px); }
   .blurb { font-size: 13px; }
   .feature-grid { display: none; }
-  .seg-stage { max-height: 44vh; }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1018,7 +1079,6 @@ body.lit .build-stamp {
 
 <div id="intro" aria-hidden="true">
   <div class="intro-lockup">
-    <img class="intro-mark" src="/assets/spinview-mark.png" alt="" onerror="this.style.display='none'">
     <div class="intro-rule"></div>
     <div class="intro-word">SPINVIEW</div>
   </div>
@@ -1036,6 +1096,8 @@ body.lit .build-stamp {
   <div class="grain"></div>
 
   <div class="slides" id="slides"></div>
+
+  <div class="cta" id="cta"></div>
 
   <button class="cue" id="cue" type="button">More <span aria-hidden="true">&#9662;</span></button>
 
@@ -1055,7 +1117,7 @@ body.lit .build-stamp {
 
 <section class="archive" id="archive" hidden>
   <div class="archive-head">
-    <h2>Also on SpinView</h2>
+    <h2>Everything on SpinView</h2>
     <span id="archiveCount"></span>
   </div>
   <div class="rail" id="rail"></div>
@@ -1375,16 +1437,41 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     });
   }
 
-  function actionsNode(s) {
-    if (!s.actions || !s.actions.length) return null;
-    var wrap = el("div", "actions anim");
-    s.actions.forEach(function (a) {
+  /* Primary action: whatever the slide declares, else the project's own
+     launch link. It is therefore identical across a project's slides, which
+     is the whole point - the button must not move or vanish. */
+  function ctaFor(s) {
+    var p = s._p || {};
+    var acts = s.actions || [];
+    var primary = null, extras = [];
+
+    /* the project's own launch link wins, so the label and the width are
+       identical on every one of its slides */
+    if (p.play) {
+      primary = { label: p.play_label || ("Open " + (p.title || "")), href: p.play, primary: true };
+    }
+    for (var i = 0; i < acts.length; i++) {
+      if (primary && acts[i].href === primary.href) continue;
+      if (!primary && acts[i].primary) { primary = acts[i]; continue; }
+      extras.push(acts[i]);
+    }
+    return { primary: primary, extras: extras };
+  }
+
+  function renderCta(s) {
+    var host = $("cta");
+    if (!host) return;
+    var cfg = ctaFor(s);
+    host.innerHTML = "";
+    if (!cfg.primary && !cfg.extras.length) return;
+
+    var wrap = el("div", "cta-inner");
+
+    function mk(a, cls) {
       var node;
-      if (a.href) {
-        node = el("a", "btn" + (a.primary ? " primary" : ""));
-        node.href = a.href;
-      } else {
-        node = el("button", "btn" + (a.primary ? " primary" : ""));
+      if (a.href) { node = el("a", cls); node.href = a.href; }
+      else {
+        node = el("button", cls);
         node.type = "button";
         node.addEventListener("click", function () {
           var t = indexOfSlideId(a.slide);
@@ -1392,9 +1479,12 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         });
       }
       node.textContent = a.label || "Open";
-      wrap.appendChild(node);
-    });
-    return wrap;
+      return node;
+    }
+
+    if (cfg.primary) wrap.appendChild(mk(cfg.primary, "btn primary"));
+    cfg.extras.forEach(function (a) { wrap.appendChild(mk(a, "btn ghost")); });
+    host.appendChild(wrap);
   }
 
   function indexOfSlideId(id) {
@@ -1429,8 +1519,6 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     h.innerHTML = markTitle(s.title);
     inner.appendChild(h);
     if (s.text) { var p = el("p", "blurb anim"); p.textContent = s.text; inner.appendChild(p); }
-    var a = actionsNode(s);
-    if (a) inner.appendChild(a);
     return inner;
   }
 
@@ -1441,8 +1529,6 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     h.innerHTML = markTitle(s.title);
     inner.appendChild(h);
     if (s.text) { var p = el("p", "blurb anim"); p.textContent = s.text; inner.appendChild(p); }
-    var a = actionsNode(s);
-    if (a) inner.appendChild(a);
     return inner;
   }
 
@@ -1466,8 +1552,6 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       });
       inner.appendChild(grid);
     }
-    var a = actionsNode(s);
-    if (a) inner.appendChild(a);
     return inner;
   }
 
@@ -1504,8 +1588,6 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       });
       copy.appendChild(st);
     }
-    var a = actionsNode(s);
-    if (a) { a.className = "actions"; copy.appendChild(a); }
     inner.appendChild(copy);
 
     var stage = el("div", "seg-stage anim");
@@ -1683,6 +1765,9 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     state.slides.forEach(function (s, k) {
       var on = k === next;
+      /* --p still holds ~100% from this dot's last run; clear it before the
+         dot goes active or it flashes full for one frame */
+      s._dot.style.setProperty("--p", "0%");
       s._node.classList.toggle("on", on);
       s._bg.classList.toggle("on", on);
       s._dot.classList.toggle("on", on);
@@ -1708,6 +1793,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     var cur = state.slides[next];
     if (cur.kind === "segmentation") segPlay(cur);
+    renderCta(cur);
     if (manual) syncUrl(cur);
     updateCue(next, n);
 
@@ -1801,20 +1887,20 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
   /* ------------------------------------------------------------- archive */
 
+  /* The strip below the fold is the index of everything released - the
+     projects on the reel included. It is what makes the page scrollable at
+     all, and it grows on its own as projects ship. */
   function buildArchive(projects) {
-    var onStage = {};
-    state.slides.forEach(function (s) {
-      if (s._p && s._p.id) onStage[s._p.id] = true;
-    });
-
-    var rest = projects.filter(function (p) {
-      return isReleased(p) && !onStage[p.id];
-    });
-
+    var rest = projects.filter(isReleased);
     if (!rest.length) return false;
 
     var rail = $("rail");
     rail.innerHTML = "";
+    var onStage = {};
+    state.slides.forEach(function (s, i) {
+      if (s._p && s._p.id && onStage[s._p.id] === undefined) onStage[s._p.id] = i;
+    });
+
     rest.forEach(function (p) {
       var href = p.play || p.url || "#";
       var card = el("a", "card");
@@ -1870,7 +1956,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     /* Pause only while the pointer is actually on something readable or
        clickable. The stage fills the whole viewport, so pausing on the stage
        itself would freeze the reel for anyone whose cursor sits on the page. */
-    var HOLD = ".slide-inner, .nav, .cue, .mark-corner";
+    var HOLD = ".slide-inner, .cta, .nav, .cue, .mark-corner";
     function holds(node) {
       while (node && node !== stage) {
         if (node.matches && node.matches(HOLD)) return true;
@@ -1918,15 +2004,29 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     }, { passive: true });
   }
 
-  /* The opening card plays on every load, the way a title card should.
-     Only a reduced-motion preference skips it. */
-  function runIntro() {
+  /* The opening card is a real wait, not a staged one: it holds until the
+     first backdrop has decoded, so the stage is never revealed on an empty
+     frame. A floor keeps it from flashing past on a warm cache, a ceiling
+     keeps a slow network from parking the visitor on a black screen. */
+  var INTRO_MIN = 900, INTRO_MAX = 4000;
+
+  function runIntro(firstImage) {
     var intro = $("intro");
+    var t0 = Date.now();
+    var done = false;
 
     function finish() {
+      if (done) return;
+      done = true;
       intro.classList.add("done");
       document.body.classList.add("lit");
       setTimeout(function () { if (intro.parentNode) intro.parentNode.removeChild(intro); }, 1000);
+    }
+
+    function release() {
+      var waited = Date.now() - t0;
+      if (waited >= INTRO_MIN) finish();
+      else setTimeout(finish, INTRO_MIN - waited);
     }
 
     if (reduced) {
@@ -1934,7 +2034,15 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       finish();
       return;
     }
-    setTimeout(finish, 1450);
+
+    setTimeout(finish, INTRO_MAX);       /* never hold longer than this */
+
+    if (!firstImage) { release(); return; }
+
+    var probe = new Image();
+    probe.onload = probe.onerror = release;
+    probe.src = firstImage;
+    if (probe.complete) release();
   }
 
   /* Which build is this?
@@ -1969,7 +2077,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     if (!cat || !cat.projects) {
       console.error("[SpinView] catalog missing or malformed");
-      runIntro();
+      runIntro("");
       return;
     }
 
@@ -2002,7 +2110,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     if (!state.slides.length) {
       console.warn("[SpinView] no released project to feature");
-      runIntro();
+      runIntro("");
       return;
     }
 
@@ -2027,7 +2135,9 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
     var start = findDeep(deep);
     go(start > 0 ? start : 0, false);
-    runIntro();
+
+    var firstShot = state.slides[state.index] && state.slides[state.index].image;
+    runIntro(firstShot ? firstShot + ver() : "");
 
     /* let #hash changes move the stage without a reload */
     window.addEventListener("hashchange", function () {
