@@ -201,6 +201,64 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   color: rgba(255,255,255,.9);
 }
 
+/* Project switcher. Doubles as the "whose slide is this" indicator, so the
+   name never has to be repeated a third time in the chrome. */
+.projects {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity .7s var(--ease) .2s, transform .7s var(--ease) .2s;
+}
+body.lit .projects { opacity: 1; transform: none; }
+
+.proj {
+  position: relative;
+  padding: 5px 0 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .24em;
+  text-indent: .24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255,255,255,.32);
+  text-shadow: 0 1px 4px rgba(0,0,0,.8);
+  transition: color .3s var(--ease);
+}
+.proj:hover { color: rgba(255,255,255,.78); }
+.proj.on { color: #fff; }
+.proj::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: .24em;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  box-shadow: 0 0 10px rgba(120,190,255,.55);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform .45s var(--ease);
+}
+.proj.on::after { transform: scaleX(1); }
+.proj .tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 4px;
+  border: 1px solid rgba(255,196,107,.4);
+  border-radius: 2px;
+  font-size: 8px;
+  letter-spacing: .1em;
+  text-indent: .1em;
+  color: #ffc46b;
+  vertical-align: 1px;
+}
+
 /* ------------------------------------------------------------------- stage */
 
 .stage {
@@ -289,30 +347,52 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   gap: clamp(14px, 2vh, 22px);
 }
 
-/* A soft dark pool behind the copy. Cheaper on the eye than a black glow
-   on the glyphs, and it only darkens where the text actually sits.
+/* Legibility band behind the copy.
+   A tight dark blob reads as a stain, so this spans the full width and
+   falls off over a long distance - it lands as part of the vignette
+   instead of a shape. Where the browser supports it, a gentle backdrop
+   blur does most of the work and the tint can stay very light: the photo
+   keeps its colour, only the fine detail under the text is softened.
    Per-slide strength comes from --halo (0 disables it). */
 .slide-inner::before,
 .seg-copy::before {
   content: "";
   position: absolute;
   z-index: -1;
-  left: -9%;
-  right: -9%;
-  top: -12%;
-  bottom: -14%;
+  left: -60vw;
+  right: -60vw;
+  top: -22%;
+  bottom: -24%;
   pointer-events: none;
   opacity: var(--halo, 1);
-  background: radial-gradient(58% 56% at 50% 50%,
-    rgba(0,0,0,.80) 0%,
-    rgba(0,0,0,.62) 40%,
-    rgba(0,0,0,.30) 64%,
-    rgba(0,0,0,0) 82%);
-  filter: blur(24px);
+  background: radial-gradient(42% 62% at 50% 50%,
+    rgba(0,0,0,.52) 0%,
+    rgba(0,0,0,.34) 42%,
+    rgba(0,0,0,.14) 66%,
+    rgba(0,0,0,0) 84%);
+  filter: blur(34px);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .slide-inner::before,
+  .seg-copy::before {
+    filter: none;
+    background: radial-gradient(42% 62% at 50% 50%,
+      rgba(0,0,0,.34) 0%,
+      rgba(0,0,0,.22) 44%,
+      rgba(0,0,0,.08) 68%,
+      rgba(0,0,0,0) 85%);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-mask-image: radial-gradient(40% 60% at 50% 50%,
+      #000 0%, rgba(0,0,0,.92) 40%, rgba(0,0,0,.45) 64%, transparent 84%);
+    mask-image: radial-gradient(40% 60% at 50% 50%,
+      #000 0%, rgba(0,0,0,.92) 40%, rgba(0,0,0,.45) 64%, transparent 84%);
+  }
 }
 .slide.kind-segmentation .slide-inner::before { display: none; }
 .seg-copy { position: relative; }
-.seg-copy::before { left: -12%; right: -12%; }
+.seg-copy::before { left: -18%; right: -18%; }
 
 /* per-element entrance */
 .slide .anim {
@@ -715,7 +795,19 @@ body.lit .nav { opacity: 1; }
 .arrow:hover { color: #fff; background: rgba(255,255,255,.08); }
 .arrow svg { width: 13px; height: 13px; }
 
-.dots { display: flex; align-items: center; gap: 9px; }
+.dots { display: flex; align-items: center; }
+.dot-group { display: flex; align-items: center; gap: 9px; }
+.dot-group + .dot-group { margin-left: 20px; position: relative; }
+.dot-group + .dot-group::before {
+  content: "";
+  position: absolute;
+  left: -11px;
+  top: 50%;
+  width: 1px;
+  height: 9px;
+  transform: translateY(-50%);
+  background: rgba(255,255,255,.16);
+}
 .dot-btn {
   position: relative;
   width: 26px;
@@ -909,6 +1001,10 @@ body.lit .stage .foot-line { opacity: 1; }
   .seg-stage { max-height: 34vh; }
   .seg-hud { font-size: 9px; letter-spacing: .14em; gap: 8px; padding: 9px 11px; }
   .stage .foot-line { display: none; }
+  .projects { gap: 13px; top: max(14px, env(safe-area-inset-top)); }
+  .proj { font-size: 9px; letter-spacing: .17em; text-indent: .17em; }
+  .proj .tag { margin-left: 5px; font-size: 7.5px; }
+  .mark-corner span { font-size: 9px; letter-spacing: .26em; text-indent: .26em; }
 }
 
 /* very short landscape phones */
@@ -944,6 +1040,8 @@ body.lit .stage .foot-line { opacity: 1; }
 <a class="mark-corner" href="/" aria-label="SpinView">
   <span>SPINVIEW</span>
 </a>
+
+<nav class="projects" id="projectNav" aria-label="Projects"></nav>
 
 <section class="stage" id="stage" aria-roledescription="carousel" aria-label="Featured">
   <div class="bg-layer" id="bgLayer"></div>
@@ -1150,6 +1248,18 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     return [t(a), t(b)].filter(Boolean).join(" \u00b7 ");
   }
 
+  /* Every slide has to say whose slide it is. When the headline already
+     carries the project name (a title card), the kicker stays as written;
+     otherwise the project name is prefixed onto it. */
+  function ownedKicker(p, kicker, title) {
+    var name = String(p.title || "");
+    if (!name) return kicker;
+    var low = name.toLowerCase();
+    if (String(title || "").toLowerCase().indexOf(low) >= 0) return kicker;
+    if (String(kicker || "").toLowerCase().indexOf(low) >= 0) return kicker;
+    return kicker ? (name + " \u00b7 " + kicker) : name;
+  }
+
   /* Turn a project into an array of stage slides. A project may declare its
      own `slides`; otherwise one slide is derived from its base fields. */
   function slidesFor(p) {
@@ -1187,7 +1297,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
         lift: s.lift || p.lift || 0,
         halo: (s.halo != null ? s.halo : (p.halo != null ? p.halo : 1)),
         scrim: (s.scrim != null ? s.scrim : (p.scrim != null ? p.scrim : 1)),
-        kicker: s.kicker || p.featured_kicker || "",
+        kicker: ownedKicker(p, s.kicker || p.featured_kicker || "", s.title || p.title),
         badge: s.badge !== undefined ? s.badge : (p.badge || ""),
         title: s.title || p.title,
         text: s.text || "",
@@ -1507,17 +1617,28 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     });
   }
 
+  /* One run of dots per project, so the reel reads as "five of these,
+     then one of those" rather than one undifferentiated row. */
   function buildDots() {
     var host = $("dots");
     host.innerHTML = "";
+    var group = null, lastId = null;
+
     state.slides.forEach(function (s, i) {
+      var pid = (s._p && s._p.id) || "";
+      if (pid !== lastId) {
+        group = el("div", "dot-group");
+        host.appendChild(group);
+        lastId = pid;
+      }
       var b = el("button", "dot-btn");
       b.type = "button";
       b.setAttribute("role", "tab");
-      b.setAttribute("aria-label", "Slide " + (i + 1));
+      b.setAttribute("aria-label", ((s._p && s._p.title) || "Slide") + " " + (s._n || (i + 1)));
+      b.title = (s._p && s._p.title) || "";
       b.appendChild(el("i"));
       b.addEventListener("click", function () { go(i, true); });
-      host.appendChild(b);
+      group.appendChild(b);
       s._dot = b;
     });
   }
@@ -1541,7 +1662,11 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     });
 
     state.index = next;
-    $("counter").textContent = pad(next + 1) + " / " + pad(n);
+
+    $("counter").textContent =
+      pad(state.slides[next]._n) + " / " + pad(state.slides[next]._of);
+
+    syncProjectNav(state.slides[next]._p);
 
     /* a new pass gets a new set of backdrops, dealt behind the viewer */
     if (n > 1 && next === 0 && prev === n - 1) {
@@ -1599,6 +1724,49 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
   function stopTimer() {
     if (state.tick) { clearInterval(state.tick); state.tick = null; }
+  }
+
+  /* ------------------------------------------------------- project switcher */
+
+  function buildProjectNav() {
+    var host = $("projectNav");
+    if (!host) return;
+    host.innerHTML = "";
+
+    var seen = {}, order = [];
+    state.slides.forEach(function (s, i) {
+      var p = s._p;
+      if (!p || seen[p.id] !== undefined) return;
+      seen[p.id] = i;
+      order.push(p);
+    });
+
+    /* a lone project needs no switcher */
+    if (order.length < 2) { host.style.display = "none"; return; }
+    host.style.display = "";
+
+    order.forEach(function (p) {
+      var b = el("button", "proj");
+      b.type = "button";
+      b.setAttribute("data-id", p.id);
+      b.appendChild(document.createTextNode(p.title || p.id));
+      if (p.badge) {
+        var t = el("span", "tag");
+        t.textContent = p.badge;
+        b.appendChild(t);
+      }
+      b.addEventListener("click", function () { go(seen[p.id], true); });
+      host.appendChild(b);
+    });
+  }
+
+  function syncProjectNav(p) {
+    var host = $("projectNav");
+    if (!host || !p) return;
+    var btns = host.getElementsByTagName("button");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("on", btns[i].getAttribute("data-id") === p.id);
+    }
   }
 
   /* ------------------------------------------------------------- archive */
@@ -1785,10 +1953,22 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       return;
     }
 
+    /* position of each slide inside its own project */
+    var counts = {};
+    state.slides.forEach(function (s) {
+      var id = (s._p && s._p.id) || "";
+      counts[id] = (counts[id] || 0) + 1;
+      s._n = counts[id];
+    });
+    state.slides.forEach(function (s) {
+      s._of = counts[(s._p && s._p.id) || ""];
+    });
+
     dealImages(null);
     buildBackgrounds();
     buildSlides();
     buildDots();
+    buildProjectNav();
     bindInput();
     buildArchive(projects);
 
