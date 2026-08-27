@@ -83,23 +83,6 @@
       "pool": "showcase"
     },
     {
-      "id": "drop",
-      "kind": "hero",
-      "image": "screen/img02.jpg",
-      "focus": "50% 50%",
-      "kicker": "The viewer",
-      "title": "Drag. Drop. Done.",
-      "text": "Drop a .glb or .gltf on the page and it opens instantly, with lighting, materials and animation. Nothing to install, nothing uploaded.",
-      "actions": [
-        {
-          "label": "Open the viewer",
-          "href": "/polynite/",
-          "primary": true
-        }
-      ],
-      "pool": "showcase"
-    },
-    {
       "id": "clusters",
       "kind": "segmentation",
       "image": "seg/01.jpg",
@@ -126,6 +109,23 @@
       "actions": [
         {
           "label": "Launch PolyNite",
+          "href": "/polynite/",
+          "primary": true
+        }
+      ],
+      "pool": "showcase"
+    },
+    {
+      "id": "drop",
+      "kind": "hero",
+      "image": "screen/img02.jpg",
+      "focus": "50% 50%",
+      "kicker": "The viewer",
+      "title": "Drag. Drop. Done.",
+      "text": "Drop a .glb or .gltf on the page and it opens instantly, with lighting, materials and animation. Nothing to install, nothing uploaded.",
+      "actions": [
+        {
+          "label": "Open the viewer",
           "href": "/polynite/",
           "primary": true
         }

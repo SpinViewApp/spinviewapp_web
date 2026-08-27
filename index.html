@@ -296,7 +296,14 @@ body.lit .projects { opacity: 1; transform: none; }
   object-fit: cover;
   object-position: 50% 45%;
   transform: scale(1.12);
+  /* A backdrop never snaps in. The <img> stays transparent until the file
+     has actually decoded, then fades on its own clock - independent of the
+     .bg-shot cross-fade, so a slow file arriving mid-slide still arrives
+     softly instead of popping. */
+  opacity: 0;
+  transition: opacity .85s var(--ease);
 }
+.bg-shot img.ready { opacity: 1; }
 .bg-shot.on { opacity: 1; }
 
 /* The pan and the zoom run on the wrapper and on the image separately, with
@@ -327,6 +334,28 @@ body.lit .projects { opacity: 1; transform: none; }
     radial-gradient(118% 80% at 50% 46%, rgba(0,0,0,.22) 0%, rgba(0,0,0,.66) 60%, rgba(0,0,0,.92) 100%),
     linear-gradient(180deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,.18) 26%, rgba(0,0,0,.42) 62%, rgba(0,0,0,.94) 100%);
 }
+/* A slow light that crosses the frame behind the copy. This is the piece
+   that stops a phone looking like a screenshot: the type stays perfectly
+   still (moving it either steps pixels or goes soft), while the light it
+   sits in keeps moving. It is one composited layer and nothing reflows. */
+.aura {
+  position: absolute;
+  inset: -20%;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: .5;
+  background:
+    radial-gradient(38% 46% at 50% 50%, rgba(77,214,255,.13) 0%, rgba(77,214,255,.05) 45%, transparent 72%),
+    radial-gradient(30% 38% at 50% 50%, rgba(255,92,225,.09) 0%, transparent 70%);
+  animation: auraDrift 27s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes auraDrift {
+  from { transform: translate3d(-9%, 4%, 0) scale(1); }
+  to   { transform: translate3d( 9%, -5%, 0) scale(1.16); }
+}
+
 .grain {
   position: absolute;
   inset: 0;
@@ -344,7 +373,10 @@ body.lit .projects { opacity: 1; transform: none; }
   z-index: 3;
   height: 100%;
   display: grid;
+  will-change: transform;
 }
+/* the reel follows the finger while it is down, and eases home on release */
+.slides.settle, .bg-layer.settle { transition: transform .42s var(--ease-out); }
 .slide {
   grid-area: 1 / 1;
   display: grid;
@@ -521,10 +553,35 @@ body.lit .projects { opacity: 1; transform: none; }
 }
 .title em {
   font-style: normal;
-  background: linear-gradient(96deg, var(--cyan), var(--violet) 52%, var(--magenta));
+  background: linear-gradient(96deg, var(--cyan), var(--violet) 30%, var(--magenta) 52%, var(--violet) 74%, var(--cyan));
+  background-size: 260% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+/* The copy itself never travels - moving large light type either steps in
+   whole pixels or goes soft. The gradient underneath it can move all it
+   likes: nothing reflows, nothing repaints outside the glyphs, and the
+   headline stops reading as a screenshot. This is the one idle animation
+   that survives on a phone. */
+.slide.on .title em { animation: sheen 9s ease-in-out 1.2s infinite; }
+@keyframes sheen {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* A phone gets no hover and no cursor, so the only thing that says "this is
+   live" is motion. The blurb breathes very slightly - far below the
+   threshold where text starts to shimmer, but enough to read as alive. */
+@media (hover: none) {
+  .slide.on .blurb { animation: breathe 7.5s ease-in-out 1.4s infinite; }
+  .slide.on .chip  { animation: breathe 6.2s ease-in-out 1.6s infinite; }
+  .slide.on .chip:nth-child(2) { animation-delay: 2s; }
+  .slide.on .chip:nth-child(3) { animation-delay: 3.4s; }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .82; }
 }
 
 .blurb {
@@ -692,6 +749,8 @@ body.lit .projects { opacity: 1; transform: none; }
   opacity: 0;
   transform: scale(.7);
   filter: brightness(1.9) saturate(1.4);
+  will-change: opacity, transform;
+  backface-visibility: hidden;
 }
 .seg-stage.play .seg-cell {
   animation: cellIn .82s var(--ease-out) forwards;
@@ -700,6 +759,12 @@ body.lit .projects { opacity: 1; transform: none; }
   0%   { opacity: 0; transform: scale(.55); filter: brightness(2.6) saturate(1.6); }
   45%  { opacity: 1; transform: scale(1.03); filter: brightness(1.7) saturate(1.4); }
   100% { opacity: 1; transform: scale(1);    filter: none; }
+}
+/* phone variant: same choreography, no filter work */
+@keyframes cellInLite {
+  0%   { opacity: 0; transform: scale(.55); }
+  45%  { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .seg-scan {
@@ -898,10 +963,15 @@ body.lit .nav { opacity: 1; }
 .dot-btn {
   position: relative;
   width: 26px;
-  height: 22px;
+  height: 24px;
   display: grid;
   place-items: center;
+  transition: width .42s var(--ease-out);
 }
+/* The slide you are on is not a slightly brighter version of the others:
+   it is twice as wide, thicker, and it is the only one that glows. You can
+   find it from across the room, which is the whole point of an indicator. */
+.dot-btn.on { width: 52px; }
 .dot-btn i {
   display: block;
   width: 100%;
@@ -909,10 +979,14 @@ body.lit .nav { opacity: 1; }
   border-radius: 2px;
   background: rgba(255,255,255,.22);
   overflow: hidden;
-  transition: background .3s var(--ease);
+  transition: background .3s var(--ease), height .32s var(--ease-out), box-shadow .32s var(--ease);
 }
 .dot-btn:hover i { background: rgba(255,255,255,.45); }
-.dot-btn.on i { background: rgba(255,255,255,.2); }
+.dot-btn.on i {
+  height: 4px;
+  background: rgba(255,255,255,.26);
+  box-shadow: 0 0 0 1px rgba(120,190,255,.22), 0 0 16px rgba(77,214,255,.35);
+}
 .dot-btn i::after {
   content: "";
   display: block;
@@ -923,6 +997,23 @@ body.lit .nav { opacity: 1; }
 }
 .dot-btn.on i::after { width: var(--p, 0%); }
 .dot-btn.seen i::after { width: 100%; background: rgba(255,255,255,.5); box-shadow: none; }
+
+/* the active dot also carries a caret, so the position reads instantly even
+   at a glance where the widths blur together */
+.dot-btn::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px rgba(77,214,255,.9);
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity .3s var(--ease), transform .3s var(--ease-out);
+}
+.dot-btn.on::after { opacity: 1; transform: translate(-50%, 0); }
 
 .counter {
   position: absolute;
@@ -1083,7 +1174,19 @@ body.lit .build-stamp {
   .chips { justify-content: center; }
   .seg-stage { max-width: 400px; max-height: calc(var(--copy-h) - 236px); }
   .slide.kind-segmentation .chips { display: none; }
-  .counter { display: none; }
+  /* the counter used to disappear here - which left a phone with no way of
+     knowing how far into a project it was. It stays, smaller, above the row. */
+  .counter {
+    right: 50%;
+    transform: translateX(50%);
+    bottom: calc(100% + 9px);
+    font-size: 9.5px;
+    letter-spacing: .26em;
+    text-indent: .26em;
+    color: rgba(255,255,255,.42);
+  }
+  .dot-btn { width: 22px; }
+  .dot-btn.on { width: 44px; }
 }
 
 @media (max-width: 620px) {
@@ -1112,6 +1215,12 @@ body.lit .build-stamp {
   .feature b { margin: 0; font-size: 12px; }
   .feature span { display: none; }
   .seg-hud { font-size: 9px; letter-spacing: .14em; gap: 8px; padding: 9px 11px; }
+  /* 72 tiles animating a filter() at once is what stalls the assembly on a
+     mid-range Android. Opacity and transform are composited - the same move,
+     none of the per-frame repaint. */
+  .seg-cell { filter: none; }
+  .seg-stage.play .seg-cell { animation-name: cellInLite; }
+  .seg-stage.play .seg-scan { animation-iteration-count: 1; }
   .build-stamp {
   margin-left: 10px;
   opacity: .55;
@@ -1145,27 +1254,40 @@ body.lit .build-stamp {
    on with battery saver and with the "remove animations" accessibility
    setting, so plenty of real visitors land here. Durations stay human,
    movement is what goes. */
+/* Android turns this preference on with battery saver, so a large share of
+   real phone visitors land in here. The previous version answered that by
+   deleting the page's motion outright - the copy stopped moving and the
+   cluster assembly, the one thing the slide exists to show, never played at
+   all. What actually helps is less travel, not no travel: amplitudes drop,
+   the endless loops stop, and every one-shot entrance still runs. */
 @media (prefers-reduced-motion: reduce) {
-  .bg-shot.on,
-  .bg-shot.on img { animation: none; }
+  /* the slow camera on the backdrop is halved, not cut */
+  .bg-shot.on { animation-duration: 46s; }
+  .bg-shot.on img { animation-duration: 62s; }
 
-  .slide .anim { transform: none; }
-  .slide.on .anim { animation: softIn .55s var(--ease) forwards; }
+  .slide .anim { transform: translateY(7px); }
+  .slide.on .anim { animation: riseIn .8s var(--ease-out) forwards; }
   .slide.leaving .anim { animation: softOut .45s var(--ease) forwards; }
 
   .slide.on .kicker.anim,
-  .slide.on .seg-copy .kicker { animation: softIn .55s var(--ease) .05s forwards; }
+  .slide.on .seg-copy .kicker {
+    animation:
+      kickerIn .8s var(--ease-out) .12s forwards,
+      kickerDriftCalm 26s ease-in-out 1.1s infinite;
+  }
+  @keyframes kickerDriftCalm {
+    0%   { transform: translate3d(0, 0, 0); }
+    50%  { transform: translate3d(5px, 0, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+  }
+  .aura { animation-duration: 54s; }
   .slide.leaving .kicker.anim,
   .slide.leaving .seg-copy .kicker { animation: softOut .45s var(--ease) forwards; }
   .seg-copy .kicker { opacity: 0; }
 
-  .kicker::before,
-  .slide.on .kicker::before { transform: none; animation: none; }
-
-  .seg-cell { animation: none !important; opacity: 1; transform: none; filter: none; }
-  .seg-stage.play .seg-scan { animation: none; opacity: 0; }
-  .seg-stage.building .seg-grid { gap: 0; }
-  .seg-hud .dot { animation: none; }
+  /* the assembly keeps playing - only the overshoot and the strobe go */
+  .seg-stage.play .seg-cell { animation-name: cellInLite; }
+  .seg-stage.play .seg-scan { animation-iteration-count: 1; opacity: .6; }
   .cue { animation: none; }
 }
 
@@ -1189,6 +1311,7 @@ body.lit .build-stamp {
 <section class="stage" id="stage" aria-roledescription="carousel" aria-label="Featured">
   <div class="bg-layer" id="bgLayer"></div>
   <div class="scrim" id="scrim"></div>
+  <div class="aura" aria-hidden="true"></div>
   <div class="grain"></div>
 
   <div class="slides" id="slides"></div>
@@ -1225,7 +1348,7 @@ body.lit .build-stamp {
 </footer>
 
 <script>
-var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:32:20", "projects": [{"id": "polynite", "title": "PolyNite", "type": "app", "collection": "spinview", "status": "live", "released": true, "release_date": "2026-08-26", "tagline": "Drop a model. Step inside it.", "description": "A WebGPU-powered GLB and glTF viewer. Drop a 3D model and explore it instantly with dynamic lighting, materials, animations and Nanite-like adaptive geometry - then step inside it in VR.", "short": "A WebGPU GLB viewer with adaptive geometry, scene lighting and VR.", "iconText": "P", "cover": "screen/img07.jpg", "screens": ["screen/img07.jpg", "screen/img09.jpg", "screen/img05.jpg", "screen/img13jpg.jpg", "screen/img08.jpg", "screen/img02.jpg", "screen/img03.jpg", "screen/img01.jpg", "screen/img10.jpg", "screen/img11.jpg", "screen/img12.jpg", "screen/img06.jpg"], "tags": ["WebGPU", "3D", "GLB", "Viewer"], "url": "/polynite/", "play": "/polynite/", "play_label": "Launch PolyNite", "visible": true, "featured": true, "featured_order": 1, "featured_kicker": "SpinView · Now live", "features": [{"title": "Drag & drop GLB", "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded."}, {"title": "VR mode", "text": "Put on a headset and walk around your model at real scale."}, {"title": "Adaptive geometry", "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail."}, {"title": "Build a scene", "text": "Lighting, environments and materials to frame a model properly."}, {"title": "Share it", "text": "Send what you built and it opens in any browser."}, {"title": "Any device", "text": "One viewer, from a phone to a headset."}], "slides": [{"id": "hero", "kind": "hero", "image": "screen/img07.jpg", "focus": "50% 45%", "kicker": "SpinView · Now live", "title": "PolyNite", "text": "Drop a GLB and explore every detail - in your browser, or in VR.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}], "pool": "showcase"}, {"id": "drop", "kind": "hero", "image": "screen/img02.jpg", "focus": "50% 50%", "kicker": "The viewer", "title": "Drag. Drop. Done.", "text": "Drop a .glb or .gltf on the page and it opens instantly, with lighting, materials and animation. Nothing to install, nothing uploaded.", "actions": [{"label": "Open the viewer", "href": "/polynite/", "primary": true}], "pool": "showcase"}, {"id": "clusters", "kind": "segmentation", "image": "seg/01.jpg", "focus": "50% 42%", "kicker": "Inside the engine", "title": "It sees clusters", "text": "PolyNite breaks every mesh into thousands of small clusters. Each frame, the engine keeps only the clusters — and the level of detail — the camera actually needs.", "chips": ["Meshlet clusters", "View-dependent LOD", "GPU-driven culling"], "stats": [], "readout": "Building cluster hierarchy"}, {"id": "render", "kind": "reveal", "image": "screen/img13jpg.jpg", "focus": "50% 40%", "kicker": "On screen", "title": "You see the model", "text": "None of that work is visible. What reaches the screen is the full model — lit, shaded and animated in real time.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}], "pool": "showcase"}, {"id": "vr", "kind": "reveal", "image": "screen/img09.jpg", "focus": "50% 45%", "kicker": "Step inside", "title": "See it at real scale", "text": "Open the same scene on a headset and walk around your model in VR - no export, no second tool.", "pool": "showcase", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}]}, {"id": "dense", "kind": "features", "image": "screen/img09.jpg", "focus": "50% 45%", "kicker": "Everything it does", "title": "More than a preview", "text": "Load, inspect, optimise, light, share - and step inside.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}], "pool": "showcase"}], "pools": {"showcase": ["screen/img07.jpg", "screen/img02.jpg", "screen/img03.jpg", "screen/img09.jpg", "screen/img05.jpg", "screen/img08.jpg", "screen/img13jpg.jpg", "screen/img10.jpg", "screen/img06.jpg"]}, "_base": "./_data/app/polynite/"}, {"id": "numeris", "title": "Numeris", "type": "game", "collection": "spinmind", "status": "beta", "released": true, "badge": "Beta", "tagline": "Solve, progress and share your branch.", "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.", "short": "Cross-math puzzles inside an evolving visual world.", "icon": "screen/image.webp", "cover": "screen/image2.webp", "screens": ["screen/image2.webp", "screen/image.webp", "screen/image3.webp"], "tags": ["Puzzle", "SpinMind"], "url": "/projects/numeris.html", "play": "/numeris/", "play_label": "Play Numeris", "visible": true, "featured": true, "featured_order": 2, "featured_kicker": "SpinMind · Beta", "slides": [{"id": "numeris", "kind": "hero", "image": "screen/image2.webp", "focus": "50% 42%", "kicker": "SpinMind", "badge": "Beta", "title": "Numeris", "text": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.", "actions": [{"label": "Play Numeris", "href": "/numeris/", "primary": true}]}], "lift": 1.45, "scrim": 0.84, "_base": "./_data/game/numeris/"}, {"id": "raylab", "title": "RayLab", "type": "experiment", "collection": "spinview", "status": "experimental", "released": true, "badge": "Experimental", "tagline": "Every pixel traced.", "description": "A realtime blob raytracer running on WebGPU. Soft shadows, a BVH-accelerated scene, adaptive resolution and a side-by-side VR view.", "short": "A realtime blob raytracer on WebGPU, viewable in VR.", "iconText": "R", "cover": "screen/03.jpg", "screens": ["screen/03.jpg", "screen/01.jpg", "screen/02.jpg"], "tags": ["Raytracing", "WebGPU", "VR", "Experiment"], "url": "/raylab/", "play": "/raylab/", "play_label": "Open RayLab", "visible": true, "featured": true, "featured_order": 3, "featured_kicker": "Experiment · Raytracing", "lift": 1.05, "scrim": 0.9, "features": [{"title": "Realtime raytracing", "text": "Every pixel traced on the GPU. No rasteriser anywhere in the pipeline."}, {"title": "VR mode", "text": "Side-by-side stereo, traced live for each eye."}, {"title": "Soft shadows", "text": "Penumbra and contact shadows straight out of the tracer."}, {"title": "BVH accelerated", "text": "A bounding-volume hierarchy keeps the scene fast as it grows."}, {"title": "Adaptive resolution", "text": "The render scale follows the framerate instead of dropping it."}, {"title": "Blob geometry", "text": "Capsules and spheres blended into creatures - maths, not meshes."}], "slides": [{"id": "raylab", "kind": "hero", "image": "screen/03.jpg", "focus": "50% 45%", "kicker": "Experiment · Raytracing", "badge": "Experimental", "title": "RayLab", "text": "Every pixel traced in real time. No meshes, no rasteriser - rays, blobs and light, on WebGPU.", "pool": "traced", "actions": [{"label": "Open RayLab", "href": "/raylab/", "primary": true}]}, {"id": "traced-vr", "kind": "features", "image": "screen/01.jpg", "focus": "50% 45%", "kicker": "And in VR", "badge": "Experimental", "title": "Traced for each eye", "text": "The same scene in side-by-side stereo - shadows and light computed live, from inside.", "pool": "traced", "actions": [{"label": "Open RayLab", "href": "/raylab/", "primary": true}]}], "pools": {"traced": ["screen/03.jpg", "screen/01.jpg", "screen/02.jpg"]}, "_base": "./_data/experiment/raylab/"}, {"id": "deitouch", "title": "DeiTouch", "type": "app", "status": "forming", "released": false, "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.", "short": "Experimental touch interfaces and virtual keyboard concepts.", "iconText": "D", "tags": ["Touch", "Interface"], "visible": true, "featured": false, "featured_order": 2, "featured_kicker": "App · Forming", "_base": "./_data/app/deitouch/"}, {"id": "holophone", "title": "Holophone", "type": "app", "status": "forming", "released": false, "description": "A tactile music experiment where gestures become the instrument.", "short": "A tactile musical interface shaped directly through touch.", "iconText": "H", "tags": ["Music", "Touch"], "visible": true, "featured": false, "featured_order": 3, "featured_kicker": "Music · Forming", "_base": "./_data/app/holophone/"}, {"id": "mandelbrot", "title": "Mandelbrot Study", "type": "experiment", "status": "prototype", "released": false, "description": "Procedural shader studies around evolving Mandelbrot worlds.", "iconText": "M", "tags": ["Shader", "Fractal"], "visible": true, "featured": false, "_base": "./_data/experiment/mandelbrot/"}], "spinfx": [{"id": "spinfx-099", "number": 99, "title": "Depth Study", "type": "spinfx", "description": "Living-image experiment exploring movement and visual parallax.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-19", "_base": "./_data/spinfx/099/"}, {"id": "spinfx-098", "number": 98, "title": "Motion Study", "type": "spinfx", "description": "Compact visual experiment from the SpinFX series.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-12", "_base": "./_data/spinfx/098/"}, {"id": "spinfx-097", "number": 97, "title": "Light Study", "type": "spinfx", "description": "Small exploration around light, depth and motion.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-05", "_base": "./_data/spinfx/097/"}, {"id": "spinfx-096", "number": 96, "title": "Shader Study", "type": "spinfx", "description": "A procedural visual experiment from SpinView.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-07-29", "_base": "./_data/spinfx/096/"}, {"id": "spinfx-001", "number": 1, "title": "Wire Study", "type": "spinfx", "description": "An early flow study from the SpinFX series.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-07-01", "_base": "./_data/spinfx/001/"}], "notes": [{"date": "08/19", "title": "Numeris sharing branches", "text": "Refining how a branch is shared, continued and challenged.", "url": "/projects/numeris.html"}, {"date": "08/18", "title": "Dynamic boss levels", "text": "Testing bosses that build the board while the player solves it.", "url": "/projects/numeris.html"}, {"date": "08/17", "title": "Mandelbrot as identity", "text": "The fractal background is becoming one of Numeris' strongest visual signatures.", "url": "/projects/numeris.html"}]}/* SPINVIEW_CATALOG_END */;
+var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:32:20", "projects": [{"id": "polynite", "title": "PolyNite", "type": "app", "collection": "spinview", "status": "live", "released": true, "release_date": "2026-08-26", "tagline": "Drop a model. Step inside it.", "description": "A WebGPU-powered GLB and glTF viewer. Drop a 3D model and explore it instantly with dynamic lighting, materials, animations and Nanite-like adaptive geometry - then step inside it in VR.", "short": "A WebGPU GLB viewer with adaptive geometry, scene lighting and VR.", "iconText": "P", "cover": "screen/img07.jpg", "screens": ["screen/img07.jpg", "screen/img09.jpg", "screen/img05.jpg", "screen/img13jpg.jpg", "screen/img08.jpg", "screen/img02.jpg", "screen/img03.jpg", "screen/img01.jpg", "screen/img10.jpg", "screen/img11.jpg", "screen/img12.jpg", "screen/img06.jpg"], "tags": ["WebGPU", "3D", "GLB", "Viewer"], "url": "/polynite/", "play": "/polynite/", "play_label": "Launch PolyNite", "visible": true, "featured": true, "featured_order": 1, "featured_kicker": "SpinView \u00b7 Now live", "features": [{"title": "Drag & drop GLB", "text": "Drop a .glb or .gltf anywhere on the page. Nothing is uploaded."}, {"title": "VR mode", "text": "Put on a headset and walk around your model at real scale."}, {"title": "Adaptive geometry", "text": "Nanite-like cluster LOD keeps dense meshes fast without losing detail."}, {"title": "Build a scene", "text": "Lighting, environments and materials to frame a model properly."}, {"title": "Share it", "text": "Send what you built and it opens in any browser."}, {"title": "Any device", "text": "One viewer, from a phone to a headset."}], "slides": [{"id": "hero", "kind": "hero", "image": "screen/img07.jpg", "focus": "50% 45%", "kicker": "SpinView \u00b7 Now live", "title": "PolyNite", "text": "Drop a GLB and explore every detail - in your browser, or in VR.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}], "pool": "showcase"}, {"id": "clusters", "kind": "segmentation", "image": "seg/01.jpg", "focus": "50% 42%", "kicker": "Inside the engine", "title": "It sees clusters", "text": "PolyNite breaks every mesh into thousands of small clusters. Each frame, the engine keeps only the clusters \u2014 and the level of detail \u2014 the camera actually needs.", "chips": ["Meshlet clusters", "View-dependent LOD", "GPU-driven culling"], "stats": [], "readout": "Building cluster hierarchy"}, {"id": "render", "kind": "reveal", "image": "screen/img13jpg.jpg", "focus": "50% 40%", "kicker": "On screen", "title": "You see the model", "text": "None of that work is visible. What reaches the screen is the full model \u2014 lit, shaded and animated in real time.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}], "pool": "showcase"}, {"id": "drop", "kind": "hero", "image": "screen/img02.jpg", "focus": "50% 50%", "kicker": "The viewer", "title": "Drag. Drop. Done.", "text": "Drop a .glb or .gltf on the page and it opens instantly, with lighting, materials and animation. Nothing to install, nothing uploaded.", "actions": [{"label": "Open the viewer", "href": "/polynite/", "primary": true}], "pool": "showcase"}, {"id": "vr", "kind": "reveal", "image": "screen/img09.jpg", "focus": "50% 45%", "kicker": "Step inside", "title": "See it at real scale", "text": "Open the same scene on a headset and walk around your model in VR - no export, no second tool.", "pool": "showcase", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}]}, {"id": "dense", "kind": "features", "image": "screen/img09.jpg", "focus": "50% 45%", "kicker": "Everything it does", "title": "More than a preview", "text": "Load, inspect, optimise, light, share - and step inside.", "actions": [{"label": "Launch PolyNite", "href": "/polynite/", "primary": true}], "pool": "showcase"}], "pools": {"showcase": ["screen/img07.jpg", "screen/img02.jpg", "screen/img03.jpg", "screen/img09.jpg", "screen/img05.jpg", "screen/img08.jpg", "screen/img13jpg.jpg", "screen/img10.jpg", "screen/img06.jpg"]}, "_base": "./_data/app/polynite/"}, {"id": "numeris", "title": "Numeris", "type": "game", "collection": "spinmind", "status": "beta", "released": true, "badge": "Beta", "tagline": "Solve, progress and share your branch.", "description": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.", "short": "Cross-math puzzles inside an evolving visual world.", "icon": "screen/image.webp", "cover": "screen/image2.webp", "screens": ["screen/image2.webp", "screen/image.webp", "screen/image3.webp"], "tags": ["Puzzle", "SpinMind"], "url": "/projects/numeris.html", "play": "/numeris/", "play_label": "Play Numeris", "visible": true, "featured": true, "featured_order": 2, "featured_kicker": "SpinMind \u00b7 Beta", "slides": [{"id": "numeris", "kind": "hero", "image": "screen/image2.webp", "focus": "50% 42%", "kicker": "SpinMind", "badge": "Beta", "title": "Numeris", "text": "Cross-math puzzles inside an evolving visual world. Solve, progress and share your branch.", "actions": [{"label": "Play Numeris", "href": "/numeris/", "primary": true}]}], "lift": 1.45, "scrim": 0.84, "_base": "./_data/game/numeris/"}, {"id": "raylab", "title": "RayLab", "type": "experiment", "collection": "spinview", "status": "experimental", "released": true, "badge": "Experimental", "tagline": "Every pixel traced.", "description": "A realtime blob raytracer running on WebGPU. Soft shadows, a BVH-accelerated scene, adaptive resolution and a side-by-side VR view.", "short": "A realtime blob raytracer on WebGPU, viewable in VR.", "iconText": "R", "cover": "screen/03.jpg", "screens": ["screen/03.jpg", "screen/01.jpg", "screen/02.jpg"], "tags": ["Raytracing", "WebGPU", "VR", "Experiment"], "url": "/raylab/", "play": "/raylab/", "play_label": "Open RayLab", "visible": true, "featured": true, "featured_order": 3, "featured_kicker": "Experiment \u00b7 Raytracing", "lift": 1.05, "scrim": 0.9, "features": [{"title": "Realtime raytracing", "text": "Every pixel traced on the GPU. No rasteriser anywhere in the pipeline."}, {"title": "VR mode", "text": "Side-by-side stereo, traced live for each eye."}, {"title": "Soft shadows", "text": "Penumbra and contact shadows straight out of the tracer."}, {"title": "BVH accelerated", "text": "A bounding-volume hierarchy keeps the scene fast as it grows."}, {"title": "Adaptive resolution", "text": "The render scale follows the framerate instead of dropping it."}, {"title": "Blob geometry", "text": "Capsules and spheres blended into creatures - maths, not meshes."}], "slides": [{"id": "raylab", "kind": "hero", "image": "screen/03.jpg", "focus": "50% 45%", "kicker": "Experiment \u00b7 Raytracing", "badge": "Experimental", "title": "RayLab", "text": "Every pixel traced in real time. No meshes, no rasteriser - rays, blobs and light, on WebGPU.", "pool": "traced", "actions": [{"label": "Open RayLab", "href": "/raylab/", "primary": true}]}, {"id": "traced-vr", "kind": "features", "image": "screen/01.jpg", "focus": "50% 45%", "kicker": "And in VR", "badge": "Experimental", "title": "Traced for each eye", "text": "The same scene in side-by-side stereo - shadows and light computed live, from inside.", "pool": "traced", "actions": [{"label": "Open RayLab", "href": "/raylab/", "primary": true}]}], "pools": {"traced": ["screen/03.jpg", "screen/01.jpg", "screen/02.jpg"]}, "_base": "./_data/experiment/raylab/"}, {"id": "deitouch", "title": "DeiTouch", "type": "app", "status": "forming", "released": false, "description": "Experimental touch interfaces and virtual keyboard ideas. Still forming inside SpinView.", "short": "Experimental touch interfaces and virtual keyboard concepts.", "iconText": "D", "tags": ["Touch", "Interface"], "visible": true, "featured": false, "featured_order": 2, "featured_kicker": "App \u00b7 Forming", "_base": "./_data/app/deitouch/"}, {"id": "holophone", "title": "Holophone", "type": "app", "status": "forming", "released": false, "description": "A tactile music experiment where gestures become the instrument.", "short": "A tactile musical interface shaped directly through touch.", "iconText": "H", "tags": ["Music", "Touch"], "visible": true, "featured": false, "featured_order": 3, "featured_kicker": "Music \u00b7 Forming", "_base": "./_data/app/holophone/"}, {"id": "mandelbrot", "title": "Mandelbrot Study", "type": "experiment", "status": "prototype", "released": false, "description": "Procedural shader studies around evolving Mandelbrot worlds.", "iconText": "M", "tags": ["Shader", "Fractal"], "visible": true, "featured": false, "_base": "./_data/experiment/mandelbrot/"}], "spinfx": [{"id": "spinfx-099", "number": 99, "title": "Depth Study", "type": "spinfx", "description": "Living-image experiment exploring movement and visual parallax.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-19", "_base": "./_data/spinfx/099/"}, {"id": "spinfx-098", "number": 98, "title": "Motion Study", "type": "spinfx", "description": "Compact visual experiment from the SpinFX series.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-12", "_base": "./_data/spinfx/098/"}, {"id": "spinfx-097", "number": 97, "title": "Light Study", "type": "spinfx", "description": "Small exploration around light, depth and motion.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-08-05", "_base": "./_data/spinfx/097/"}, {"id": "spinfx-096", "number": 96, "title": "Shader Study", "type": "spinfx", "description": "A procedural visual experiment from SpinView.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-07-29", "_base": "./_data/spinfx/096/"}, {"id": "spinfx-001", "number": 1, "title": "Wire Study", "type": "spinfx", "description": "An early flow study from the SpinFX series.", "cover": "cover.webp", "url": "https://www.youtube.com/@SpinViewFx", "visible": true, "featured": false, "date": "2026-07-01", "_base": "./_data/spinfx/001/"}], "notes": [{"date": "08/19", "title": "Numeris sharing branches", "text": "Refining how a branch is shared, continued and challenged.", "url": "/projects/numeris.html"}, {"date": "08/18", "title": "Dynamic boss levels", "text": "Testing bosses that build the board while the player solves it.", "url": "/projects/numeris.html"}, {"date": "08/17", "title": "Mandelbrot as identity", "text": "The fractal background is becoming one of Numeris' strongest visual signatures.", "url": "/projects/numeris.html"}]}/* SPINVIEW_CATALOG_END */;
 
 (function () {
   "use strict";
@@ -1381,6 +1504,8 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
       used[pick] = true;
       sl.image = pick;
       if (sl._img && sl._img.getAttribute("src") !== pick + ver()) {
+        /* a swapped file has to earn its fade again */
+        sl._img.classList.remove("ready");
         sl._img.src = pick + ver();
       }
     }
@@ -1510,10 +1635,14 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
       if (s.kind === "segmentation") wrap.className += " muted";
       if (s.image) {
         var img = el("img");
-        img.src = s.image + ver();
         img.alt = "";
         img.decoding = "async";
-        img.loading = i === 0 ? "eager" : "lazy";
+        /* "lazy" on a carousel means the file only starts downloading once
+           the slide is already on screen, which is exactly the pop-in.
+           The first few are fetched up front; the rest are warmed in the
+           background by warmShots() once the page is up. */
+        img.loading = i < 3 ? "eager" : "lazy";
+        if (i === 0) { try { img.fetchPriority = "high"; } catch (e) {} }
         img.style.objectPosition = s.focus;
         /* a dark screenshot needs a lift before the scrim buries it */
         if (s.lift) img.style.filter = "brightness(" + s.lift + ") saturate(1.12)";
@@ -1530,6 +1659,10 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
             this.remove();
           }
         };
+        /* the class is what fades it in; it goes on only once pixels exist */
+        img.addEventListener("load", function () { this.classList.add("ready"); });
+        img.src = s.image + ver();
+        if (img.complete && img.naturalWidth) img.classList.add("ready");
         wrap.appendChild(img);
         s._img = img;
       }
@@ -1747,12 +1880,19 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
     var probe = new Image();
     var ready = false;
     var waiting = null;
-    probe.onload = probe.onerror = function () {
+    function release() {
+      if (ready) return;
       ready = true;
       if (waiting) { var f = waiting; waiting = null; f(); }
-    };
+    }
+    probe.onload = probe.onerror = release;
     probe.src = s.image + ver();
-    if (probe.complete) ready = true;
+    if (probe.complete && probe.naturalWidth) ready = true;
+    /* A load event that never arrives - a proxy stall, a dead file, an
+       Android tab restored from the background - used to leave the assembly
+       waiting forever and the slide showing an empty frame. It plays anyway
+       after three seconds. */
+    setTimeout(release, 3000);
 
     s._seg = {
       stage: stage, pct: pct, bar: bar, raf: null,
@@ -2086,35 +2226,112 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
     });
 
     var stage = $("stage");
+    var slidesHost = $("slides");
+    var bgHost = $("bgLayer");
 
-    /* Pause only while the pointer is actually on something readable or
-       clickable. The stage fills the whole viewport, so pausing on the stage
-       itself would freeze the reel for anyone whose cursor sits on the page. */
-    var HOLD = ".slide-inner, .cta, .nav, .cue, .mark-corner";
-    function holds(node) {
+    /* Hover-to-pause, but only where hovering is a thing. A touch browser
+       synthesises a mouseover on tap and then never sends the matching
+       mouseleave - so one tap latched state.paused true and the reel stopped
+       advancing for the rest of the visit. That is the frozen counter. */
+    var canHover = false;
+    try {
+      canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    } catch (e) {}
+
+    if (canHover) {
+      /* Pause only while the pointer is actually on something readable or
+         clickable. The stage fills the whole viewport, so pausing on the stage
+         itself would freeze the reel for anyone whose cursor sits on the page. */
+      var HOLD = ".slide-inner, .cta, .nav, .cue, .mark-corner";
+      var holds = function (node) {
+        while (node && node !== stage) {
+          if (node.matches && node.matches(HOLD)) return true;
+          node = node.parentNode;
+        }
+        return false;
+      };
+      stage.addEventListener("mouseover", function (e) { state.paused = holds(e.target); });
+      stage.addEventListener("mouseleave", function () { state.paused = false; });
+    }
+
+    /* ---- tap anywhere in the scene: next slide ------------------------- */
+    /* Anything that already does something of its own is left alone. */
+    var SKIP = "a, button, input, select, textarea, [role='button'], .cta, .nav, .cue, .projects, .mark-corner";
+    var noTapUntil = 0;
+
+    stage.addEventListener("click", function (e) {
+      if (Date.now() < noTapUntil) return;      /* that click was the end of a drag */
+      var node = e.target;
       while (node && node !== stage) {
-        if (node.matches && node.matches(HOLD)) return true;
+        if (node.matches && node.matches(SKIP)) return;
         node = node.parentNode;
       }
-      return false;
-    }
-    stage.addEventListener("mouseover", function (e) { state.paused = holds(e.target); });
-    stage.addEventListener("mouseleave", function () { state.paused = false; });
+      go(state.index + 1, true);
+    });
 
-    var x0 = null, y0 = null;
+    /* ---- drag the reel ------------------------------------------------- */
+    /* The slide tracks the finger with resistance, so the gesture is visible
+       while it happens rather than being judged after the fact. Past the
+       threshold it commits in the direction of travel; short of it, it eases
+       back and the tap handler is suppressed so a scrubbed drag is not also
+       read as a tap. */
+    var x0 = null, y0 = null, axis = null, moved = false;
+
+    function drag(dx) {
+      var t = dx ? "translate3d(" + dx.toFixed(1) + "px,0,0)" : "";
+      slidesHost.style.transform = t;
+      if (bgHost) bgHost.style.transform = dx ? "translate3d(" + (dx * 0.22).toFixed(1) + "px,0,0)" : "";
+    }
+    function settle() {
+      slidesHost.classList.add("settle");
+      if (bgHost) bgHost.classList.add("settle");
+      drag(0);
+      setTimeout(function () {
+        slidesHost.classList.remove("settle");
+        if (bgHost) bgHost.classList.remove("settle");
+      }, 460);
+    }
+
     stage.addEventListener("touchstart", function (e) {
-      if (!e.touches.length) return;
+      if (e.touches.length !== 1) return;
       x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+      axis = null; moved = false;
+      slidesHost.classList.remove("settle");
+      if (bgHost) bgHost.classList.remove("settle");
     }, { passive: true });
-    stage.addEventListener("touchend", function (e) {
-      if (x0 === null || !e.changedTouches.length) return;
-      var dx = e.changedTouches[0].clientX - x0;
-      var dy = e.changedTouches[0].clientY - y0;
-      if (Math.abs(dx) > 46 && Math.abs(dx) > Math.abs(dy)) {
-        go(state.index + (dx < 0 ? 1 : -1), true);
+
+    stage.addEventListener("touchmove", function (e) {
+      if (x0 === null || !e.touches.length) return;
+      var dx = e.touches[0].clientX - x0;
+      var dy = e.touches[0].clientY - y0;
+      if (axis === null) {
+        /* wait until the gesture has an opinion, so a vertical scroll is
+           never stolen by the carousel */
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
       }
-      x0 = null; y0 = null;
+      if (axis !== "x") return;
+      moved = true;
+      state.paused = true;
+      drag(dx * 0.55);
     }, { passive: true });
+
+    function endDrag(e) {
+      if (x0 === null) return;
+      var dx = (e.changedTouches && e.changedTouches.length)
+        ? e.changedTouches[0].clientX - x0 : 0;
+      x0 = null; y0 = null;
+      state.paused = false;
+      settle();
+      if (axis === "x" && moved) {
+        noTapUntil = Date.now() + 700;
+        var threshold = Math.max(52, Math.min(130, window.innerWidth * 0.17));
+        if (Math.abs(dx) > threshold) go(state.index + (dx < 0 ? 1 : -1), true);
+      }
+      axis = null; moved = false;
+    }
+    stage.addEventListener("touchend", endDrag, { passive: true });
+    stage.addEventListener("touchcancel", endDrag, { passive: true });
 
     document.addEventListener("visibilitychange", function () {
       state.paused = document.hidden;
@@ -2299,11 +2516,28 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
       }
     });
 
-    /* warm the next background so the cross-fade is clean */
-    if (state.slides[1] && state.slides[1].image) {
-      var pre = new Image();
-      pre.src = state.slides[1].image + ver();
-    }
+    /* Warm every backdrop, one at a time, behind the reel. Sequential and
+       not parallel on purpose: a phone on mobile data that fires nine
+       requests at once finishes all of them late, including the one the
+       viewer is about to need. */
+    warmShots();
+  }
+
+  function warmShots() {
+    var queue = [], seen = {};
+    state.slides.forEach(function (s) {
+      if (s.image && !seen[s.image]) { seen[s.image] = 1; queue.push(s.image); }
+      (s.pool || []).forEach(function (u) {
+        if (!seen[u]) { seen[u] = 1; queue.push(u); }
+      });
+    });
+    var i = 0;
+    (function next() {
+      if (i >= queue.length) return;
+      var im = new Image();
+      im.onload = im.onerror = function () { setTimeout(next, 40); };
+      im.src = queue[i++] + ver();
+    })();
   }
 
   if (document.readyState === "loading") {
