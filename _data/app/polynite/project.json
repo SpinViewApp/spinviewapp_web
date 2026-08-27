@@ -78,10 +78,6 @@
           "label": "Launch PolyNite",
           "href": "/polynite/",
           "primary": true
-        },
-        {
-          "label": "See how it works",
-          "slide": "clusters"
         }
       ],
       "pool": "showcase"

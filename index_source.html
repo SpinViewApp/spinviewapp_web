@@ -288,13 +288,23 @@ body.lit .projects { opacity: 1; transform: none; }
   height: 100%;
   object-fit: cover;
   object-position: 50% 45%;
-  transform: scale(1.08);
+  transform: scale(1.12);
 }
 .bg-shot.on { opacity: 1; }
-.bg-shot.on img { animation: drift 26s ease-in-out infinite alternate; }
-@keyframes drift {
-  from { transform: scale(1.06) translate3d(-.8%, .6%, 0); }
-  to   { transform: scale(1.15) translate3d(.9%, -.9%, 0); }
+
+/* The pan and the zoom run on the wrapper and on the image separately, with
+   periods that do not divide into each other - so the pair never repeats the
+   same frame and the motion reads as a slow camera rather than a loop. */
+.bg-shot.on { animation: pan 23s ease-in-out infinite alternate; }
+.bg-shot.on img { animation: zoom 31s ease-in-out infinite alternate; }
+
+@keyframes pan {
+  from { transform: translate3d(-1.8%, 1.1%, 0); }
+  to   { transform: translate3d( 1.8%, -1.3%, 0); }
+}
+@keyframes zoom {
+  from { transform: scale(1.10); }
+  to   { transform: scale(1.24); }
 }
 
 /* dim the photo when the slide has its own visual (segmentation) */
@@ -337,9 +347,29 @@ body.lit .projects { opacity: 1; transform: none; }
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity .5s var(--ease), visibility .5s;
+  transition: opacity .62s var(--ease), visibility .62s;
 }
 .slide.on { opacity: 1; visibility: visible; pointer-events: auto; }
+
+/* Leaving is its own state, not just the absence of .on: the copy sinks and
+   fades on the way out instead of being cut. Without it the outgoing text
+   simply stops existing, which is what reads as brutal. */
+.slide.leaving { opacity: 0; visibility: visible; pointer-events: none; }
+.slide.leaving .anim { animation: sink .52s var(--ease) forwards; }
+.slide.leaving .anim:nth-child(1) { animation-delay: 0s; }
+.slide.leaving .anim:nth-child(2) { animation-delay: .03s; }
+.slide.leaving .anim:nth-child(3) { animation-delay: .16s; }
+.slide.leaving .anim:nth-child(4) { animation-delay: .09s; }
+.slide.leaving .kicker.anim,
+.slide.leaving .seg-copy .kicker {
+  animation: kickerOut .5s var(--ease) forwards;
+}
+@keyframes sink {
+  to { opacity: 0; transform: translate3d(0, -16px, 0); }
+}
+@keyframes kickerOut {
+  to { opacity: 0; transform: translate3d(24px, 0, 0); }
+}
 
 .slide-inner {
   position: relative;
@@ -372,10 +402,43 @@ body.lit .projects { opacity: 1; transform: none; }
   animation: riseIn .9s var(--ease-out) forwards;
 }
 .slide.on .anim:nth-child(1) { animation-delay: .06s; }
-.slide.on .anim:nth-child(2) { animation-delay: .14s; }
-.slide.on .anim:nth-child(3) { animation-delay: .22s; }
-.slide.on .anim:nth-child(4) { animation-delay: .30s; }
-.slide.on .anim:nth-child(5) { animation-delay: .38s; }
+
+/* The kicker does not rise with the rest: it slides in from the left while
+   its rule draws itself, then keeps drifting sideways for as long as the
+   slide is up. It is small, letterspaced and glowing, so promoting it to its
+   own layer costs nothing visible - which is what keeps the slow travel
+   smooth instead of stepping a pixel at a time. */
+.slide.on .kicker.anim,
+.slide.on .seg-copy .kicker {
+  will-change: transform;
+  animation:
+    kickerIn .85s var(--ease-out) .16s forwards,
+    kickerDrift 15s ease-in-out 1.1s infinite,
+    kickerPulse 6.5s ease-in-out 1.1s infinite;
+}
+@keyframes kickerIn {
+  from { opacity: 0; transform: translate3d(-26px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+/* starts and ends at zero, so it never jumps when it takes over from the entrance */
+@keyframes kickerDrift {
+  0%   { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(9px, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+@keyframes kickerPulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.35); }
+}
+.kicker::before { transform: scaleX(0); transform-origin: left center; }
+.slide.on .kicker::before {
+  animation: ruleIn .7s var(--ease-out) .46s forwards;
+}
+@keyframes ruleIn { to { transform: scaleX(1); } }
+.slide.on .anim:nth-child(2) { animation-delay: .26s; }
+.slide.on .anim:nth-child(3) { animation-delay: .36s; }
+.slide.on .anim:nth-child(4) { animation-delay: .46s; }
+.slide.on .anim:nth-child(5) { animation-delay: .56s; }
 @keyframes riseIn { to { opacity: 1; transform: none; } }
 
 .kicker {
@@ -546,6 +609,7 @@ body.lit .projects { opacity: 1; transform: none; }
   justify-items: stretch;
 }
 .seg-copy { display: grid; gap: clamp(12px, 1.8vh, 20px); justify-items: start; }
+.seg-copy .kicker { opacity: 0; }
 .seg-copy .title { font-size: clamp(34px, 4.6vw, 62px); }
 .seg-copy .blurb { max-width: 44ch; }
 
@@ -1071,6 +1135,10 @@ body.lit .build-stamp {
     transition-duration: .01ms !important;
   }
   .slide .anim { opacity: 1; transform: none; }
+  .seg-copy .kicker { opacity: 1; }
+  .kicker::before { transform: none; }
+  .slide.on .kicker.anim,
+  .slide.on .seg-copy .kicker { animation: none; opacity: 1; }
   .seg-cell { opacity: 1; transform: none; filter: none; }
 }
 </style>
@@ -1768,6 +1836,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       /* --p still holds ~100% from this dot's last run; clear it before the
          dot goes active or it flashes full for one frame */
       s._dot.style.setProperty("--p", "0%");
+      if (on) s._node.classList.remove("leaving");
       s._node.classList.toggle("on", on);
       s._bg.classList.toggle("on", on);
       s._dot.classList.toggle("on", on);
@@ -1775,6 +1844,14 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       s._dot.setAttribute("aria-selected", on ? "true" : "false");
       if (!on && s.kind === "segmentation" && k === prev) segStop(s);
     });
+
+    /* let the outgoing copy play its exit before it is dropped */
+    if (prev !== next && state.slides[prev]) {
+      var out = state.slides[prev]._node;
+      out.classList.add("leaving");
+      if (out._exit) clearTimeout(out._exit);
+      out._exit = setTimeout(function () { out.classList.remove("leaving"); }, 700);
+    }
 
     state.index = next;
 

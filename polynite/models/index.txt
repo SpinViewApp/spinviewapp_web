@@ -3,10 +3,15 @@ Dragon_Model.glb 364472
 gal-b-die-4221.glb 906060
 gal-b-lantern-4120.glb 220508
 Game_Console_Pack.glb 387676
+Game_Console_Pack.high.glb 195932
+Game_Console_Pack.tiny.glb 143004
 Holofil-flying-icarus.glb 5593444
 Human_Skull.glb 2185768
 nickpanek-black-knight-1689.glb 14391060
 pixellabs-battle-axe-3881.glb 43241768
+pixellabs-battle-axe-3881.high.glb 7842556
+pixellabs-battle-axe-3881.low.glb 3008236
+pixellabs-battle-axe-3881.tiny.glb 1326828
 pixellabs-battle-axe-3881_optimized.glb 42872940
 pixellabs-battle-axe-3881_optimized.high.glb 7842556
 pixellabs-battle-axe-3881_optimized.low.glb 2938260
@@ -21,6 +26,7 @@ pixellabs-fantasy-signpost-3561.glb 41219700
 pixellabs-fantasy-weapon-3419.glb 29426652
 pixellabs-fantasy-weapon-3466.glb 34514060
 pixellabs-futuristic-crab-machine-2554.glb 25101836
+pixellabs-futuristic-crab-machine-2554.tiny.glb 7655656
 pixellabs-futuristic-mech-armor-3d-model-2552.glb 28120472
 pixellabs-ghost-spirit-3368.glb 29523492
 pixellabs-glb-3347.glb 48405256
