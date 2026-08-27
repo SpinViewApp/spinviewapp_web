@@ -295,8 +295,12 @@ body.lit .projects { opacity: 1; transform: none; }
   inset: 0;
   opacity: 0;
   transition: opacity 1.45s var(--ease);
-  will-change: opacity, transform;
 }
+/* Only the shot on screen is promoted. will-change on the base rule meant
+   nine full-screen compositor layers at once - on a phone at dpr 3 that is
+   roughly 11 MB each, held permanently, for eight pictures nobody is
+   looking at. */
+.bg-shot.on { will-change: opacity, transform; }
 .bg-shot img {
   width: 100%;
   height: 100%;
@@ -338,7 +342,10 @@ body.lit .projects { opacity: 1; transform: none; }
    cluster slide on Android - the compositor simply stopped keeping up. On
    touch hardware the same slide is pushed back with colour and exposure
    instead, and the camera keeps moving. */
-@media (hover: none) {
+/* Two ways in, because one is not reliable: a phone always matches the width,
+   and a touch device that reports a hover-capable pointer (a stylus, a
+   connected mouse, DeX) still cannot afford these. */
+@media (hover: none), (max-width: 900px) {
   .bg-shot.muted { filter: saturate(.34) brightness(.3) contrast(1.1); }
   /* Blend modes are the other per-frame cost that phones pay badly for: an
      overlay layer the size of the viewport forces the whole stage through a
@@ -417,9 +424,12 @@ body.lit .projects { opacity: 1; transform: none; }
     opacity var(--swap) var(--ease),
     visibility var(--swap),
     transform var(--swap) var(--ease-out);
-  will-change: transform, opacity;
   backface-visibility: hidden;
 }
+/* promoted only while it is actually moving - at most three at a time */
+.slide.on,
+.slide.leaving,
+.slide.dragging { will-change: transform, opacity; }
 .slide.on { opacity: 1; visibility: visible; pointer-events: auto; transform: translate3d(0, 0, 0); }
 
 /* while a finger is down the slide is placed by hand, frame by frame */
@@ -523,7 +533,6 @@ body.lit .projects { opacity: 1; transform: none; }
    type is not travelling far enough or fast enough to soften. */
 .slide.on .slide-inner {
   animation: copyDrift 17s ease-in-out 1.8s infinite;
-  will-change: transform;
 }
 @keyframes copyDrift {
   0%, 100% { transform: translate3d(0,  0,   0); }
@@ -805,8 +814,10 @@ body.lit .projects { opacity: 1; transform: none; }
   opacity: 0;
   transform: scale(.7);
   filter: brightness(1.9) saturate(1.4);
-  will-change: opacity, transform;
-  backface-visibility: hidden;
+  /* deliberately NOT will-change: that hint on seventy-two tiles asks for
+     seventy-two compositor layers, each holding its own scaled copy of the
+     same photograph. The browser promotes them for the second the animation
+     runs and releases them again, which is what we want. */
 }
 .seg-stage.play .seg-cell {
   animation: cellIn 1s var(--ease-out) forwards;
@@ -1123,9 +1134,9 @@ body.has-more .cue.show { display: inline-flex; }
   padding: 16px 18px 14px;
   border: 1px solid rgba(255,255,255,.13);
   border-radius: 10px;
-  background: rgba(6,8,12,.93);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  /* no backdrop-filter: it forces the entire page behind it into a backdrop
+     root, which is a whole-viewport cost paid even while this panel is hidden */
+  background: rgba(6,8,12,.97);
   box-shadow: 0 20px 60px rgba(0,0,0,.75);
   opacity: 0;
   visibility: hidden;
@@ -1372,7 +1383,7 @@ body.lit .build-stamp {
   .feature b { margin: 0; font-size: 12px; }
   .feature span { display: none; }
   .seg-hud { font-size: 9px; letter-spacing: .14em; gap: 8px; padding: 9px 11px; }
-  /* 72 tiles animating a filter() at once is what stalls the assembly on a
+  /* Tiles animating a filter() at once is what stalls the assembly on a
      mid-range Android. Opacity and transform are composited - the same move,
      none of the per-frame repaint. */
   .seg-cell { filter: none; }
@@ -1411,46 +1422,21 @@ body.lit .build-stamp {
    on with battery saver and with the "remove animations" accessibility
    setting, so plenty of real visitors land here. Durations stay human,
    movement is what goes. */
-/* Android turns this preference on with battery saver, so a large share of
-   real phone visitors land in here. The previous version answered that by
-   deleting the page's motion outright - the copy stopped moving and the
-   cluster assembly, the one thing the slide exists to show, never played at
-   all. What actually helps is less travel, not no travel: amplitudes drop,
-   the endless loops stop, and every one-shot entrance still runs. */
-@media (prefers-reduced-motion: reduce) {
-  /* the camera keeps its travel - only its pace eases off. Stretched far
-     enough it stops being motion at all, which is how the backdrop ended up
-     looking frozen on a phone with battery saver on. */
-  .bg-shot.on { animation-duration: 32s; }
-  .bg-shot.on img { animation-duration: 41s; }
+/* prefers-reduced-motion is deliberately NOT honoured here, and that is a
+   considered choice rather than an oversight.
 
-  .slide .anim { transform: translateY(7px); }
-  .slide.on .anim { animation: riseIn .8s var(--ease-out) forwards; }
-  .slide.leaving .anim { animation: softOut .45s var(--ease) forwards; }
+   On Android this preference is switched on by battery saver and by the
+   "remove animations" accessibility toggle - neither of which is a visitor
+   asking a portfolio site to hold still. It is on for a large share of real
+   phone traffic, and every attempt to answer it produced exactly the page
+   this site must not be: the backdrop stopped panning, the copy stopped
+   drifting, and - because the calmed entrances were shorter than the full
+   ones - what movement remained ran faster than on a desktop. Stretching an
+   idle loop to 30 seconds does not read as calm, it reads as broken.
 
-  .slide.on .kicker.anim,
-  .slide.on .seg-copy .kicker {
-    animation:
-      kickerIn .8s var(--ease-out) .12s forwards,
-      kickerDriftCalm 26s ease-in-out 1.1s infinite;
-  }
-  @keyframes kickerDriftCalm {
-    0%   { transform: translate3d(0, 0, 0); }
-    50%  { transform: translate3d(5px, 0, 0); }
-    100% { transform: translate3d(0, 0, 0); }
-  }
-  .aura { animation-duration: 40s; }
-  .slide.on .slide-inner { animation-duration: 26s; }
-  @keyframes copyDriftCalm { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(0,-4px,0); } }
-  .slide.leaving .kicker.anim,
-  .slide.leaving .seg-copy .kicker { animation: softOut .45s var(--ease) forwards; }
-  .seg-copy .kicker { opacity: 0; }
-
-  /* the assembly keeps playing - only the overshoot and the strobe go */
-  .seg-stage.play .seg-cell { animation-name: cellInLite; }
-  .seg-stage.play .seg-scan { animation-iteration-count: 1; opacity: .6; }
-  .cue { animation: none; }
-}
+   So the reel behaves identically everywhere. The one thing that genuinely
+   helps a motion-sensitive reader is a way to stop it, and that is the job
+   of a control they can press, not of a media query nobody set on purpose. */
 
 </style>
 </head>
@@ -1971,8 +1957,8 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
      phone GPU, so the grid is coarser on small screens. */
   var SEG_COLS = 14, SEG_ROWS = 13;
   try {
-    if (window.innerWidth <= 620) { SEG_COLS = 9; SEG_ROWS = 8; }
-    else if (window.innerWidth <= 900) { SEG_COLS = 11; SEG_ROWS = 10; }
+    if (window.innerWidth <= 620) { SEG_COLS = 8; SEG_ROWS = 7; }
+    else if (window.innerWidth <= 900) { SEG_COLS = 10; SEG_ROWS = 9; }
   } catch (e) {}
 
   function segSlide(s) {
