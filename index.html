@@ -1106,6 +1106,102 @@ body.has-more .cue.show { display: inline-flex; }
 .cue:hover { color: rgba(255,255,255,.72); }
 @keyframes bob { 50% { transform: translateY(5px); } }
 
+/* ------------------------------------------------------------ build panel */
+/* "Am I even looking at the new one?" is a question a phone cannot answer on
+   its own: the footer stamp is hidden at this width and a browser will
+   happily serve an index.html it cached ten minutes ago. This panel says
+   which build is running, asks the server what it is currently shipping,
+   and compares the two. Opened with /?build or by tapping the slide counter
+   three times. */
+.build-panel {
+  position: fixed;
+  z-index: 200;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: min(420px, calc(100vw - 28px));
+  transform: translate(-50%, 14px);
+  padding: 16px 18px 14px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 10px;
+  background: rgba(6,8,12,.93);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 20px 60px rgba(0,0,0,.75);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .4s var(--ease), transform .4s var(--ease-out), visibility .4s;
+}
+.build-panel.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+.build-panel h3 {
+  margin: 0 0 12px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .28em;
+  text-indent: .28em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.34);
+}
+.build-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 5px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.build-row + .build-row { border-top: 1px solid rgba(255,255,255,.06); }
+.build-row .k {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.32);
+}
+.build-row .v {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,.86);
+  word-break: break-word;
+}
+.build-verdict {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.build-verdict.wait  { background: rgba(255,255,255,.06); color: rgba(255,255,255,.5); }
+.build-verdict.fresh { background: rgba(77,214,255,.12); color: var(--cyan); box-shadow: inset 0 0 0 1px rgba(77,214,255,.28); }
+.build-verdict.stale { background: rgba(255,196,107,.13); color: #ffc46b; box-shadow: inset 0 0 0 1px rgba(255,196,107,.34); }
+.build-verdict.err   { background: rgba(255,92,225,.10); color: #ff9ae8; box-shadow: inset 0 0 0 1px rgba(255,92,225,.28); }
+.build-acts { display: flex; gap: 8px; margin-top: 11px; }
+.build-acts button {
+  flex: 1;
+  min-height: 38px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 6px;
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.8);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  transition: background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease);
+}
+.build-acts button.key { border-color: rgba(77,214,255,.45); color: var(--cyan); }
+.build-acts button:hover { background: rgba(255,255,255,.09); color: #fff; }
+
 /* ----------------------------------------------------------------- archive */
 
 .archive {
@@ -1399,6 +1495,18 @@ body.lit .build-stamp {
   <div class="foot-line">&copy; <span id="yearTop"></span> SpinView &middot; Majify Technologies Inc. <span class="build-stamp"></span></div>
 </section>
 
+<div class="build-panel" id="buildPanel" role="dialog" aria-label="Build" aria-hidden="true">
+  <h3>Build</h3>
+  <div class="build-row"><span class="k">Page ouverte</span><span class="v" id="bpLocal">-</span></div>
+  <div class="build-row"><span class="k">Catalogue</span><span class="v" id="bpGen">-</span></div>
+  <div class="build-row"><span class="k">Sur le serveur</span><span class="v" id="bpServer">...</span></div>
+  <div class="build-verdict wait" id="bpVerdict">Vérification…</div>
+  <div class="build-acts">
+    <button type="button" class="key" id="bpReload">Recharger à neuf</button>
+    <button type="button" id="bpClose">Fermer</button>
+  </div>
+</div>
+
 <section class="archive" id="archive" hidden>
   <div class="archive-head">
     <h2>Everything on SpinView</h2>
@@ -1463,6 +1571,8 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
         try { v = decodeURIComponent(kv[1] || ""); } catch (e) { v = kv[1] || ""; }
         if (!k) continue;
         if (k === "p" || k === "project" || k === "app") { raw = v; break; }
+        /* housekeeping parameters are not project names */
+        if (k === "build" || k === "fresh" || k === "cb" || k === "v") continue;
         raw = k;
         if (kv.length > 1) out.slide = v;
         break;
@@ -2577,6 +2687,123 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
     try { console.log("[SpinView] build " + v + " \u00b7 catalog " + gen); } catch (e) {}
   }
 
+  /* ------------------------------------------------------------- build panel */
+
+  /* The page's own identity is the catalog timestamp the builder stamped into
+     this very file - not version.js, which is a separate request the browser
+     caches on its own schedule and which can therefore describe a different
+     build than the one you are reading. */
+  function localBuild(cat) {
+    return {
+      version: window.SPINVIEW_VERSION || "local",
+      generated: (cat && cat.generated) ? String(cat.generated).replace("T", " ").slice(0, 16) : "?"
+    };
+  }
+
+  function openBuild(cat) {
+    var panel = $("buildPanel");
+    if (!panel) return;
+    var me = localBuild(cat);
+    $("bpLocal").textContent = me.version;
+    $("bpGen").textContent = me.generated;
+    $("bpServer").textContent = "...";
+    var verdict = $("bpVerdict");
+    verdict.className = "build-verdict wait";
+    verdict.textContent = "Vérification…";
+    panel.classList.add("show");
+    panel.setAttribute("aria-hidden", "false");
+    state.paused = true;
+
+    if (!window.fetch) {
+      verdict.className = "build-verdict err";
+      verdict.textContent = "Navigateur trop ancien pour vérifier";
+      return;
+    }
+
+    /* Ask for index.html itself, uncached. Its catalog stamp is the one thing
+       that cannot disagree with the HTML it arrived in. */
+    var bust = "cb=" + Date.now();
+    var url = location.pathname + (location.pathname.slice(-1) === "/" ? "" : "") + "?" + bust;
+
+    fetch(url, { cache: "no-store" })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var g = /"generated"\s*:\s*"([^"]+)"/.exec(html);
+        var live = g ? g[1].replace("T", " ").slice(0, 16) : "";
+        return fetch("/version.txt?" + bust, { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.text() : ""; })
+          .catch(function () { return ""; })
+          .then(function (v) { return { gen: live, ver: (v || "").trim() }; });
+      })
+      .then(function (srv) {
+        $("bpServer").textContent =
+          (srv.ver || "?") + (srv.gen ? "  \u00b7  " + srv.gen : "");
+        if (!srv.gen) {
+          verdict.className = "build-verdict err";
+          verdict.textContent = "Serveur injoignable";
+        } else if (srv.gen === me.generated) {
+          verdict.className = "build-verdict fresh";
+          verdict.textContent = "À jour";
+        } else {
+          verdict.className = "build-verdict stale";
+          verdict.textContent = "Version en cache — rechargez";
+        }
+      })
+      .catch(function () {
+        $("bpServer").textContent = "-";
+        verdict.className = "build-verdict err";
+        verdict.textContent = "Vérification impossible (hors ligne ?)";
+      });
+  }
+
+  function closeBuild() {
+    var panel = $("buildPanel");
+    if (!panel) return;
+    panel.classList.remove("show");
+    panel.setAttribute("aria-hidden", "true");
+    state.paused = false;
+  }
+
+  function bindBuild(cat) {
+    var panel = $("buildPanel");
+    if (!panel) return;
+
+    $("bpClose").addEventListener("click", closeBuild);
+    $("bpReload").addEventListener("click", function () {
+      var go = function () {
+        location.replace(location.pathname + "?fresh=" + Date.now());
+      };
+      /* a fresh URL defeats the HTTP cache; caches.delete() covers anything a
+         service worker may have parked, now or later */
+      if (window.caches && caches.keys) {
+        caches.keys()
+          .then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })
+          .then(go, go);
+      } else { go(); }
+    });
+
+    /* three taps on the slide counter - small, deliberate, never hit by
+       accident, and visible on a phone */
+    var counter = $("counter");
+    if (counter) {
+      var hits = 0, last = 0;
+      counter.style.pointerEvents = "auto";
+      counter.style.cursor = "pointer";
+      counter.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var now = Date.now();
+        hits = (now - last < 700) ? hits + 1 : 1;
+        last = now;
+        if (hits >= 3) { hits = 0; openBuild(cat); }
+      });
+    }
+
+    /* and /?build or /#build, which is the one that can be typed on a phone */
+    var wants = /(^|[?&])build(=|&|$)/.test(location.search) ||
+                /^#build$/i.test(location.hash || "");
+    if (wants) setTimeout(function () { openBuild(cat); }, 900);
+  }
+
   function boot() {
     var cat = SPINVIEW_CATALOG;
     var y = String(new Date().getFullYear());
@@ -2648,6 +2875,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */{"generated": "2026-08-27T01:
       setTimeout(fitChrome, 120);
     });
     bindInput();
+    bindBuild(cat);
     buildArchive(projects);
 
     var start = findDeep(deep);
