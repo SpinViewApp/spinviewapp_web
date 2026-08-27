@@ -1,0 +1,92 @@
+{
+  "id": "raylab",
+  "title": "RayLab",
+  "type": "experiment",
+  "collection": "spinview",
+  "status": "experimental",
+
+  "released": true,
+  "badge": "Experimental",
+
+  "tagline": "Every pixel traced.",
+
+  "description": "A realtime blob raytracer running on WebGPU. Soft shadows, a BVH-accelerated scene, adaptive resolution and a side-by-side VR view.",
+  "short": "A realtime blob raytracer on WebGPU, viewable in VR.",
+
+  "iconText": "R",
+  "cover": "screen/03.jpg",
+
+  "screens": [
+    "screen/03.jpg",
+    "screen/01.jpg",
+    "screen/02.jpg"
+  ],
+
+  "tags": [
+    "Raytracing",
+    "WebGPU",
+    "VR",
+    "Experiment"
+  ],
+
+  "url": "/raylab/",
+  "play": "/raylab/",
+  "play_label": "Open RayLab",
+
+  "visible": true,
+
+  "featured": true,
+  "featured_order": 3,
+  "featured_kicker": "Experiment · Raytracing",
+
+  "lift": 1.05,
+  "scrim": 0.9,
+
+  "features": [
+    { "title": "Realtime raytracing", "text": "Every pixel traced on the GPU. No rasteriser anywhere in the pipeline." },
+    { "title": "VR mode",             "text": "Side-by-side stereo, traced live for each eye." },
+    { "title": "Soft shadows",        "text": "Penumbra and contact shadows straight out of the tracer." },
+    { "title": "BVH accelerated",     "text": "A bounding-volume hierarchy keeps the scene fast as it grows." },
+    { "title": "Adaptive resolution", "text": "The render scale follows the framerate instead of dropping it." },
+    { "title": "Blob geometry",       "text": "Capsules and spheres blended into creatures - maths, not meshes." }
+  ],
+
+  "slides": [
+    {
+      "id": "raylab",
+      "kind": "hero",
+      "image": "screen/03.jpg",
+      "focus": "50% 45%",
+      "kicker": "Experiment · Raytracing",
+      "badge": "Experimental",
+      "title": "RayLab",
+      "text": "Every pixel traced in real time. No meshes, no rasteriser - rays, blobs and light, on WebGPU.",
+      "pool": "traced",
+      "actions": [
+        { "label": "Open RayLab", "href": "/raylab/", "primary": true }
+      ]
+    },
+    {
+      "id": "traced-vr",
+      "kind": "features",
+      "image": "screen/01.jpg",
+      "focus": "50% 45%",
+      "kicker": "And in VR",
+      "badge": "Experimental",
+      "title": "Traced for each eye",
+      "text": "The same scene in side-by-side stereo - shadows and light computed live, from inside.",
+      "pool": "traced",
+      "actions": [
+        { "label": "Open RayLab", "href": "/raylab/", "primary": true }
+      ]
+    }
+  ],
+
+  "pools": {
+    "traced": [
+      "screen/03.jpg",
+      "screen/01.jpg",
+      "screen/02.jpg"
+    ]
+  }
+}
