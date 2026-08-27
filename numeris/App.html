@@ -377,9 +377,19 @@ body {
   }
 
   /* Probe WebGL2 on a DETACHED canvas, then release the context: the page
-     canvas belongs to the engine and a canvas accepts one context type only. */
-  function devProbeGL() {
+     canvas belongs to the engine and a canvas accepts one context type only.
+
+     NOT done by default on the WebGPU binary. Creating a WebGL2 context makes
+     the browser bring up a second GPU context on a page that is already
+     driving WebGPU; that costs tens of milliseconds and hitches the frame,
+     and a frame hitch is an audio dropout (the AudioWorklet shares the
+     renderer process). Ask for it with ?glinfo when the answer is needed. */
+  function devProbeGL(force) {
     if (devGlProbed) return;
+    if (!force && window.__spinEngine !== "AppGL" && !qflag("glinfo")) {
+      devInfo.gl = "not probed (WebGPU engine \u2014 add ?glinfo to measure)";
+      return;
+    }
     devGlProbed = true;
     try {
       var c = document.createElement("canvas");

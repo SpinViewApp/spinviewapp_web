@@ -207,8 +207,14 @@ body.lit .mark-corner { opacity: .5; transform: none; }
 
 /* Project switcher. Doubles as the "whose slide is this" indicator, so the
    name never has to be repeated a third time in the chrome. */
+body.tight .mark-corner { display: none; }
+
 .projects {
   position: fixed;
+  max-width: calc(100vw - 30px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   top: max(16px, env(safe-area-inset-top));
   right: max(18px, env(safe-area-inset-right));
   z-index: 60;
@@ -220,6 +226,7 @@ body.lit .mark-corner { opacity: .5; transform: none; }
   transition: opacity .7s var(--ease) .2s, transform .7s var(--ease) .2s;
 }
 body.lit .projects { opacity: 1; transform: none; }
+.projects::-webkit-scrollbar { display: none; }
 
 .proj {
   position: relative;
@@ -1128,19 +1135,40 @@ body.lit .build-stamp {
 
 }
 
+@keyframes softIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes softOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* Reduced motion means less travel - not a fast-forward.
+   Collapsing every duration to nothing (the usual one-liner) does not calm
+   the page down, it plays the whole thing at ten times speed: the clusters
+   snapped together in 276ms instead of 2.6s. Android turns this preference
+   on with battery saver and with the "remove animations" accessibility
+   setting, so plenty of real visitors land here. Durations stay human,
+   movement is what goes. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
-  .slide .anim { opacity: 1; transform: none; }
-  .seg-copy .kicker { opacity: 1; }
-  .kicker::before { transform: none; }
+  .bg-shot.on,
+  .bg-shot.on img { animation: none; }
+
+  .slide .anim { transform: none; }
+  .slide.on .anim { animation: softIn .55s var(--ease) forwards; }
+  .slide.leaving .anim { animation: softOut .45s var(--ease) forwards; }
+
   .slide.on .kicker.anim,
-  .slide.on .seg-copy .kicker { animation: none; opacity: 1; }
-  .seg-cell { opacity: 1; transform: none; filter: none; }
+  .slide.on .seg-copy .kicker { animation: softIn .55s var(--ease) .05s forwards; }
+  .slide.leaving .kicker.anim,
+  .slide.leaving .seg-copy .kicker { animation: softOut .45s var(--ease) forwards; }
+  .seg-copy .kicker { opacity: 0; }
+
+  .kicker::before,
+  .slide.on .kicker::before { transform: none; animation: none; }
+
+  .seg-cell { animation: none !important; opacity: 1; transform: none; filter: none; }
+  .seg-stage.play .seg-scan { animation: none; opacity: 0; }
+  .seg-stage.building .seg-grid { gap: 0; }
+  .seg-hud .dot { animation: none; }
+  .cue { animation: none; }
 }
+
 </style>
 </head>
 <body>
@@ -1754,7 +1782,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     void stage.offsetWidth;
     stage.classList.add("play", "building");
 
-    var total = reduced ? 200 : 2600;
+    var total = reduced ? 1600 : 2600;
     var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
 
     if (seg.raf) cancelAnimationFrame(seg.raf);
@@ -1966,8 +1994,29 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     if (!host || !p) return;
     var btns = host.getElementsByTagName("button");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.toggle("on", btns[i].getAttribute("data-id") === p.id);
+      var on = btns[i].getAttribute("data-id") === p.id;
+      btns[i].classList.toggle("on", on);
+      /* if the row has had to scroll, keep the active name in view - set
+         scrollLeft directly so the page itself is never scrolled */
+      if (on && host.scrollWidth > host.clientWidth + 2) {
+        host.scrollLeft = Math.max(0,
+          btns[i].offsetLeft - (host.clientWidth - btns[i].offsetWidth) / 2);
+      }
     }
+  }
+
+  /* On a narrow screen the switcher and the wordmark fight for the top row.
+     Navigation wins: the wordmark steps aside rather than the project names
+     being truncated. The intro has already shown the name anyway. */
+  function fitChrome() {
+    var mark = document.querySelector(".mark-corner");
+    var nav = $("projectNav");
+    if (!mark || !nav) return;
+    document.body.classList.remove("tight");
+    if (nav.style.display === "none" || !nav.children.length) return;
+    var m = mark.getBoundingClientRect();
+    var n = nav.getBoundingClientRect();
+    if (n.left < m.right + 14) document.body.classList.add("tight");
   }
 
   /* ------------------------------------------------------------- archive */
@@ -2118,11 +2167,9 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       else setTimeout(finish, INTRO_MIN - waited);
     }
 
-    if (reduced) {
-      intro.style.transition = "none";
-      finish();
-      return;
-    }
+    /* the preference is about movement, not about skipping the wait for the
+       first image - only the fade is dropped */
+    if (reduced) intro.style.transition = "none";
 
     setTimeout(finish, INTRO_MAX);       /* never hold longer than this */
 
@@ -2219,6 +2266,11 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     buildSlides();
     buildDots();
     buildProjectNav();
+    fitChrome();
+    window.addEventListener("resize", fitChrome);
+    window.addEventListener("orientationchange", function () {
+      setTimeout(fitChrome, 120);
+    });
     bindInput();
     buildArchive(projects);
 

@@ -1,1 +1,1 @@
-window.SPINVIEW_VERSION="v0053";
+window.SPINVIEW_VERSION="v0054";
