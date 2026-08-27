@@ -39,6 +39,9 @@
 }
 </script>
 <script src="version.js"></script>
+<!-- Which engine is deployed in THIS folder (webgpu | webgl). Written by
+     build.cwc from web/backend_<backend>.js. Absent = WebGPU. -->
+<script src="backend.js"></script>
 <style>
 html, body {
   margin: 0;
@@ -269,6 +272,14 @@ body {
     host === "::1" ||
     host.indexOf("192.168.") === 0 ||
     window.spinviewDebugEnabled === true;
+
+  /* Which graphics API the engine sitting next to this shell was compiled
+     for. backend.js (deployed per build) sets it; without that file we are
+     looking at the historical WebGPU-only deploy. This drives ONE thing:
+     which preflight runs before App.js is fetched. */
+  var BUILD_BACKEND = (window.__spinBuildBackend === "webgl") ? "webgl" : "webgpu";
+  var IS_GL = BUILD_BACKEND === "webgl";
+  var API_LABEL = IS_GL ? "WebGL2" : "WebGPU";
 
   /* A failure raised INSIDE the runtime is a call stack, not a message: it
      names components, symbols and source files, and none of that helps the
@@ -613,6 +624,9 @@ body {
     b2: "Safari 18 et plus (macOS et iOS 18)",
     b3: "Firefox : activer WebGPU dans ",
     b4: "verifier que l'acceleration materielle est active dans les reglages du navigateur",
+    gl_title: "WebGL 2 est requis",
+    gl_none: "Ce navigateur n'expose pas WebGL 2, ou l'acceleration materielle est desactivee. Cette version du moteur s'appuie dessus pour son rendu.",
+    gl_device: "Le contexte WebGL 2 a ete obtenu, mais le moteur n'a pas pu initialiser son rendu. C'est generalement le pilote graphique.",
     dl: "Le fichier du moteur n'a pas pu etre recupere. Verifie ta connexion, puis recharge la page.",
     title_dl: "Le moteur n'a pas pu etre telecharge",
     detail: "Detail technique"
@@ -628,15 +642,19 @@ body {
     b2: "Safari 18+ (macOS and iOS 18)",
     b3: "Firefox: enable WebGPU in ",
     b4: "check that hardware acceleration is enabled in your browser settings",
+    gl_title: "WebGL 2 is required",
+    gl_none: "This browser does not expose WebGL 2, or hardware acceleration is disabled. This build of the engine relies on it for rendering.",
+    gl_device: "A WebGL 2 context was acquired but the engine could not initialize rendering. This usually points at the graphics driver.",
     dl: "The engine file could not be fetched. Check your connection, then reload the page.",
     title_dl: "The engine could not be downloaded",
     detail: "Technical detail"
   };
 
-  /* Single binary: App.js + App.wasm. No second engine to probe, no flag to
-     read - if WebGPU is missing there is nothing to fall back to, and the
-     panel below says so plainly instead of hunting for a file that was never
-     built. */
+  /* One binary per deploy folder: App.js + App.wasm, compiled for the API
+     named by backend.js. There is no runtime fallback inside a folder - if the
+     API is missing the panel below says so plainly instead of hunting for a
+     file that was never built. The OTHER backend lives in its own folder
+     (raylab / raylab_webgl), one URL apart. */
   function loadEngine(base) {
     var sc = document.createElement("script");
     sc.src = cacheBust(base + ".js");
@@ -648,10 +666,10 @@ body {
     };
     window.__spinEngine = base;
     devInfo.engine  = base + ".wasm";
-    devInfo.api     = "WebGPU";
+    devInfo.api     = API_LABEL;
     devInfo.backend = devInfo.api;
     devInfoRender();
-    console.info("[gpu-bootstrap] engine selected: " + base + " (WebGPU)");
+    console.info("[gpu-bootstrap] engine selected: " + base + " (" + API_LABEL + ")");
     document.body.appendChild(sc);
   }
 
@@ -698,11 +716,33 @@ body {
 
   /* No WebGPU: there is no second engine here, so state it and stop. */
   function noGpu(reason, detail) {
-    devInfo.why = "WebGPU unavailable (" + detail + ")";
+    devInfo.why = API_LABEL + " unavailable (" + detail + ")";
     devInfo.api = "unavailable";
     if (devInfo.gpu === "not probed") devInfo.gpu = "unavailable: " + detail;
     devInfoRender();
     gpuNotice(reason, detail);
+  }
+
+  /* WebGL2 preflight - the mirror of gpuPreflight for the GLES3 build.
+     Synchronous and cheap: devProbeGL already opens a DETACHED canvas and
+     releases the context (the page canvas belongs to the engine and accepts
+     one context type only, so probing it here would break the engine). */
+  function glPreflight(onReady) {
+    devProbeGL();
+    if (devInfo.gl === "unavailable" || /^probe failed/.test(String(devInfo.gl))) {
+      devInfo.why = "WebGL2 unavailable";
+      devInfo.api = "unavailable";
+      devInfoRender();
+      gpuNotice(T.gl_none,
+        "getContext('webgl2') refused | secure=" + (window.isSecureContext === true) +
+        " | " + navigator.userAgent, T.gl_title);
+      return;
+    }
+    if (!devInfo.why || devInfo.why === "selection in progress")
+      devInfo.why = "automatic: WebGL2 context acquired";
+    devInfoRender();
+    console.info("[gpu-bootstrap] WebGL2 available");
+    onReady();
   }
 
   function gpuPreflight(onReady) {
@@ -794,8 +834,9 @@ body {
       var why = window.__spinLastPanic || String(reason || "");
       if (typeof gpuNotice === "function" &&
           !document.querySelector(".gpu-notice") &&
-          /wgpu|WGPU|webgpu|device|adapter|surface|swapchain/i.test(why)) {
-        gpuNotice(T.nodevice, why);
+          /wgpu|WGPU|webgpu|webgl|gles|glGetError|framebuffer|device|adapter|surface|swapchain/i.test(why)) {
+        if (IS_GL) gpuNotice(T.gl_device, why, T.gl_title);
+        else gpuNotice(T.nodevice, why);
         return;
       }
       if (loader) loader.style.display = "flex";
@@ -853,7 +894,11 @@ body {
     }
   })();
 
-  gpuPreflight(function () { loadEngine("App"); });
+  /* One preflight per compiled backend. */
+  console.info("[gpu-bootstrap] build backend =", BUILD_BACKEND,
+    window.__spinBuildBackend ? "(backend.js)" : "(backend.js absent -> default)");
+  if (IS_GL) glPreflight(function () { loadEngine("App"); });
+  else gpuPreflight(function () { loadEngine("App"); });
   setTimeout(function () {
     console.info("[gpu-bootstrap] 5s state",
       "runtimeInitialized=", window.spinRuntimeInitialized === true,
