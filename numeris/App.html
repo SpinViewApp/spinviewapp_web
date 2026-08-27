@@ -387,7 +387,7 @@ body {
   function devProbeGL(force) {
     if (devGlProbed) return;
     if (!force && window.__spinEngine !== "AppGL" && !qflag("glinfo")) {
-      devInfo.gl = "not probed (WebGPU engine \u2014 add ?glinfo to measure)";
+      devInfo.gl = "not probed (WebGPU engine - add ?glinfo to measure)";
       return;
     }
     devGlProbed = true;
@@ -817,7 +817,7 @@ body {
       if (done) return;
       done = true;
       glBinaryState = ok ? 1 : 0;
-      devInfo.glBin = ok ? "deployed" : "absent (" + why + ") \u2014 no fallback possible";
+      devInfo.glBin = ok ? "deployed" : "absent (" + why + ") - no fallback possible";
       devInfoRender();
       console.info("[gpu-bootstrap] WebGL2 binary " +
         (ok ? "present" : "absent (" + why + ")") + " : " + url);
@@ -898,12 +898,23 @@ body {
           var ai = adapter.info || null;   /* adapter.info: recent Chrome */
           var who = ai ? [ai.vendor, ai.architecture, ai.device, ai.description]
                           .filter(Boolean).join(" / ") : "";
+          /* The full feature list, not just the count: two browsers on the
+             same machine can hand sokol different optional features, and that
+             changes what the engine enables. Sorted so two logs diff cleanly. */
+          var featList = "";
+          try {
+            var fa = [];
+            adapter.features.forEach(function (f) { fa.push(String(f)); });
+            featList = fa.sort().join(", ");
+          } catch (eF) {}
           devInfo.gpu = (who || "adapter acquired") +
             "\n" + nb + " features | tex2D max " +
             (adapter.limits ? adapter.limits.maxTextureDimension2D : "?") +
             " | depth32float-stencil8 " +
             ((adapter.features && adapter.features.has &&
-              adapter.features.has("depth32float-stencil8")) ? "yes" : "NO");
+              adapter.features.has("depth32float-stencil8")) ? "yes" : "NO") +
+            (featList ? "\n" + featList : "");
+          try { console.info("[gpu-bootstrap] adapter features: " + featList); } catch (eL2) {}
           if (!devInfo.why || devInfo.why === "selection in progress")
             devInfo.why = "automatic: WebGPU adapter acquired";
           devInfoRender();
