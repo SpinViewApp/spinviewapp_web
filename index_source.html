@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>SpinView - PolyNite, a WebGPU GLB viewer</title>
-<meta name="description" content="SpinView builds interactive 3D tools, games and visual experiments. Now live: PolyNite, a WebGPU-powered GLB and glTF viewer with Nanite-like adaptive geometry.">
+<title>SpinView - PolyNite, a WebGPU GLB viewer with VR</title>
+<meta name="description" content="SpinView builds interactive 3D tools, games and visual experiments. Now live: PolyNite, a WebGPU GLB and glTF viewer with Nanite-like adaptive geometry, scene lighting, sharing and a VR mode.">
 <meta name="theme-color" content="#000000">
 <meta name="robots" content="index, follow">
 <meta name="googlebot" content="index, follow">
@@ -12,16 +12,16 @@
 <link rel="icon" type="image/png" href="/assets/spinview_icon.jpg">
 <link rel="apple-touch-icon" href="/assets/spinview_icon.jpg">
 
-<meta property="og:title" content="SpinView - PolyNite, a WebGPU GLB viewer">
-<meta property="og:description" content="Drop a GLB and explore every detail. PolyNite is a WebGPU viewer with Nanite-like adaptive geometry, running directly in your browser.">
+<meta property="og:title" content="SpinView - PolyNite, a WebGPU GLB viewer with VR">
+<meta property="og:description" content="Drop a GLB and explore every detail, then step inside it in VR. PolyNite is a WebGPU viewer with Nanite-like adaptive geometry, running directly in your browser.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://spinview.app/">
 <meta property="og:site_name" content="SpinView">
 <meta property="og:image" content="https://spinview.app/_data/app/polynite/screen/img07.jpg">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="SpinView - PolyNite, a WebGPU GLB viewer">
-<meta name="twitter:description" content="Drop a GLB and explore every detail. A WebGPU viewer with Nanite-like adaptive geometry.">
+<meta name="twitter:title" content="SpinView - PolyNite, a WebGPU GLB viewer with VR">
+<meta name="twitter:description" content="Drop a GLB and explore every detail, then step inside it in VR.">
 <meta name="twitter:image" content="https://spinview.app/_data/app/polynite/screen/img07.jpg">
 
 <script type="application/ld+json">
@@ -47,7 +47,7 @@
       "url": "https://spinview.app/polynite/",
       "applicationCategory": "MultimediaApplication",
       "operatingSystem": "Web browser with WebGPU",
-      "description": "A WebGPU-powered GLB and glTF viewer with Nanite-like adaptive geometry.",
+      "description": "A WebGPU-powered GLB and glTF viewer with Nanite-like adaptive geometry, scene lighting, sharing and a VR mode.",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
       "publisher": { "@id": "https://spinview.app/#organization" }
     }
@@ -1437,8 +1437,15 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
     tick: null,
     started: 0,
     paused: false,
-    cueSeen: false
+    cueSeen: false,
+    armed: false,      /* the clock only starts once the intro is out of the way */
+    firstRun: true     /* the opening slide gets a shorter hold */
   };
+
+  /* The very first move happens quickly, so a visitor landing on the page
+     sees within a couple of seconds that this is a reel and not a still.
+     Every slide after that runs at its own reading pace. */
+  var FIRST_DWELL = 2600;
 
   function words(t) {
     t = String(t || "").trim();
@@ -1449,7 +1456,7 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
      read it, not for a fixed beat: the opening card is a hook and gets out of
      the way fast, a dense card lingers. A slide may override this with
      "duration" (milliseconds) in project.json. */
-  function durationFor(s, isFirst) {
+  function durationFor(s) {
     if (s.duration) return s.duration;
 
     var n = words(s.title) + words(s.text);
@@ -1463,8 +1470,6 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       var f = (s._p && s._p.features) ? s._p.features.length : 0;
       d += 1200 + f * 300;
     }
-
-    if (isFirst) d = Math.min(d * 0.72, 5400);
 
     return Math.max(4000, Math.min(d, 10500));
   }
@@ -1853,6 +1858,8 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       out._exit = setTimeout(function () { out.classList.remove("leaving"); }, 700);
     }
 
+    if (prev !== next) state.firstRun = false;
+
     state.index = next;
 
     $("counter").textContent =
@@ -1901,10 +1908,11 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
 
   function restart(manual) {
     stopTimer();
+    if (!state.armed) return;
     if (state.slides.length < 2) return;
     state.started = Date.now();
     var s = state.slides[state.index];
-    var d = durationFor(s, state.index === 0);
+    var d = state.firstRun ? FIRST_DWELL : durationFor(s);
 
     state.tick = setInterval(function () {
       if (state.paused) { state.started += 60; return; }
@@ -2097,6 +2105,10 @@ var SPINVIEW_CATALOG = /* SPINVIEW_CATALOG_BEGIN */null/* SPINVIEW_CATALOG_END *
       done = true;
       intro.classList.add("done");
       document.body.classList.add("lit");
+      /* the opening slide's hold begins now - not while it was hidden behind
+         the intro, which made the first move land at an unpredictable moment */
+      state.armed = true;
+      restart(false);
       setTimeout(function () { if (intro.parentNode) intro.parentNode.removeChild(intro); }, 1000);
     }
 
