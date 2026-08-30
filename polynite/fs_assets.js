@@ -27,6 +27,38 @@
     { url: "models/index.txt", dest: "/vmh_index.txt" }
   ];
 
+  /* Is there a model library one level ABOVE this page?
+   *
+   * That is the whole question behind the Dev / Release tabs, and it is the
+   * only honest way to ask it. The page location cannot answer: a dev server
+   * rooted ON the dev folder serves it as "/", so looking for a "dev" segment
+   * in the path found nothing and the release layout was assumed. Nor can a
+   * build flag answer, because deploying is a COPY of dev/ over the site - the
+   * flag would travel with it and lie about where it landed.
+   *
+   * A parent index.txt is a fact about the deploy, checked where it is used.
+   * HEAD, so nothing is downloaded, and a 404 here is an ANSWER, not a
+   * failure: it means this page IS the site. Run as a boot dependency so
+   * main() starts with the answer already in hand - the library table is
+   * built before the first model is asked for, and never has to be rebuilt
+   * underneath it. */
+  function probeParentLib() {
+    var dep = "vmesh_parent_lib";
+    M.vmeshParentLib = 0;
+    addRunDependency(dep);
+    fetch(assetUrl("../models/index.txt"),
+          { method: "HEAD", credentials: "same-origin", cache: "no-store" })
+      .then(function (res) { M.vmeshParentLib = res.ok ? 1 : 0; })
+      .catch(function () { M.vmeshParentLib = 0; })
+      .then(function () {
+        if (typeof console !== "undefined" && console.info)
+          console.info("[fs_assets] parent model library",
+            M.vmeshParentLib ? "found -> this is a nested deploy (dev)"
+                             : "absent -> this page is the site");
+        removeRunDependency(dep);
+      });
+  }
+
   function ensureDir(path) {
     var parts = path.split("/");
     var dir = "";
@@ -67,6 +99,7 @@
   }
 
   M.preRun.push(function () {
+    probeParentLib();
     for (var i = 0; i < ASSETS.length; i++) loadOne(ASSETS[i]);
   });
 })();

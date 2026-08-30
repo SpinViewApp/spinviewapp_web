@@ -4,8 +4,15 @@
 
     var VERSION_FILE = "version.txt";
     var DEFAULT_VERSION = "dev";
-    var VERSION_KEY = "siteVersion";
-    var RELOAD_KEY = "lastReloadVersion";
+
+    /* Same reason as above: scope what is left in storage to this app's own
+       path, so two apps under one host never read each other's counters. */
+    var SCOPE = (function(){
+        try{ return location.pathname.replace(/[^/]*$/, ""); }
+        catch(error){ return "/"; }
+    })();
+    var VERSION_KEY = "siteVersion:" + SCOPE;
+    var RELOAD_KEY = "lastReloadVersion:" + SCOPE;
 
     function isLocalDevelopmentHost(){
         var host = location.hostname;
@@ -19,7 +26,7 @@
     }
 
     function hasDebugParameter(){
-        return /(?:^|[?&])debug(?:[=&]|$)/i.test(location.search);
+        return /(?:^|[?&])(?:dev|debug)(?:[=&]|$)/i.test(location.search);
     }
 
     function readStorage(storage,key){
@@ -53,12 +60,24 @@
         }
     }
 
+    /*
+        THE FROZEN VERSION COMES FROM THE URL OR NOWHERE.
+
+        localStorage is per ORIGIN, not per app. Several apps served from the
+        same host - spinview.app/nanite, /numeris, /raytracer, or one local
+        port pointed at a different build folder from one day to the next -
+        share this key. Seeding the freeze from it made a page cache-bust
+        itself with ANOTHER app's version, and the label then disagreed with
+        the number in the log.
+
+        So: ?_v when the page carries one (authoritative, and production puts
+        it there with the reload below), otherwise "dev". Cache-busting does
+        not suffer - every URL also carries a per-load _t. The real version is
+        pushed to the label by spinviewSetDisplayVersion as soon as
+        version.txt lands.
+    */
     function getCurrentVersion(){
-        return (
-            getPageVersion() ||
-            readStorage(localStorage,VERSION_KEY) ||
-            DEFAULT_VERSION
-        );
+        return getPageVersion() || DEFAULT_VERSION;
     }
 
     function updateDebugState(){
@@ -123,6 +142,11 @@
             VERSION_KEY,
             remoteVersion
         );
+
+        /* Label: the shell froze its version before this fetch answered. */
+        if(typeof window.spinviewSetDisplayVersion === "function"){
+            window.spinviewSetDisplayVersion(remoteVersion);
+        }
 
         updateDebugState();
 

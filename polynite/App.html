@@ -38,6 +38,32 @@
   }
 }
 </script>
+<script>
+/* PolyNite account API origin - the ONE place it is written.
+ *
+ * Local development needs no editing: `launch_polynite.bat` starts wrangler on
+ * :8787, and localhost:<anything> is the same SITE as localhost:8787, so the
+ * session cookie is first-party and the whole sign-in works against the local
+ * Worker. With nothing listening there the panel simply reports the service as
+ * unreachable - it never blocks or slows the viewer.
+ *
+ * PN_API_DEPLOYED is the one value to fill in after the first
+ * `deploy_polynite.bat`: wrangler prints the URL it published to. Set it to ""
+ * to remove the account feature entirely - no control drawn, nothing fetched,
+ * which is the right state for a deploy with no backend behind it.
+ *
+ * The session is an HttpOnly cookie on that origin: nothing here can read it,
+ * which is the point. See majify-api/worker/polynite-auth/POLYNITE_AUTH.md.
+ */
+(function () {
+  var PN_API_DEPLOYED = "https://api.spinview.app";
+  var local = location.hostname === "localhost" ||
+              location.hostname === "127.0.0.1" ||
+              location.hostname === "::1";
+  window.__pnApiBase = local ? "http://localhost:8787" : PN_API_DEPLOYED;
+})();
+</script>
+<script src="backend.js"></script>
 <script src="version.js"></script>
 <style>
 html, body {
@@ -241,7 +267,7 @@ body {
 <script>
 /* Source of truth for the web shell — copied by build.cwc to {pOut}index.html
  * (and {pOut}App.html, replacing emscripten's own WebGL launcher). Same shell
- * as Numeris: Module exists BEFORE App.js is fetched, every asset is
+ * as Numeris: Module exists BEFORE app.js is fetched, every asset is
  * cache-busted with the frozen page version, and the WebGPU preflight
  * explains a refusal instead of leaving a black screen. */
 (function () {
@@ -292,11 +318,21 @@ body {
   /* ============== ENGINE / BACKEND BANNER (top of the DEV panel) ==============
      Bootstrap and engine traces mix together fast. This banner stays pinned at
      the top of the panel and answers the only questions that matter when in
-     doubt: which binary is running, on which backend, on which GPU, and is the
-     WebGL fallback even deployed. */
+     doubt: which binary is running, on which backend, on which GPU, and which
+     API this build was compiled for. */
+  /* Which graphics API the engine sitting next to this shell was COMPILED
+     for. backend.js (written per deploy by build.cwc) says so; without that
+     file we assume WebGPU, the historical deploy. Nothing here chooses a
+     backend at runtime - the choice was made at build time and this only
+     reads it, so the preflight below checks the right API instead of
+     guessing. */
+  var BUILD_BACKEND = (window.__spinBuildBackend === "webgl") ? "webgl" : "webgpu";
+  var IS_GL = BUILD_BACKEND === "webgl";
+  var API_LABEL = IS_GL ? "WebGL2" : "WebGPU";
+
   var devInfo = {
     engine: "-", backend: "pending", why: "selection in progress",
-    gpu: "not probed", gl: "not probed", glBin: "not probed", runtime: "",
+    gpu: "not probed", gl: "not probed", runtime: "",
     api: "pending"   /* the one graphics line a user may see */
   };
   var devInfoEl = null, devGlProbed = false;
@@ -356,7 +392,9 @@ body {
       ["version", devEsc(shownVersion())],
       ["WebGPU",  devEsc(devInfo.gpu)],
       ["WebGL2",  devEsc(devInfo.gl)],
-      ["AppGL",   devEsc(devInfo.glBin)],
+      ["build",   devEsc(API_LABEL +
+                    (window.__spinBuildBackend ? " (backend.js)"
+                                               : " (backend.js absent -> assumed)"))],
       ["screen",  devEsc(scr)],
       ["flags",   devEsc(flags || "none")],
       ["UA",      devEsc(navigator.userAgent)]
@@ -392,7 +430,7 @@ body {
   function getCurrentVersion() {
     /* VERSION FROZEN AT BOOT.
        The value returned here could change mid-page (version.js, localStorage)
-       and then App.js and its side files would come from two different builds.
+       and then app.js and its side files would come from two different builds.
        One page = one version, frozen on the first call. */
     if (window.__spinVerFrozen) return window.__spinVerFrozen;
     var v;
@@ -613,6 +651,11 @@ body {
     b2: "Safari 18 et plus (macOS et iOS 18)",
     b3: "Firefox : activer WebGPU dans ",
     b4: "verifier que l'acceleration materielle est active dans les reglages du navigateur",
+    gl_title: "WebGL 2 est requis",
+    gl_none: "Ce navigateur n'expose pas WebGL 2, ou l'acceleration materielle est desactivee. Cette version du moteur s'appuie dessus pour son rendu.",
+    gl_device: "Le contexte WebGL 2 a ete obtenu, mais le moteur n'a pas pu initialiser son rendu. C'est generalement le pilote graphique.",
+    dl: "Le fichier du moteur n'a pas pu etre recupere. Verifie ta connexion, puis recharge la page.",
+    title_dl: "Le moteur n'a pas pu etre telecharge",
     detail: "Detail technique"
   } : {
     title: "WebGPU is required",
@@ -626,39 +669,26 @@ body {
     b2: "Safari 18+ (macOS and iOS 18)",
     b3: "Firefox: enable WebGPU in ",
     b4: "check that hardware acceleration is enabled in your browser settings",
+    gl_title: "WebGL 2 is required",
+    gl_none: "This browser does not expose WebGL 2, or hardware acceleration is disabled. This build of the engine relies on it for rendering.",
+    gl_device: "A WebGL 2 context was acquired but the engine could not initialize rendering. This usually points at the graphics driver.",
+    dl: "The engine file could not be fetched. Check your connection, then reload the page.",
+    title_dl: "The engine could not be downloaded",
     detail: "Technical detail"
   };
 
-  /* ============ BINARY SELECTION: WebGPU or WebGL2 fallback ============
-     Two binaries can live side by side in this folder: App.* (WebGPU) and
-     AppGL.* (WebGL2). The user downloads only ONE of them.
-       ?webgpu  forces WebGPU        ?webgl  forces WebGL2   (?gpu / ?gl alias)
-     With no flag: WebGPU when the device provides it, else WebGL2, else the
-     explanation panel. */
-  /* A flag counts as soon as it is present, like ?gui: ?webgl, ?webgl=1 and
-     ?gl are all true; only ?webgl=0 (or =false/=off/=no) turns it off. */
-  function qflag(name) {
-    try {
-      var m = new RegExp("[?&]" + name + "(?:=([^&]*))?(?=&|$)", "i")
-                .exec(String(location.search || ""));
-      if (!m) return false;
-      var v = m[1];
-      if (v === undefined || v === "") return true;
-      v = v.toLowerCase();
-      return !(v === "0" || v === "false" || v === "off" || v === "no");
-    } catch (e) { return false; }
-  }
-  var forceGL  = qflag("webgl") || qflag("gl");
-  var forceGPU = qflag("webgpu") || qflag("gpu");
-
-  function webgl2Available() {
-    /* On a DETACHED canvas: a canvas accepts a single context type, and the
-       page canvas belongs to the engine. */
-    try {
-      var c = document.createElement("canvas");
-      return !!(c.getContext("webgl2") || c.getContext("experimental-webgl2"));
-    } catch (e) { return false; }
-  }
+  /* ==================== ONE BINARY PER DEPLOY FOLDER ====================
+     app.js + app.wasm, compiled for the API that backend.js names. There is
+     no runtime fallback here any more: hunting for a second binary that a WebGPU
+     build never produced cost a HEAD request on every start and, when it came
+     back empty, answered a MISSING FILE with a lecture about graphics
+     drivers. If the API this build needs is absent, the panel below says so
+     and stops.
+     Coming back to a WebGL2 build is a BUILD decision, not a runtime one:
+     compile with the WebGL cwMake (sokol lib emsc_webgl, -DSOKOL_GLES3,
+     GLSL300es shaders) into its own folder. build.cwc drops the matching
+     web/backend_*.js in beside the engine and this shell preflights WebGL2
+     instead - same file, no fork. blobcone_fast ships both that way. */
 
   function loadEngine(base) {
     var sc = document.createElement("script");
@@ -667,32 +697,38 @@ body {
     sc.onload = function () { console.info("[gpu-bootstrap] " + base + ".js loaded", sc.src); };
     sc.onerror = function (e) {
       console.error("[gpu-bootstrap] " + base + ".js load failed", sc.src, e);
-      gpuNotice(T.nodevice, "could not load " + base + ".js");
+      /* A missing or unreachable engine file is NOT a graphics problem. It
+         used to borrow T.nodevice and tell the user to go check their driver
+         and their about:config while the only thing wrong was a 404 - which
+         is how a broken link once read as "your GPU refuses a device". */
+      gpuNotice(T.dl, "could not load " + base + ".js", T.title_dl);
     };
     window.__spinEngine = base;
     devInfo.engine  = base + ".wasm";
-    devInfo.api     = (base === "AppGL") ? "WebGL2" : "WebGPU";
+    devInfo.api     = API_LABEL;
     devInfo.backend = devInfo.api;
     devInfoRender();
-    console.info("[gpu-bootstrap] engine selected: " + base +
-      (base === "AppGL" ? " (WebGL2)" : " (WebGPU)"));
+    console.info("[gpu-bootstrap] engine selected: " + base + " (" + API_LABEL + ")");
     document.body.appendChild(sc);
   }
 
-  function gpuNotice(reason, detail) {
+  function gpuNotice(reason, detail, title) {
     try { if (loader) loader.style.display = "none"; } catch (eL) {}
     var d = document.createElement("div");
     d.className = "gpu-notice";
     var card = document.createElement("div");
     card.className = "gpu-notice-card";
     var h = document.createElement("h1");
-    h.textContent = T.title;
+    h.textContent = title || T.title;
     var p = document.createElement("p");
     p.textContent = reason;
     var how = document.createElement("p");
-    how.textContent = T.how;
     var ul = document.createElement("ul");
-    var items = [T.b1, T.b2, null, T.b4];
+    /* "Use one of these browsers" answers only ONE question: this browser has
+       no WebGPU. A download failure or a WebGL build gets its own title and
+       no checklist - advice that does not apply is worse than none. */
+    var items = title ? [] : [T.b1, T.b2, null, T.b4];
+    how.textContent = items.length ? T.how : "";
     var i, li;
     for (i = 0; i < items.length; i++) {
       li = document.createElement("li");
@@ -712,81 +748,48 @@ body {
     d.appendChild(card);
     document.body.appendChild(d);
     window.__spinNoticeShown = true;
-    devInfo.api = "unavailable";
+    /* NOT devInfo.api = "unavailable" here: this panel also shows when the
+       engine simply failed to download. The preflight owns that field. */
     try { devInfoRender(); } catch (eR) {}
     try { consoleHide(); } catch (eC) {}
     console.error("[gpu-bootstrap] startup refused: " + detail);
   }
 
-  /* The WebGL2 binary is OPTIONAL. If it is not deployed next to App.wasm
-     there is simply no fallback and the explanation panel shows up. We probe
-     AppGL.wasm (the .js alone would be useless) with a HEAD; a server that
-     answers HTML for a missing file counts as absent. Result memoized so we
-     probe only once. */
-  var glBinaryState = -1;   /* -1 unknown, 0 absent, 1 present */
-  function glBinaryPresent(cb) {
-    if (glBinaryState >= 0) { cb(glBinaryState === 1); return; }
-    var url = cacheBust("AppGL.wasm"), done = false;
-    function settle(ok, why) {
-      if (done) return;
-      done = true;
-      glBinaryState = ok ? 1 : 0;
-      devInfo.glBin = ok ? "deployed" : "absent (" + why + ") — no fallback possible";
-      devInfoRender();
-      console.info("[gpu-bootstrap] WebGL2 binary " +
-        (ok ? "present" : "absent (" + why + ")") + " : " + url);
-      cb(ok);
-    }
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open("HEAD", url, true);
-      xhr.timeout = 6000;
-      xhr.onload = function () {
-        var ct = "";
-        try { ct = (xhr.getResponseHeader("Content-Type") || "").toLowerCase(); } catch (eH) {}
-        if (xhr.status < 200 || xhr.status >= 400) { settle(false, "HTTP " + xhr.status); return; }
-        if (ct.indexOf("html") >= 0) { settle(false, "HTML response"); return; }
-        settle(true, "");
-      };
-      xhr.onerror   = function () { settle(false, "network error"); };
-      xhr.ontimeout = function () { settle(false, "timeout"); };
-      xhr.send();
-    } catch (e) { settle(false, "XHR unavailable"); }
-  }
-
-  /* No usable WebGPU: try WebGL2 before giving up, but only if the matching
-     binary was actually deployed. */
-  function fallbackOrNotice(reason, detail) {
-    devInfo.why = "fallback: WebGPU unavailable (" + detail + ")";
+  /* The API this build needs is missing: there is no second engine in this
+     folder, so say which one and stop. */
+  function noGpu(reason, detail) {
+    devInfo.why = API_LABEL + " unavailable (" + detail + ")";
+    devInfo.api = "unavailable";
     if (devInfo.gpu === "not probed") devInfo.gpu = "unavailable: " + detail;
     devInfoRender();
-    if (!webgl2Available()) {
-      gpuNotice(reason, detail + " | WebGL2 unavailable too");
+    gpuNotice(reason, detail);
+  }
+
+  /* WebGL2 preflight - the mirror of gpuPreflight for a GLES3 build.
+     Synchronous and cheap: devProbeGL opens a DETACHED canvas and releases the
+     context. The PAGE canvas belongs to the engine and accepts one context
+     type only, so probing that one here would break the very thing it checks. */
+  function glPreflight(onReady) {
+    devProbeGL(true);   /* this IS the GL build: measure, do not defer */
+    if (devInfo.gl === "unavailable" || /^probe failed/.test(String(devInfo.gl))) {
+      devInfo.why = "WebGL2 unavailable";
+      devInfo.api = "unavailable";
+      devInfoRender();
+      gpuNotice(T.gl_none,
+        "getContext('webgl2') refused | secure=" + (window.isSecureContext === true) +
+        " | " + navigator.userAgent, T.gl_title);
       return;
     }
-    glBinaryPresent(function (ok) {
-      if (!ok) {
-        gpuNotice(reason, detail + " | no WebGL2 binary deployed");
-        return;
-      }
-      console.warn("[gpu-bootstrap] WebGPU unavailable (" + detail +
-        ") -> WebGL2 fallback");
-      loadEngine("AppGL");
-    });
+    if (!devInfo.why || devInfo.why === "selection in progress")
+      devInfo.why = "automatic: WebGL2 context acquired";
+    devInfoRender();
+    console.info("[gpu-bootstrap] WebGL2 available");
+    onReady();
   }
 
   function gpuPreflight(onReady) {
-    if (forceGL) {
-      devInfo.why = "forced by ?webgl flag";
-      glBinaryPresent(function (ok) {
-        if (ok) loadEngine("AppGL");
-        else gpuNotice(T.nodevice, "?webgl requested but AppGL.wasm is not deployed");
-      });
-      return;
-    }
-    if (forceGPU) devInfo.why = "forced by ?webgpu flag";
     if (!navigator.gpu || typeof navigator.gpu.requestAdapter !== "function") {
-      fallbackOrNotice(window.isSecureContext === false ? T.insecure : T.none,
+      noGpu(window.isSecureContext === false ? T.insecure : T.none,
         "navigator.gpu absent | secure=" + (window.isSecureContext === true) +
         " | " + navigator.userAgent);
       return;
@@ -797,14 +800,14 @@ body {
     var guard = setTimeout(function () {
       if (settled) return;
       settled = true;
-      fallbackOrNotice(T.noadapter, "requestAdapter did not answer within 8 s");
+      noGpu(T.noadapter, "requestAdapter did not answer within 8 s");
     }, 8000);
     navigator.gpu.requestAdapter({ powerPreference: "high-performance" })
       .then(function (adapter) {
         if (settled) return;
         settled = true; clearTimeout(guard);
         if (!adapter) {
-          fallbackOrNotice(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
+          noGpu(T.noadapter, "requestAdapter -> null | " + navigator.userAgent);
           return;
         }
         var nb = adapter.features ? adapter.features.size : 0;
@@ -836,13 +839,13 @@ body {
       }, function (eA) {
         if (settled) return;
         settled = true; clearTimeout(guard);
-        fallbackOrNotice(T.noadapter,
+        noGpu(T.noadapter,
           "requestAdapter: " + (eA && eA.message ? eA.message : String(eA)));
       })
       ;
   }
 
-  /* Module MUST exist before App.js — same contract as Numeris / blobcone_fast. */
+  /* Module MUST exist before app.js — same contract as Numeris / blobcone_fast. */
   window.Module = {
     canvas: canvas,
     preRun: [],
@@ -873,8 +876,9 @@ body {
       var why = window.__spinLastPanic || String(reason || "");
       if (typeof gpuNotice === "function" &&
           !document.querySelector(".gpu-notice") &&
-          /wgpu|WGPU|webgpu|device|adapter|surface|swapchain/i.test(why)) {
-        gpuNotice(T.nodevice, why);
+          /wgpu|WGPU|webgpu|gl_|GLES|WebGL|device|adapter|context|surface|swapchain/i.test(why)) {
+        if (IS_GL) gpuNotice(T.gl_device, why, T.gl_title);
+        else       gpuNotice(T.nodevice, why);
         return;
       }
       if (loader) loader.style.display = "flex";
@@ -901,7 +905,7 @@ body {
   window.spinviewConsoleHide = consoleHide;
   window.spinviewConsoleToggle = consoleToggle;
 
-  /* Cap devicePixelRatio before loading App.js.
+  /* Cap devicePixelRatio before loading app.js.
      The engine (high_dpi=true) sizes the backing store at css * dpr. On a phone
      dpr=3 -> 1080x2007 = 2.17 Mpx, MORE than desktop, for a 360x669 CSS
      screen. Capping at 2 divides the fragment load by ~2.25 for a difference
@@ -926,7 +930,10 @@ body {
     }
   })();
 
-  gpuPreflight(function () { loadEngine("App"); });
+  console.info("[gpu-bootstrap] build backend:", BUILD_BACKEND,
+    window.__spinBuildBackend ? "(backend.js)" : "(backend.js absent -> default)");
+  if (IS_GL) glPreflight(function () { loadEngine("app"); });
+  else       gpuPreflight(function () { loadEngine("app"); });
   setTimeout(function () {
     console.info("[gpu-bootstrap] 5s state",
       "runtimeInitialized=", window.vmeshRuntimeInitialized === true,
