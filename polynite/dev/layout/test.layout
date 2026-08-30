@@ -1,0 +1,104 @@
+{
+"mainpan": {
+  "1": {
+    "1": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "options",
+        "func": "pantor_options_fmap",
+        "pane_uid": 3
+      },
+      "ratio": 0,
+      "type": "empty"
+    },
+    "2": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "history",
+        "func": "panhistory_fmap",
+        "pane_uid": 4
+      },
+      "ratio": 0,
+      "type": "empty"
+    },
+    "ratio": 0.45,
+    "type": "V"
+  },
+  "2": {
+    "1": {
+      "1": {
+        "app": {
+          "cmd": "view",
+          "func": "pantor_render_fmap",
+          "pane_uid": 5
+        }
+      },
+      "2": {
+        "app": {
+          "cmd": "history",
+          "func": "panhistory_fmap",
+          "hidden": true,
+          "pane_uid": 4
+        }
+      },
+      "ratio": 0,
+      "type": "H"
+    },
+    "2": {
+      "active_tab": 0,
+      "app": {
+        "cmd": "options",
+        "func": "pantor_options_fmap",
+        "pane_uid": 3,
+        "state": {
+          "ui_state": {
+          }
+        }
+      },
+      "type": ""
+    },
+    "ratio": 0.342316,
+    "type": "V"
+  },
+  "ratio": 0.3,
+  "type": "H"
+},
+"panlayout_current_layout": "test",
+"panlayout_last_session": "session/test.session",
+"pantor": {
+  "anim_speed": 0.35,
+  "animate_bg": true,
+  "bg_color": {
+    "a": 0.0666667,
+    "b": 0,
+    "g": 0,
+    "r": 0
+  },
+  "circle_color": {
+    "a": 0,
+    "b": 0,
+    "g": 0.168627,
+    "r": 1
+  },
+  "circle_radius": 72,
+  "grid_color": {
+    "a": 0.11,
+    "b": 0.193686,
+    "g": 0.193686,
+    "r": 0.463277
+  },
+  "pan": [0, 0],
+  "ring_color": {
+    "a": 0,
+    "b": 1,
+    "g": 1,
+    "r": 0.403922
+  },
+  "show_grid": true,
+  "touch_circle": [29, 124],
+  "touch_square": [-96, -40],
+  "tuning": [0.35, 72, 0],
+  "zoom": 1
+}
+
+}
