@@ -18,6 +18,11 @@ REM  version.txt is always excluded - it is the DEPLOY FOLDER'S own
 REM  counter and dev's is far behind the site's. Copying it would
 REM  send the version backwards and browsers would stop reloading.
 REM  The site's counter is bumped below instead.
+REM
+REM  tier.txt is always excluded too, and that exclusion is what
+REM  MAKES this folder the release: the build stamps "dev" into it,
+REM  and its absence here is how the page knows the released model
+REM  library is beside it rather than one level up.
 REM ###############################################################
 
 set "SRC=%~dp0dev"
@@ -37,7 +42,7 @@ echo  Deploying   %SRC%
 echo         to   %~dp0
 echo.
 echo  Copying: %WHAT%
-echo  Always excluded: version.txt
+echo  Always excluded: version.txt, tier.txt
 echo.
 echo  Files removed from dev\ are NOT deleted here - this copies, it does not
 echo  mirror. Nothing already on the site can be destroyed by a mistake in the
@@ -47,7 +52,7 @@ set "GO="
 set /p GO=Proceed? [y/N]: 
 if /i not "%GO%"=="y" goto :cancel
 
-robocopy "%SRC%" "%DST%" /E %XMODELS% /XF version.txt /XJ /NFL /NDL /NJH /R:1 /W:1
+robocopy "%SRC%" "%DST%" /E %XMODELS% /XF version.txt tier.txt /XJ /NFL /NDL /NJH /R:1 /W:1
 REM robocopy: 0-7 is success, 8 and up is a real failure. `if errorlevel N`
 REM means ">= N", so this is the documented way to read it.
 if errorlevel 8 goto :fail
@@ -65,6 +70,8 @@ if exist "%DST%\App.js"   echo           for app.js. Delete App.* here and in de
 if exist "%DST%\App.wasm" echo  WARNING: App.wasm is still here - same problem.
 if not exist "%DST%\app.js" echo  WARNING: app.js is MISSING - the site will show the WebGPU notice.
 if not exist "%DST%\backend.js" echo  WARNING: backend.js missing - the shell will assume WebGPU.
+if exist "%DST%\tier.txt" echo  WARNING: tier.txt is on the SITE. The release must not have one -
+if exist "%DST%\tier.txt" echo           delete it, or the site will look for its models one level up.
 if not exist "%DST%\models\index.txt" echo  WARNING: models\index.txt missing - run this again with: models
 echo.
 echo  Then commit and push spinviewapp_web to publish.
